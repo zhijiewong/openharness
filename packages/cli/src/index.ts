@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output, stderr } from "node:process";
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import type { BridgeEnvelope, InputEnvelope, ResponseEnvelope } from "./protocol.js";
 import { sendBridgeRequest, streamBridgeRequest } from "./transport/stdio.js";
+
+const VALID_PERMISSION_MODES = ["ask", "trust", "deny"] as const;
 
 const program = new Command();
 
@@ -17,7 +20,7 @@ program
   .description("Ask the Python bridge for version information")
   .action(async () => {
     const response = await sendBridgeRequest({
-      id: "version-1",
+      id: randomUUID(),
       method: "app.version",
     });
     printResponse(response);
@@ -30,7 +33,7 @@ program
   .option("-m, --model <model>", "Model override")
   .option("-r, --resume <sessionId>", "Resume a saved session by ID")
   .option("--session-dir <path>", "Override session directory")
-  .option("--permission-mode <mode>", "Permission mode: ask, trust, deny", "deny")
+  .addOption(new Option("--permission-mode <mode>", "Permission mode").choices(VALID_PERMISSION_MODES).default("deny"))
   .option("--trust", "Shortcut for --permission-mode trust")
   .action(async (
     prompt: string | undefined,
@@ -53,7 +56,7 @@ config
   .option("--config-path <path>", "Override config file path")
   .action(async (options: { configPath?: string }) => {
     const response = await sendBridgeRequest({
-      id: "config-show-1",
+      id: randomUUID(),
       method: "config.show",
       params: {
         config_path: options.configPath ?? null,
@@ -70,7 +73,7 @@ config
   .option("--config-path <path>", "Override config file path")
   .action(async (key: string, value: string, options: { configPath?: string }) => {
     const response = await sendBridgeRequest({
-      id: "config-set-1",
+      id: randomUUID(),
       method: "config.set",
       params: {
         key,
@@ -87,7 +90,7 @@ program
   .option("--session-dir <path>", "Override session directory")
   .action(async (options: { sessionDir?: string }) => {
     const response = await sendBridgeRequest({
-      id: "sessions-list-1",
+      id: randomUUID(),
       method: "sessions.list",
       params: {
         session_dir: options.sessionDir ?? null,
@@ -102,7 +105,7 @@ program
   .option("--cost-dir <path>", "Override cost directory")
   .action(async (options: { costDir?: string }) => {
     const response = await sendBridgeRequest({
-      id: "cost-summary-1",
+      id: randomUUID(),
       method: "cost.summary",
       params: {
         cost_dir: options.costDir ?? null,
@@ -116,7 +119,7 @@ program
   .description("List available tools")
   .action(async () => {
     const response = await sendBridgeRequest({
-      id: "tools-list-1",
+      id: randomUUID(),
       method: "tools.list",
     });
     printResponse(response);
@@ -128,7 +131,7 @@ program
   .option("-p, --provider <provider>", "Filter by provider")
   .action(async (options: { provider?: string }) => {
     const response = await sendBridgeRequest({
-      id: "models-list-1",
+      id: randomUUID(),
       method: "models.list",
       params: {
         provider: options.provider ?? null,
@@ -144,7 +147,7 @@ program
   .option("--project-path <path>", "Override project path")
   .action(async (options: { init?: boolean; projectPath?: string }) => {
     const response = await sendBridgeRequest({
-      id: "rules-list-1",
+      id: randomUUID(),
       method: "rules.list",
       params: {
         create: options.init ?? false,
@@ -160,7 +163,7 @@ program
   .option("--project-path <path>", "Override project path")
   .action(async (options: { projectPath?: string }) => {
     const response = await sendBridgeRequest({
-      id: "skills-list-1",
+      id: randomUUID(),
       method: "skills.list",
       params: {
         project_path: options.projectPath ?? null,
@@ -176,7 +179,7 @@ program
   .option("--memory-dir <path>", "Override memory directory")
   .action(async (options: { search?: string; memoryDir?: string }) => {
     const response = await sendBridgeRequest({
-      id: "memory-list-1",
+      id: randomUUID(),
       method: "memory.list",
       params: {
         search: options.search ?? null,
@@ -193,7 +196,7 @@ program
   .option("--config-path <path>", "Override config file path")
   .action(async (options: { projectPath?: string; configPath?: string }) => {
     const response = await sendBridgeRequest({
-      id: "project-init-1",
+      id: randomUUID(),
       method: "project.init",
       params: {
         project_path: options.projectPath ?? null,
@@ -254,7 +257,7 @@ async function runChatTurn(
   let nextSessionId = resume;
   await streamBridgeRequest(
     {
-      id: `chat-${Date.now()}`,
+      id: randomUUID(),
       method: "chat.start",
       params: {
         prompt,

@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import { sendBridgeRequest, streamBridgeRequest } from "./stdio.js";
 
-const mockBridgePath = path.resolve("src/transport/mock-bridge.test-helper.mjs");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const mockBridgePath = path.resolve(__dirname, "mock-bridge.test-helper.mjs");
 
 test("sendBridgeRequest parses a result envelope", async () => {
   const response = await sendBridgeRequest(

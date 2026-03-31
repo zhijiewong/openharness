@@ -65,6 +65,15 @@ def _error(req_id: str, code: str, message: str, **data: Any) -> dict[str, Any]:
     }
 
 
+def _mask_api_key(key: str | None) -> str:
+    """Mask API key for safe transmission — never send full keys over stdio."""
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "***"
+    return f"***{key[-4:]}"
+
+
 def _serialize_config(config: AgentConfig) -> dict[str, Any]:
     return {
         "path": str(DEFAULT_CONFIG_PATH),
@@ -75,10 +84,9 @@ def _serialize_config(config: AgentConfig) -> dict[str, Any]:
         "tools": config.tools,
         "providers": {
             name: {
-                "api_key": provider.api_key,
+                "api_key": _mask_api_key(provider.api_key),
                 "base_url": provider.base_url,
                 "default_model": provider.default_model,
-                "extra": provider.extra,
             }
             for name, provider in config.providers.items()
         },

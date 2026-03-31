@@ -141,8 +141,14 @@ async def _run_chat(
     # Check provider health
     healthy = await provider.health_check()
     if not healthy:
-        ui.console.print("[red]Cannot connect to LLM provider. Is Ollama running?[/red]")
-        ui.console.print("[dim]Start Ollama: ollama serve[/dim]")
+        provider_name = config.provider
+        ui.console.print(f"[red]Cannot connect to LLM provider ({provider_name}).[/red]")
+        if provider_name == "ollama":
+            ui.console.print("[dim]Start Ollama: ollama serve[/dim]")
+        elif provider_name in ("openai", "anthropic", "openrouter"):
+            ui.console.print(f"[dim]Check your API key: oh config set providers.{provider_name}.api_key YOUR_KEY[/dim]")
+        else:
+            ui.console.print(f"[dim]Check provider configuration: oh config show[/dim]")
         return
 
     # Load harness features

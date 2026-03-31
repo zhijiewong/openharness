@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { platform } from "node:os";
 import type { BridgeEnvelope, InputEnvelope, RequestEnvelope, ResponseEnvelope } from "../protocol.js";
 
 type SpawnOptions = {
@@ -6,11 +7,26 @@ type SpawnOptions = {
   args?: string[];
 };
 
-const DEFAULT_COMMAND = "py";
-const DEFAULT_ARGS = ["-3", "-m", "oh.bridge"];
+function getDefaultCommand(): string {
+  if (process.env.OH_PYTHON) {
+    return process.env.OH_PYTHON;
+  }
+  return platform() === "win32" ? "py" : "python3";
+}
+
+function getDefaultArgs(): string[] {
+  const cmd = getDefaultCommand();
+  // Windows py launcher needs -3 flag; python3 does not
+  if (cmd === "py") {
+    return ["-3", "-m", "oh.bridge"];
+  }
+  return ["-m", "oh.bridge"];
+}
 
 function spawnBridge(options?: SpawnOptions) {
-  return spawn(options?.command ?? DEFAULT_COMMAND, options?.args ?? DEFAULT_ARGS, {
+  const command = options?.command ?? getDefaultCommand();
+  const args = options?.args ?? getDefaultArgs();
+  return spawn(command, args, {
     stdio: ["pipe", "pipe", "pipe"],
   });
 }
@@ -46,16 +62,20 @@ export async function sendBridgeRequest(
     child.on("error", reject);
   });
 
-  const line = stdout
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .find(Boolean);
+  const lines = stdout.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 
-  if (!line) {
-    throw new Error("Bridge returned no output.");
+  for (const line of lines) {
+    try {
+      return JSON.parse(line) as ResponseEnvelope;
+    } catch {
+      // Skip non-JSON lines (e.g., Python warnings, deprecation notices)
+      continue;
+    }
   }
 
-  return JSON.parse(line) as ResponseEnvelope;
+  throw new Error(
+    `Bridge returned no valid JSON.\nstdout: ${stdout.slice(0, 500)}${stderr ? `\nstderr: ${stderr.slice(0, 500)}` : ""}`,
+  );
 }
 
 export async function streamBridgeRequest(
@@ -72,7 +92,13 @@ export async function streamBridgeRequest(
   child.stdin.write(`${JSON.stringify(request)}\n`);
 
   const processLine = async (line: string): Promise<void> => {
-    const event = JSON.parse(line) as BridgeEnvelope;
+    let event: BridgeEnvelope;
+    try {
+      event = JSON.parse(line) as BridgeEnvelope;
+    } catch {
+      // Skip non-JSON lines (Python warnings, tracebacks, etc.)
+      return;
+    }
     const response = await onEvent(event);
     if (response) {
       child.stdin.write(`${JSON.stringify(response)}\n`);
@@ -101,8 +127,10 @@ export async function streamBridgeRequest(
   await new Promise<void>((resolve, reject) => {
     child.on("exit", async (code) => {
       try {
-        if (stdout.trim()) {
-          await processLine(stdout.trim());
+        // Chain any trailing partial line into the serialized processing queue
+        const trailing = stdout.trim();
+        if (trailing) {
+          processing = processing.then(() => processLine(trailing));
         }
         await processing;
       } catch (error) {
