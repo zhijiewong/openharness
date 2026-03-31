@@ -86,6 +86,13 @@ class AgentConfig:
         """Persist current config to YAML."""
         path = path or DEFAULT_CONFIG_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Restrict permissions on ~/.oh/ (contains API keys)
+        import os
+        if os.name != "nt":
+            try:
+                path.parent.chmod(0o700)
+            except OSError:
+                pass
 
         data: dict[str, Any] = {
             "provider": self.provider,
