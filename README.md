@@ -56,7 +56,7 @@ pip install "openharness[all]"
 Development install:
 
 ```bash
-git clone https://github.com/wangz/openharness.git
+git clone https://github.com/zhijiewong/openharness.git
 cd openharness
 pip install -e ".[dev]"
 ```
