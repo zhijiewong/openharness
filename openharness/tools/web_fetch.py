@@ -54,6 +54,29 @@ class WebFetchTool(BaseTool):
     def is_concurrency_safe(self, arguments: dict[str, Any]) -> bool:
         return True
 
+    async def validate_input(self, arguments: dict[str, Any], context: ToolContext) -> str | None:
+        url = arguments.get("url", "")
+        if not url:
+            return "URL is required."
+        # Scheme check
+        if not url.startswith(("http://", "https://")):
+            return "Only http:// and https:// URLs are allowed."
+        # Block private/internal IPs (SSRF protection)
+        from urllib.parse import urlparse
+        import ipaddress
+        hostname = urlparse(url).hostname or ""
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return f"Access to private/internal address {hostname} is blocked."
+        except ValueError:
+            # Not an IP literal — check common internal hostnames
+            if hostname in ("localhost", "metadata.google.internal"):
+                return f"Access to {hostname} is blocked."
+            if hostname.endswith(".internal") or hostname.endswith(".local"):
+                return f"Access to internal hostname {hostname} is blocked."
+        return None
+
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         url = arguments["url"]
         prompt = arguments.get("prompt", "")
