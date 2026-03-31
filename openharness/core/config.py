@@ -71,11 +71,14 @@ class AgentConfig:
         for name, prov_raw in raw.pop("providers", {}).items():
             providers[name] = ProviderConfig(name=name, **prov_raw)
 
-        # Map YAML keys to dataclass fields
+        # Map YAML keys to dataclass fields, coercing types
+        _PATH_FIELDS = {"oh_home", "session_dir", "memory_dir"}
         config = cls(providers=providers)
         for key, val in raw.items():
             key = key.replace("-", "_")
             if hasattr(config, key):
+                if key in _PATH_FIELDS and isinstance(val, str):
+                    val = Path(val)
                 setattr(config, key, val)
         return config
 

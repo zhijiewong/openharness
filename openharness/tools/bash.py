@@ -72,9 +72,10 @@ class BashTool(BaseTool):
             # Detect shell
             shell = _get_shell()
 
+            flag = _shell_flag(shell)
             proc = await asyncio.create_subprocess_exec(
                 shell,
-                "-c" if shell != "powershell" else "-Command",
+                flag,
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -120,6 +121,15 @@ class BashTool(BaseTool):
             return ToolResult(call_id="", output="Error: Shell not found", is_error=True)
         except Exception as exc:
             return ToolResult(call_id="", output=f"Error: {exc}", is_error=True)
+
+
+def _shell_flag(shell: str) -> str:
+    """Get the correct command-execution flag for the shell."""
+    if shell == "cmd":
+        return "/C"
+    if shell == "powershell":
+        return "-Command"
+    return "-c"
 
 
 def _get_shell() -> str:

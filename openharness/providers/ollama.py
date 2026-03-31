@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from openharness.core.config import ProviderConfig
-from openharness.core.events import CostUpdate, Event, TextDelta, TurnComplete
+from openharness.core.events import CostUpdate, Event, TextDelta, ToolCallStart, TurnComplete
 from openharness.core.exceptions import ProviderError
 from openharness.core.types import (
     Message,
@@ -156,7 +156,10 @@ class OllamaProvider(BaseProvider):
                     if raw_calls := msg.get("tool_calls"):
                         for i, tc in enumerate(raw_calls):
                             fn = tc.get("function", {})
-                            yield TextDelta(content="")  # signal tool call via complete()
+                            yield ToolCallStart(
+                                tool_name=fn.get("name", f"unknown_{i}"),
+                                call_id=tc.get("id", f"call_{i}"),
+                            )
 
                     # Done flag
                     if chunk.get("done"):

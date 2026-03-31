@@ -59,10 +59,15 @@ class HookResult:
 # ---------------------------------------------------------------------------
 
 def _substitute_context(command: str, context: dict[str, Any]) -> str:
-    """Replace {file}, {tool_name}, etc. placeholders in a command string."""
+    """Replace {file}, {tool_name}, etc. placeholders in a command string.
+
+    All substituted values are shell-escaped to prevent command injection.
+    """
+    import shlex
+
     result = command
     for key, value in context.items():
-        result = result.replace(f"{{{key}}}", str(value))
+        result = result.replace(f"{{{key}}}", shlex.quote(str(value)))
     return result
 
 

@@ -119,15 +119,15 @@ class AgentLoop:
                 yield TurnComplete(reason="completed")
                 return
 
-            # Execute tool calls
-            tool_results = await self._execute_tools(
+            # Execute tool calls, yielding start/end events as they happen
+            tool_results: list[ToolResult] = []
+            async for event_or_result in self._execute_tools_with_events(
                 response.tool_calls, tool_context
-            )
-
-            # Yield tool events
-            for tc, tr in zip(response.tool_calls, tool_results):
-                yield ToolCallStart(tool_name=tc.tool_name, call_id=tc.id)
-                yield ToolCallEnd(call_id=tc.id, output=tr.output, is_error=tr.is_error)
+            ):
+                if isinstance(event_or_result, ToolResult):
+                    tool_results.append(event_or_result)
+                else:
+                    yield event_or_result
 
             # Add tool results to messages for next turn
             for tc, tr in zip(response.tool_calls, tool_results):
@@ -142,37 +142,33 @@ class AgentLoop:
 
         yield TurnComplete(reason="max_turns")
 
-    async def _execute_tools(
+    async def _execute_tools_with_events(
         self,
         tool_calls: tuple[ToolCall, ...],
         context: ToolContext,
-    ) -> list[ToolResult]:
-        """Execute tool calls with concurrency control.
+    ) -> AsyncIterator[Event | ToolResult]:
+        """Execute tool calls, yielding ToolCallStart/End events in real time.
 
         Read-only tools run in parallel, write tools run serially.
-        (Mirrors Claude Code's toolOrchestration.ts partitioning.)
         """
-        results: list[ToolResult] = []
-
-        # Partition into batches: concurrent (read-only) vs serial (write)
         batches = _partition_tool_calls(tool_calls, self.tools)
 
         for batch in batches:
             if batch["concurrent"]:
-                # Run all tools in parallel
-                tasks = [
-                    self._execute_single_tool(tc, context)
-                    for tc in batch["calls"]
-                ]
-                batch_results = await asyncio.gather(*tasks)
-                results.extend(batch_results)
-            else:
-                # Run tools serially
+                # Yield all starts, then run in parallel, then yield all ends
                 for tc in batch["calls"]:
+                    yield ToolCallStart(tool_name=tc.tool_name, call_id=tc.id)
+                tasks = [self._execute_single_tool(tc, context) for tc in batch["calls"]]
+                batch_results = await asyncio.gather(*tasks)
+                for tc, result in zip(batch["calls"], batch_results):
+                    yield ToolCallEnd(call_id=tc.id, output=result.output, is_error=result.is_error)
+                    yield result
+            else:
+                for tc in batch["calls"]:
+                    yield ToolCallStart(tool_name=tc.tool_name, call_id=tc.id)
                     result = await self._execute_single_tool(tc, context)
-                    results.append(result)
-
-        return results
+                    yield ToolCallEnd(call_id=tc.id, output=result.output, is_error=result.is_error)
+                    yield result
 
     async def _execute_single_tool(
         self, tool_call: ToolCall, context: ToolContext
