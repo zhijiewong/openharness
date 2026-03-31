@@ -13,9 +13,19 @@
 
 Build your own terminal coding agent with any LLM.
 
+![Status: Alpha](https://img.shields.io/badge/status-alpha-orange)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+
 ---
 
+## Why OpenHarness?
+
+Most AI coding tools lock you into one provider. OpenHarness is a lightweight, open-source agent harness that works with any LLM -- local models via Ollama (free, offline, private) or cloud APIs (OpenAI, Anthropic, OpenRouter, DeepSeek, Groq, and any OpenAI-compatible endpoint). It gives you the harness features that make agents useful -- tool permission gates, project rules, reusable skills, lifecycle hooks, persistent memory -- without the weight of a full framework like LangChain or CrewAI.
+
 ## Quick Start
+
+Requires **Python 3.11+**.
 
 ```bash
 pip install openharness
@@ -25,7 +35,7 @@ oh chat --model ollama/llama3
 
 ## What It Does
 
-OpenHarness is an open-source Python agent harness. It connects any LLM to a set of tools (file read/edit/write, shell, search, web fetch) with permission gates, then runs an agent loop in your terminal.
+OpenHarness connects any LLM to a set of tools with permission gates, then runs an agent loop in your terminal.
 
 **Providers:** Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible API
 
@@ -46,6 +56,8 @@ Low-risk tools auto-approve. Medium and high risk require confirmation in `ask` 
 **Harness features:** project rules, reusable skills, lifecycle hooks, persistent memory, cost tracking, session save/resume, project auto-detection.
 
 ## Installation
+
+Requires **Python 3.11+**.
 
 ```bash
 pip install openharness                  # base
@@ -99,6 +111,7 @@ oh config set max_cost_per_session 5.00
 | `oh rules` | Project rules |
 | `oh skills` | Available skills |
 | `oh memory` | Stored memories |
+| `oh version` | Show installed version |
 
 ## Project Rules
 
@@ -112,7 +125,7 @@ Create `.oh/RULES.md` in any repo (or run `oh init`):
 
 Rules load automatically into every session. Load order: `~/.oh/global-rules/*.md` then `.oh/RULES.md` then `.oh/rules/*.md`.
 
-## Architecture
+## Project Layout
 
 ```
 oh/cli               CLI commands (chat, config, cost, etc.)
@@ -125,12 +138,14 @@ openharness/mcp      MCP client for external tool servers
 packages/cli         TypeScript CLI frontend (bridges to Python core via stdio)
 ```
 
+The CLI calls the agent loop, which calls the LLM provider, which returns tool calls. The agent executes tools (with permission checks), feeds results back to the LLM, and repeats until the LLM responds with text.
+
 ## TypeScript CLI
 
 A Node.js/TypeScript frontend is available under `packages/cli/`. It bridges to the Python core over stdio.
 
 ```bash
-npm install && npm run build:cli
+npm install && npm run build
 oh-ts chat "explain this codebase" --permission-mode ask
 oh-ts models
 oh-ts config show
@@ -138,9 +153,12 @@ oh-ts config show
 
 ## Contributing
 
-1. Open an issue for larger changes
-2. `pip install -e ".[dev]"` and `pytest` before PRs
-3. Keep CLI and docs in sync
+1. Open an issue or discussion before larger changes
+2. Install in dev mode: `pip install -e ".[dev]"`
+3. Run tests: `pytest`
+4. Run TS type check: `cd packages/cli && npx tsc --noEmit`
+5. Keep CLI commands and README in sync
+6. No CLA required
 
 ## License
 

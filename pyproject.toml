@@ -45,8 +45,8 @@ dev = [
 oh = "oh.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/wangz/openharness"
-Repository = "https://github.com/wangz/openharness"
+Homepage = "https://github.com/zhijiewong/openharness"
+Repository = "https://github.com/zhijiewong/openharness"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openharness", "oh"]
