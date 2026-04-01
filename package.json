@@ -53,5 +53,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/zhijiewong/openharness"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/zhijiewong/openharness/issues"
+  },
+  "homepage": "https://github.com/zhijiewong/openharness#readme"
 }
