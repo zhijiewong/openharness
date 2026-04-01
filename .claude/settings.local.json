@@ -76,7 +76,9 @@
       "Bash(npm pack:*)",
       "Bash(npm run:*)",
       "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"llama3\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"say hi\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(find /e/AI/src/components -name *Permission* -o -name *ToolUse* -o -name *Markdown*)",
+      "Bash(grep -n \"^export\" /e/AI/src/components/design-system/*.tsx)"
     ]
   }
 }
