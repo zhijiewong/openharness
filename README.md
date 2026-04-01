@@ -11,16 +11,19 @@
         `--`
 ```
 
-Open-source terminal coding agent. Build your own Claude Code with any LLM.
+AI coding agent in your terminal. Works with any LLM -- free local models or cloud APIs.
 
-![Status: Alpha](https://img.shields.io/badge/status-alpha-orange)
+![npm](https://img.shields.io/npm/v/@zhijiewang/openharness)
 ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green)
 ![TypeScript](https://img.shields.io/badge/typescript-strict-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Status: Alpha](https://img.shields.io/badge/status-alpha-orange)
 
 ---
 
 <video src="https://github.com/user-attachments/assets/ed19a2cc-14d3-4db3-aa5b-3dc07c444498" controls width="100%"></video>
+
+*OpenHarness reading files, running commands, and editing code — powered by a local Ollama model.*
 
 ---
 
@@ -31,78 +34,118 @@ npm install -g @zhijiewang/openharness
 oh
 ```
 
-That's it. Just type `oh` to start chatting with your local Ollama model.
+That's it. OpenHarness auto-detects Ollama and starts chatting. No API key needed.
 
 ```bash
-oh                                    # auto-detect Ollama, start chatting
+oh                                    # auto-detect local model
 oh --model ollama/qwen2.5:7b         # specific model
-oh --model gpt-4o                     # use OpenAI (needs OPENAI_API_KEY)
+oh --model gpt-4o                     # cloud model (needs OPENAI_API_KEY)
 oh --trust                            # auto-approve all tool calls
-```
-
-<!-- ![Demo](assets/demo.gif) -->
-
-## Install
-
-Requires **Node.js 18+**.
-
-```bash
-# From npm
-npm install -g @zhijiewang/openharness
-
-# From source
-git clone https://github.com/zhijiewong/openharness.git
-cd openharness
-npm install
-npm install -g .
-oh
+oh run "fix the tests" --json         # headless mode for CI/CD
 ```
 
 ## Why OpenHarness?
 
-Claude Code is powerful but locked to Anthropic. OpenHarness gives you the same architecture -- React+Ink terminal UI, async generator agent loop, Zod tool schemas, permission gates -- but works with **any LLM**. Local models via Ollama (free, offline, private), or cloud APIs (OpenAI, Anthropic, OpenRouter, DeepSeek, Groq, and any OpenAI-compatible endpoint).
+|  | OpenHarness | Claude Code | Aider | OpenCode |
+|---|---|---|---|---|
+| Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
+| Free local models | Ollama native | No | Yes | Yes |
+| Tools | 17 with permission gates | 40+ | File-focused | 20+ |
+| Git integration | Auto-commit + /undo | Yes | Deep git | Basic |
+| Slash commands | 16 built-in | 80+ | Some | Some |
+| Headless/CI mode | `oh run --json` | Yes | Yes | Yes |
+| Terminal UI | React + Ink | React + Ink | Basic | BubbleTea |
+| Language | TypeScript | TypeScript | Python | Go |
+| License | MIT | Proprietary | Apache 2.0 | MIT |
+| Price | Free (BYOK) | $20+/month | Free (BYOK) | Free (BYOK) |
 
-## Tools
+## Tools (17)
 
 | Tool | Risk | Description |
 |------|------|-------------|
+| Bash | high | Execute shell commands with timeout |
 | Read | low | Read files with line ranges |
-| Edit | medium | Search-and-replace edits |
 | Write | medium | Create or overwrite files |
-| Bash | high | Shell commands with timeout |
+| Edit | medium | Search-and-replace edits |
 | Glob | low | Find files by pattern |
 | Grep | low | Regex content search |
-| WebFetch | medium | Fetch URL content |
+| WebFetch | medium | Fetch URL content (SSRF-protected) |
+| WebSearch | medium | Search the web |
+| TaskCreate | low | Create structured tasks |
+| TaskUpdate | low | Update task status |
+| TaskList | low | List all tasks |
+| AskUser | low | Ask user a question with options |
+| Skill | low | Invoke a skill from .oh/skills/ |
+| Agent | medium | Spawn a sub-agent for delegation |
+| EnterPlanMode | low | Enter structured planning mode |
+| ExitPlanMode | low | Exit planning mode |
+| NotebookEdit | medium | Edit Jupyter notebooks |
 
-Low-risk tools auto-approve. Medium and high risk require confirmation in `ask` mode.
+Low-risk read-only tools auto-approve. Medium and high risk tools require confirmation in `ask` mode. Use `--trust` to skip all prompts.
 
-## Commands
+## Slash Commands (16)
+
+Type these during a chat session:
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all available commands |
+| `/clear` | Clear conversation history |
+| `/cost` | Show session cost and token usage |
+| `/status` | Show model, mode, git branch, session info |
+| `/diff` | Show uncommitted git changes |
+| `/undo` | Undo last AI commit |
+| `/commit [msg]` | Create a git commit |
+| `/log` | Show recent git commits |
+| `/files` | List files in context |
+| `/model <name>` | Switch model mid-session |
+| `/compact` | Compress conversation to free context |
+| `/export` | Export conversation to markdown |
+| `/plan` | Enter plan mode |
+| `/review` | Review recent code changes |
+| `/config` | Show configuration |
+| `/memory` | View memories |
+
+## Git Integration
+
+OpenHarness auto-commits AI edits in git repos:
+
+```
+oh: Edit src/app.ts                    # auto-committed with "oh:" prefix
+oh: Write tests/app.test.ts
+```
+
+- Every AI file change is committed automatically
+- `/undo` reverts the last AI commit (only OH commits, never yours)
+- `/diff` shows what changed
+- Your dirty files are safe — committed separately before AI edits
+
+## Headless Mode
+
+Run a single prompt without interactive UI — perfect for CI/CD:
 
 ```bash
-oh                          # start chatting (default command)
-oh --model MODEL            # use a specific model
-oh --trust                  # auto-approve all tools
-oh --deny                   # block all non-read tools
-oh --resume ID              # resume a saved session
-oh models                   # list models and pricing
-oh tools                    # list tools and risk levels
-oh init                     # set up .oh/ for current project
-oh sessions                 # list saved sessions
-oh rules                    # show project rules
-oh --version                # show version
+oh run "fix the failing tests" --model ollama/llama3 --trust
+oh run "add error handling to api.ts" --json    # JSON output
+oh run "explain this codebase" --model gpt-4o
 ```
+
+Exit code 0 on success, 1 on failure.
 
 ## Providers
 
 ```bash
-# Local (free, no API key)
+# Local (free, no API key needed)
 oh --model ollama/llama3
 oh --model ollama/qwen2.5:7b-instruct
 
-# Cloud (set API key as env var)
+# Cloud
 OPENAI_API_KEY=sk-... oh --model gpt-4o
 ANTHROPIC_API_KEY=sk-ant-... oh --model claude-sonnet-4-6
 OPENROUTER_API_KEY=sk-or-... oh --model openrouter/deepseek-chat
+
+# Any OpenAI-compatible endpoint
+oh --model deepseek/deepseek-chat
 ```
 
 ## Project Rules
@@ -117,35 +160,36 @@ Create `.oh/RULES.md` in any repo (or run `oh init`):
 
 Rules load automatically into every session.
 
-## Tech Stack
+## Install
 
-| | OpenHarness | Claude Code |
-|---|---|---|
-| Language | TypeScript (strict) | TypeScript (strict) |
-| Runtime | Node.js 18+ | Bun |
-| Terminal UI | React + Ink | React + custom Ink fork |
-| Tool schemas | Zod | Zod |
-| Agent loop | async generators | async generators |
-| Providers | Any (5 built-in) | Anthropic only |
-| License | MIT | Proprietary |
+Requires **Node.js 18+**.
+
+```bash
+# From npm
+npm install -g @zhijiewang/openharness
+
+# From source
+git clone https://github.com/zhijiewong/openharness.git
+cd openharness
+npm install && npm install -g .
+```
 
 ## Development
 
 ```bash
-git clone https://github.com/zhijiewong/openharness.git
-cd openharness
 npm install
 npx tsx src/main.tsx              # run in dev mode
 npx tsc --noEmit                  # type check
+npm test                          # run tests
 ```
-
-### Adding a provider
-
-Create `src/providers/yourprovider.ts` implementing the `Provider` interface, add a case in `src/providers/index.ts`.
 
 ### Adding a tool
 
 Create `src/tools/YourTool/index.ts` implementing the `Tool` interface with a Zod input schema, register it in `src/tools.ts`.
+
+### Adding a provider
+
+Create `src/providers/yourprovider.ts` implementing the `Provider` interface, add a case in `src/providers/index.ts`.
 
 ## Contributing
 
