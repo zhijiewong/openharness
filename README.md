@@ -19,7 +19,9 @@ Open-source terminal coding agent. Build your own Claude Code with any LLM.
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ---
-https://github.com/user-attachments/assets/a9ab2828-4472-4faa-9541-fc66451a8976
+
+<video src="https://github.com/user-attachments/assets/a9ab2828-4472-4faa-9541-fc66451a8976" controls width="100%"></video>
+
 ---
 
 ## Quick Start
