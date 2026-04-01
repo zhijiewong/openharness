@@ -158,13 +158,23 @@ export default function REPL({
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Box marginBottom={1}>
-        <Text bold color="cyan">
-          OpenHarness
-        </Text>
-        {currentModel ? (
-          <Text dimColor> ({currentModel})</Text>
-        ) : null}
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color="cyan">{`        ___
+       /   \\
+      (     )        ___  ___  ___ _  _ _  _   _ ___ _  _ ___ ___ ___
+       \`~w~\`        / _ \\| _ \\| __| \\| | || | /_\\ | _ \\ \\| | __/ __/ __|
+       (( ))       | (_) |  _/| _|| .\` | __ |/ _ \\|   / .\` | _|\\__ \\__ \\
+        ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
+       ((  ))
+        \`--\``}</Text>
+        <Box marginTop={0}>
+          <Text bold color="cyan">OpenHarness</Text>
+          <Text dimColor> v0.1.0</Text>
+          {currentModel ? <Text color="green"> {currentModel}</Text> : null}
+          <Text dimColor> ({permissionMode} mode)</Text>
+        </Box>
+        <Text dimColor>Tools: {tools.map(t => t.name).join(", ")}</Text>
+        <Text dimColor>Type "exit" or Ctrl+C to quit.</Text>
       </Box>
 
       <Messages messages={messages} toolCalls={toolCalls} />
