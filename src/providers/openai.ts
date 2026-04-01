@@ -3,7 +3,7 @@
  */
 
 import type { Message, ToolCall } from "../types/message.js";
-import type { StreamEvent } from "../types/events.js";
+import type { StreamEvent, ToolCallComplete } from "../types/events.js";
 import { createAssistantMessage } from "../types/message.js";
 import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
 
@@ -169,6 +169,16 @@ export class OpenAIProvider implements Provider {
           }
         }
       }
+    }
+
+    // Emit tool_call_complete for each accumulated tool call
+    for (const [, acc] of toolCallAccumulators) {
+      yield {
+        type: "tool_call_complete",
+        callId: acc.id,
+        toolName: acc.name,
+        arguments: acc.args ? JSON.parse(acc.args) : {},
+      } satisfies ToolCallComplete;
     }
   }
 

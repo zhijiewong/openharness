@@ -3,7 +3,7 @@
  */
 
 import type { Message, ToolCall } from "../types/message.js";
-import type { StreamEvent } from "../types/events.js";
+import type { StreamEvent, ToolCallComplete } from "../types/events.js";
 import { createAssistantMessage } from "../types/message.js";
 import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
 
@@ -132,11 +132,22 @@ export class OllamaProvider implements Provider {
         if (chunk.message?.tool_calls) {
           for (const tc of chunk.message.tool_calls) {
             const callId = tc.id ?? crypto.randomUUID();
+            const toolName = tc.function?.name ?? "unknown";
             yield {
               type: "tool_call_start",
-              toolName: tc.function?.name ?? "unknown",
+              toolName,
               callId,
             };
+            const args =
+              typeof tc.function?.arguments === "string"
+                ? JSON.parse(tc.function.arguments)
+                : tc.function?.arguments ?? {};
+            yield {
+              type: "tool_call_complete",
+              callId,
+              toolName,
+              arguments: args,
+            } satisfies ToolCallComplete;
           }
         }
 

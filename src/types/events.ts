@@ -13,6 +13,13 @@ export type ToolCallStart = {
   readonly callId: string;
 };
 
+export type ToolCallComplete = {
+  readonly type: "tool_call_complete";
+  readonly callId: string;
+  readonly toolName: string;
+  readonly arguments: Record<string, unknown>;
+};
+
 export type ToolCallEnd = {
   readonly type: "tool_call_end";
   readonly callId: string;
@@ -50,6 +57,7 @@ export type ErrorEvent = {
 export type StreamEvent =
   | TextDelta
   | ToolCallStart
+  | ToolCallComplete
   | ToolCallEnd
   | PermissionRequest
   | CostUpdate

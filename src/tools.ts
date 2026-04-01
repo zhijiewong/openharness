@@ -8,10 +8,11 @@ import { FileReadTool } from "./tools/FileReadTool/index.js";
 import { FileWriteTool } from "./tools/FileWriteTool/index.js";
 import { FileEditTool } from "./tools/FileEditTool/index.js";
 import { GlobTool } from "./tools/GlobTool/index.js";
+import { GrepTool } from "./tools/GrepTool/index.js";
+import { WebFetchTool } from "./tools/WebFetchTool/index.js";
 
 /**
  * Returns all registered tools.
- * GrepTool and WebFetchTool are excluded until implemented.
  */
 export function getAllTools(): Tools {
   return [
@@ -20,5 +21,7 @@ export function getAllTools(): Tools {
     FileWriteTool,
     FileEditTool,
     GlobTool,
+    GrepTool,
+    WebFetchTool,
   ];
 }
