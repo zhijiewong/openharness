@@ -20,7 +20,7 @@ Open-source terminal coding agent. Build your own Claude Code with any LLM.
 
 ---
 
-<video src="https://github.com/user-attachments/assets/a9ab2828-4472-4faa-9541-fc66451a8976" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/ed19a2cc-14d3-4db3-aa5b-3dc07c444498" controls width="100%"></video>
 
 ---
 
