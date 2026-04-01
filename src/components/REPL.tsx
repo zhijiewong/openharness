@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { Box, Text, useApp } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
@@ -29,6 +29,15 @@ type PendingPermission = {
   resolve: (allowed: boolean) => void;
 };
 
+const BANNER = `        ___
+       /   \\
+      (     )        ___  ___  ___ _  _ _  _   _ ___ _  _ ___ ___ ___
+       \`~w~\`        / _ \\| _ \\| __| \\| | || | /_\\ | _ \\ \\| | __/ __/ __|
+       (( ))       | (_) |  _/| _|| .\` | __ |/ _ \\|   / .\` | _|\\__ \\__ \\
+        ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
+       ((  ))
+        \`--\``;
+
 export default function REPL({
   provider,
   tools,
@@ -41,17 +50,15 @@ export default function REPL({
   const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(
-    new Map(),
-  );
-  const [pendingPermission, setPendingPermission] =
-    useState<PendingPermission | null>(null);
+  const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(new Map());
+  const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
 
   const handleSubmit = useCallback(
     async (input: string) => {
-      if (input.trim() === "/exit" || input.trim() === "/quit") {
+      const trimmed = input.trim();
+      if (trimmed === "exit" || trimmed === "quit" || trimmed === "/exit" || trimmed === "/quit") {
         exit();
         return;
       }
@@ -59,17 +66,12 @@ export default function REPL({
       setLoading(true);
       setStreamingText("");
       setError(null);
+      setToolCalls(new Map());
 
-      // Add user message to display (query.ts also adds it to its internal state,
-      // so we pass messages WITHOUT this message to avoid duplication)
       const userMsg = createUserMessage(input);
-      const displayMessages = [...messages, userMsg];
-      setMessages(displayMessages);
+      setMessages((prev) => [...prev, userMsg]);
 
-      const askUser = (
-        toolName: string,
-        description: string,
-      ): Promise<boolean> => {
+      const askUser = (toolName: string, description: string): Promise<boolean> => {
         return new Promise((resolve) => {
           setPendingPermission({
             toolName,
@@ -94,7 +96,7 @@ export default function REPL({
       let accumulatedText = "";
 
       try {
-        for await (const event of query(input, config, messages)) {  // messages = state before userMsg
+        for await (const event of query(input, config, messages)) {
           switch (event.type) {
             case "text_delta":
               accumulatedText += event.content;
@@ -136,18 +138,13 @@ export default function REPL({
 
             case "turn_complete":
               if (accumulatedText) {
-                setMessages((prev) => [
-                  ...prev,
-                  createAssistantMessage(accumulatedText),
-                ]);
+                setMessages((prev) => [...prev, createAssistantMessage(accumulatedText)]);
               }
               break;
           }
         }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : String(err),
-        );
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
         setStreamingText("");
@@ -157,47 +154,43 @@ export default function REPL({
   );
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column">
+      {/* ── Banner ── */}
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="cyan">{`        ___
-       /   \\
-      (     )        ___  ___  ___ _  _ _  _   _ ___ _  _ ___ ___ ___
-       \`~w~\`        / _ \\| _ \\| __| \\| | || | /_\\ | _ \\ \\| | __/ __/ __|
-       (( ))       | (_) |  _/| _|| .\` | __ |/ _ \\|   / .\` | _|\\__ \\__ \\
-        ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
-       ((  ))
-        \`--\``}</Text>
-        <Box marginTop={0}>
-          <Text bold color="cyan">OpenHarness</Text>
+        <Text color="magenta">{BANNER}</Text>
+        <Box>
+          <Text bold color="magenta">OpenHarness</Text>
           <Text dimColor> v0.1.0</Text>
-          {currentModel ? <Text color="green"> {currentModel}</Text> : null}
-          <Text dimColor> ({permissionMode} mode)</Text>
+          <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
+          <Text dimColor>{` (${permissionMode})`}</Text>
         </Box>
-        <Text dimColor>Tools: {tools.map(t => t.name).join(", ")}</Text>
-        <Text dimColor>Type "exit" or Ctrl+C to quit.</Text>
+        <Text dimColor>
+          {"─".repeat(60)}
+        </Text>
       </Box>
 
+      {/* ── Messages ── */}
       <Messages messages={messages} toolCalls={toolCalls} />
 
+      {/* ── Streaming response ── */}
       {loading && streamingText && (
-        <Box marginY={0}>
-          <Text color="blue" bold>
-            Assistant:{" "}
-          </Text>
+        <Box marginY={0} flexDirection="column">
+          <Text color="magenta" bold>{"◆ "}</Text>
           <Text>{streamingText}</Text>
         </Box>
       )}
 
-      {loading && !streamingText && (
-        <Spinner model={currentModel} />
-      )}
+      {/* ── Spinner ── */}
+      {loading && !streamingText && <Spinner model={currentModel} />}
 
+      {/* ── Error ── */}
       {error && (
-        <Box>
-          <Text color="red">Error: {error}</Text>
+        <Box marginY={1} borderStyle="round" borderColor="red" paddingX={1}>
+          <Text color="red">✗ {error}</Text>
         </Box>
       )}
 
+      {/* ── Permission prompt ── */}
       {pendingPermission && (
         <PermissionPrompt
           toolName={pendingPermission.toolName}
@@ -207,6 +200,7 @@ export default function REPL({
         />
       )}
 
+      {/* ── Input ── */}
       <Box marginTop={1}>
         <TextInput onSubmit={handleSubmit} disabled={loading} />
       </Box>

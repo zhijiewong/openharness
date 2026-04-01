@@ -43,7 +43,7 @@ export default function TextInput({ onSubmit, disabled }: TextInputProps) {
 
   return (
     <Box>
-      <Text color="green" bold>
+      <Text color="cyan" bold>
         {"❯ "}
       </Text>
       <InkTextInput
