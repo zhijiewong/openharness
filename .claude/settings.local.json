@@ -65,7 +65,18 @@
       "Bash(ls src/components/*.tsx src/main.tsx src/tools.ts)",
       "Bash(find src:*)",
       "Bash(find python:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(ollama list:*)",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen2.5:7b-instruct\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"hi\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"llama3\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"say hello in one word\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen2.5:7b-instruct\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"hi\"\"\"\"}],\"\"\"\"stream\"\"\"\":true}')",
+      "Bash(openharness version:*)",
+      "Bash(oh --version)",
+      "Bash(git checkout:*)",
+      "Bash(npm pack:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"llama3\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"say hi\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(npx tsx:*)"
     ]
   }
 }

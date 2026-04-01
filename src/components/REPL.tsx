@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useApp } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
@@ -55,21 +55,22 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
 
-  const handleSubmit = useCallback(
-    async (input: string) => {
-      const trimmed = input.trim();
-      if (trimmed === "exit" || trimmed === "quit" || trimmed === "/exit" || trimmed === "/quit") {
-        exit();
-        return;
-      }
+  // Use a ref to queue the next prompt — useEffect picks it up
+  const pendingPromptRef = useRef<string | null>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
+  // Process queued prompt in useEffect so React can render between state updates
+  useEffect(() => {
+    const prompt = pendingPromptRef.current;
+    if (!prompt || loading) return;
+    pendingPromptRef.current = null;
+
+    const run = async () => {
       setLoading(true);
       setStreamingText("");
       setError(null);
       setToolCalls(new Map());
-
-      const userMsg = createUserMessage(input);
-      setMessages((prev) => [...prev, userMsg]);
 
       const askUser = (toolName: string, description: string): Promise<boolean> => {
         return new Promise((resolve) => {
@@ -93,14 +94,14 @@ export default function REPL({
         askUser,
       };
 
-      let accumulatedText = "";
+      let accumulated = "";
 
       try {
-        for await (const event of query(input, config, messages)) {
+        for await (const event of query(prompt, config, messagesRef.current)) {
           switch (event.type) {
             case "text_delta":
-              accumulatedText += event.content;
-              setStreamingText(accumulatedText);
+              accumulated += event.content;
+              setStreamingText(accumulated);
               break;
 
             case "tool_call_start":
@@ -113,6 +114,9 @@ export default function REPL({
                 });
                 return next;
               });
+              break;
+
+            case "tool_call_complete":
               break;
 
             case "tool_call_end":
@@ -137,8 +141,8 @@ export default function REPL({
               break;
 
             case "turn_complete":
-              if (accumulatedText) {
-                setMessages((prev) => [...prev, createAssistantMessage(accumulatedText)]);
+              if (accumulated) {
+                setMessages((prev) => [...prev, createAssistantMessage(accumulated)]);
               }
               break;
           }
@@ -149,13 +153,31 @@ export default function REPL({
         setLoading(false);
         setStreamingText("");
       }
+    };
+
+    run();
+  }, [loading, provider, tools, systemPrompt, permissionMode]);
+
+  const handleSubmit = useCallback(
+    (input: string) => {
+      const trimmed = input.trim();
+      if (trimmed === "exit" || trimmed === "quit" || trimmed === "/exit" || trimmed === "/quit") {
+        exit();
+        return;
+      }
+
+      const userMsg = createUserMessage(input);
+      setMessages((prev) => [...prev, userMsg]);
+      pendingPromptRef.current = input;
+      // Force re-render so useEffect picks up the queued prompt
+      setLoading(false);
     },
-    [provider, tools, systemPrompt, permissionMode, messages, exit],
+    [exit],
   );
 
   return (
     <Box flexDirection="column">
-      {/* ── Banner ── */}
+      {/* Banner */}
       <Box flexDirection="column" marginBottom={1}>
         <Text color="magenta">{BANNER}</Text>
         <Box>
@@ -164,33 +186,31 @@ export default function REPL({
           <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
           <Text dimColor>{` (${permissionMode})`}</Text>
         </Box>
-        <Text dimColor>
-          {"─".repeat(60)}
-        </Text>
+        <Text dimColor>{"─".repeat(60)}</Text>
       </Box>
 
-      {/* ── Messages ── */}
+      {/* Messages */}
       <Messages messages={messages} toolCalls={toolCalls} />
 
-      {/* ── Streaming response ── */}
+      {/* Streaming response */}
       {loading && streamingText && (
-        <Box marginY={0} flexDirection="column">
+        <Box marginY={0}>
           <Text color="magenta" bold>{"◆ "}</Text>
           <Text>{streamingText}</Text>
         </Box>
       )}
 
-      {/* ── Spinner ── */}
+      {/* Spinner */}
       {loading && !streamingText && <Spinner model={currentModel} />}
 
-      {/* ── Error ── */}
+      {/* Error */}
       {error && (
         <Box marginY={1} borderStyle="round" borderColor="red" paddingX={1}>
-          <Text color="red">✗ {error}</Text>
+          <Text color="red">{"✗ "}{error}</Text>
         </Box>
       )}
 
-      {/* ── Permission prompt ── */}
+      {/* Permission prompt */}
       {pendingPermission && (
         <PermissionPrompt
           toolName={pendingPermission.toolName}
@@ -200,7 +220,7 @@ export default function REPL({
         />
       )}
 
-      {/* ── Input ── */}
+      {/* Input */}
       <Box marginTop={1}>
         <TextInput onSubmit={handleSubmit} disabled={loading} />
       </Box>
