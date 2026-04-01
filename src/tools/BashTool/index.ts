@@ -26,7 +26,8 @@ export const BashTool: Tool<typeof inputSchema> = {
   },
 
   call(input, context): Promise<ToolResult> {
-    const timeout = Math.min((input.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT);
+    // input.timeout is in seconds; convert to ms. Default 120s.
+    const timeoutMs = Math.min((input.timeout ?? 120) * 1000, MAX_TIMEOUT);
     const isWin = process.platform === "win32";
     const shell = isWin ? "cmd.exe" : "/bin/bash";
     const shellArgs = isWin ? ["/c", input.command] : ["-c", input.command];
@@ -45,7 +46,7 @@ export const BashTool: Tool<typeof inputSchema> = {
       const timer = setTimeout(() => {
         killed = true;
         proc.kill("SIGTERM");
-      }, timeout);
+      }, timeoutMs);
 
       proc.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();

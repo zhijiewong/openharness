@@ -28,7 +28,7 @@ export async function createProvider(modelArg?: string): Promise<{ provider: Pro
 
   const config: ProviderConfig = {
     name: providerName,
-    apiKey: process.env[`${providerName.toUpperCase()}_API_KEY`] ?? process.env.OPENAI_API_KEY,
+    apiKey: process.env[`${providerName.toUpperCase()}_API_KEY`],
     defaultModel: model,
   };
 

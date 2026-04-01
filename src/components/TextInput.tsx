@@ -13,8 +13,6 @@ export default function TextInput({ onSubmit, disabled }: TextInputProps) {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   useInput((_input, key) => {
-    if (disabled) return;
-
     if (key.upArrow && history.length > 0) {
       const next = Math.min(historyIndex + 1, history.length - 1);
       setHistoryIndex(next);
@@ -30,7 +28,7 @@ export default function TextInput({ onSubmit, disabled }: TextInputProps) {
         setValue(history[next]!);
       }
     }
-  });
+  }, { isActive: !disabled });
 
   const handleSubmit = useCallback(
     (submitted: string) => {

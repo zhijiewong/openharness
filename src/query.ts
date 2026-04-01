@@ -94,11 +94,21 @@ export async function* query(
         assistantContent += event.content;
         yield event;
       } else if (event.type === "tool_call_start") {
+        // Placeholder — arguments populated by tool_call_complete
         toolCalls.push({
           id: event.callId,
           toolName: event.toolName,
           arguments: {},
         });
+        yield event;
+      } else if (event.type === "tool_call_complete") {
+        // Update the matching tool call with final parsed arguments
+        const tc = toolCalls.find((t) => t.id === event.callId);
+        if (tc) {
+          // ToolCall is readonly, so replace in-place
+          const idx = toolCalls.indexOf(tc);
+          toolCalls[idx] = { ...tc, arguments: event.arguments };
+        }
       } else if (event.type === "cost_update") {
         state.totalCost += event.cost;
         yield event;

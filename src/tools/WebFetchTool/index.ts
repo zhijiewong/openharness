@@ -80,7 +80,7 @@ export const WebFetchTool: Tool<typeof inputSchema> = {
     try {
       const response = await fetch(input.url, {
         headers: { "User-Agent": "OpenHarness/1.0" },
-        redirect: "follow",
+        redirect: "error",  // Block redirects — prevents SSRF via redirect to private IPs
         signal: AbortSignal.timeout(30_000),
       });
 

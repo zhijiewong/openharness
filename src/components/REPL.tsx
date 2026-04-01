@@ -60,8 +60,11 @@ export default function REPL({
       setStreamingText("");
       setError(null);
 
+      // Add user message to display (query.ts also adds it to its internal state,
+      // so we pass messages WITHOUT this message to avoid duplication)
       const userMsg = createUserMessage(input);
-      setMessages((prev) => [...prev, userMsg]);
+      const displayMessages = [...messages, userMsg];
+      setMessages(displayMessages);
 
       const askUser = (
         toolName: string,
@@ -91,7 +94,7 @@ export default function REPL({
       let accumulatedText = "";
 
       try {
-        for await (const event of query(input, config, messages)) {
+        for await (const event of query(input, config, messages)) {  // messages = state before userMsg
           switch (event.type) {
             case "text_delta":
               accumulatedText += event.content;

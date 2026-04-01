@@ -3,7 +3,7 @@
  */
 
 import type { Message, ToolCall } from "../types/message.js";
-import type { StreamEvent } from "../types/events.js";
+import type { StreamEvent, ToolCallComplete } from "../types/events.js";
 import { createAssistantMessage } from "../types/message.js";
 import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
 
@@ -120,6 +120,7 @@ export class AnthropicProvider implements Provider {
     // Track current tool_use block for input_json_delta accumulation
     let currentToolId = "";
     let currentToolName = "";
+    let currentToolArgs = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -155,6 +156,7 @@ export class AnthropicProvider implements Provider {
             if (block?.type === "tool_use") {
               currentToolId = block.id;
               currentToolName = block.name;
+              currentToolArgs = "";
               yield {
                 type: "tool_call_start",
                 toolName: block.name,
@@ -168,7 +170,23 @@ export class AnthropicProvider implements Provider {
             if (delta?.type === "text_delta" && delta.text) {
               yield { type: "text_delta", content: delta.text };
             }
-            // input_json_delta is accumulated but we don't need to emit it as text
+            if (delta?.type === "input_json_delta" && delta.partial_json) {
+              currentToolArgs += delta.partial_json;
+            }
+            break;
+          }
+          case "content_block_stop": {
+            if (currentToolId) {
+              yield {
+                type: "tool_call_complete",
+                callId: currentToolId,
+                toolName: currentToolName,
+                arguments: currentToolArgs ? JSON.parse(currentToolArgs) : {},
+              } satisfies ToolCallComplete;
+              currentToolId = "";
+              currentToolName = "";
+              currentToolArgs = "";
+            }
             break;
           }
           case "message_delta": {
