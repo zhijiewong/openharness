@@ -10,7 +10,7 @@ type SpinnerProps = {
 export default function Spinner({ label, model }: SpinnerProps) {
   return (
     <Box>
-      <Text color="cyan">
+      <Text color="magenta">
         <InkSpinner type="dots" />
       </Text>
       <Text dimColor>

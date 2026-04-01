@@ -13,39 +13,41 @@ type ToolCallDisplayProps = {
   toolCall: ToolCallState;
 };
 
-const MAX_OUTPUT = 200;
+const MAX_OUTPUT_LINES = 8;
 
 export default function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
   const { toolName, status, output } = toolCall;
 
+  const icon = status === "running" ? (
+    <Text color="yellow"><InkSpinner type="dots" />{" "}</Text>
+  ) : status === "error" ? (
+    <Text color="red">{"✗ "}</Text>
+  ) : (
+    <Text color="green">{"✓ "}</Text>
+  );
+
   return (
-    <Box flexDirection="column" marginLeft={2}>
+    <Box flexDirection="column" marginLeft={2} marginY={0}>
       <Box>
-        {status === "running" ? (
-          <Text color="cyan">
-            <InkSpinner type="dots" />{" "}
-          </Text>
-        ) : status === "error" ? (
-          <Text color="red">{"✗ "}</Text>
-        ) : (
-          <Text color="green">{"✓ "}</Text>
-        )}
-        <Text color="cyan" bold>
-          {toolName}
-        </Text>
-        {status === "running" && <Text dimColor> running...</Text>}
+        {icon}
+        <Text color="yellow" bold>{toolName}</Text>
+        {status === "running" && <Text dimColor>{" ..."}</Text>}
       </Box>
-      {output != null && (
-        <Box marginLeft={2}>
-          <Text color={status === "error" ? "red" : "gray"} wrap="truncate-end">
-            {output.length > MAX_OUTPUT
-              ? output.slice(0, MAX_OUTPUT) + "..."
-              : output}
+      {output != null && status !== "running" && (
+        <Box marginLeft={4}>
+          <Text color={status === "error" ? "red" : "gray"} dimColor>
+            {truncateOutput(output, MAX_OUTPUT_LINES)}
           </Text>
         </Box>
       )}
     </Box>
   );
+}
+
+function truncateOutput(text: string, maxLines: number): string {
+  const lines = text.split("\n");
+  if (lines.length <= maxLines) return text;
+  return lines.slice(0, maxLines).join("\n") + `\n... (${lines.length} lines)`;
 }
 
 export type { ToolCallState };

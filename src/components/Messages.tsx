@@ -31,10 +31,8 @@ function MessageRow({
   if (role === "user") {
     return (
       <Box marginY={0}>
-        <Text color="green" bold>
-          You:{" "}
-        </Text>
-        <Text>{content}</Text>
+        <Text color="cyan" bold>{"❯ "}</Text>
+        <Text bold>{content}</Text>
       </Box>
     );
   }
@@ -42,32 +40,22 @@ function MessageRow({
   if (role === "assistant") {
     return (
       <Box flexDirection="column" marginY={0}>
-        <Box>
-          <Text color="blue" bold>
-            Assistant:{" "}
-          </Text>
-          <Text>{content}</Text>
-        </Box>
+        {content ? (
+          <Box>
+            <Text color="magenta" bold>{"◆ "}</Text>
+            <Text>{content}</Text>
+          </Box>
+        ) : null}
         {message.toolCalls?.map((tc) => {
           const state = toolCalls.get(tc.id);
-          return state ? (
-            <ToolCallDisplay key={tc.id} toolCall={state} />
-          ) : null;
+          return state ? <ToolCallDisplay key={tc.id} toolCall={state} /> : null;
         })}
       </Box>
     );
   }
 
   if (role === "tool") {
-    const result = message.toolResults?.[0];
-    return (
-      <Box marginLeft={4} marginY={0}>
-        <Text dimColor>
-          {result?.isError ? "[error] " : "[result] "}
-          {content.length > 150 ? content.slice(0, 150) + "..." : content}
-        </Text>
-      </Box>
-    );
+    return null; // Tool results shown inline via ToolCallDisplay
   }
 
   return null;
