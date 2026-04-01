@@ -46,6 +46,8 @@ oh run "fix the tests" --json         # headless mode for CI/CD
 
 ## Why OpenHarness?
 
+Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness works with any LLM -- run it free with Ollama on your own machine, or connect to any cloud API. Every AI edit is git-committed and reversible with `/undo`.
+
 |  | OpenHarness | Claude Code | Aider | OpenCode |
 |---|---|---|---|---|
 | Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
