@@ -1,5 +1,5 @@
 /**
- * Core message types — mirrors Claude Code's types/message.ts pattern.
+ * Core message types for the agent conversation loop.
  */
 
 export type Role = "user" | "assistant" | "system" | "tool";

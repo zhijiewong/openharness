@@ -1,7 +1,7 @@
 /**
  * Agent loop — the core LLM-to-Tool orchestration cycle.
  *
- * Mirrors Claude Code's query.ts architecture:
+ * Core agent loop architecture:
  * - while(true) state machine with explicit transitions
  * - Error recovery with ordered fallbacks and circuit breaker
  * - Context window management with message compression

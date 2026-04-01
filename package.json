@@ -1,7 +1,7 @@
 {
   "name": "@zhijiewang/openharness",
   "version": "0.2.0",
-  "description": "Open-source terminal coding agent. Build your own Claude Code with any LLM.",
+  "description": "Open-source terminal coding agent. Works with any LLM.",
   "type": "module",
   "bin": {
     "openharness": "./dist/main.js",
@@ -44,7 +44,7 @@
     "cli",
     "coding-agent",
     "terminal",
-    "claude-code",
+    "coding-assistant",
     "ollama",
     "openai",
     "anthropic"

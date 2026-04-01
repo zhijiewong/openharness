@@ -1,5 +1,5 @@
 /**
- * Permission types — mirrors Claude Code's ToolPermissionContext.
+ * Permission types — tool permission context and risk-based gating.
  */
 
 export type PermissionMode = "ask" | "trust" | "deny";
@@ -20,7 +20,7 @@ export type AskUserFn = (
 /**
  * Permission gate — decides if a tool call should be allowed.
  *
- * Decision matrix (mirrors Claude Code):
+ * Decision matrix:
  * - LOW risk + read-only: always allow
  * - trust mode: always allow
  * - deny mode: only allow LOW read-only
