@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import type { Message } from "../types/message.js";
 
 const DEFAULT_SESSION_DIR = join(homedir(), ".oh", "sessions");
@@ -21,7 +22,7 @@ export type Session = {
 
 export function createSession(provider: string, model: string): Session {
   return {
-    id: crypto.randomUUID().slice(0, 12),
+    id: randomUUID().slice(0, 12),
     messages: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
