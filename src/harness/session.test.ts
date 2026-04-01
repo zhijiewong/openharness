@@ -29,8 +29,9 @@ test("listSessions() returns saved sessions sorted by updatedAt", async () => {
   const s2 = createSession("openai", "gpt-4o-mini");
   saveSession(s1, tmp);
   // Small delay so updatedAt differs
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((r) => setTimeout(r, 20));
   saveSession(s2, tmp);
+
   const list = listSessions(tmp);
   assert.equal(list.length, 2);
   // Most recent first

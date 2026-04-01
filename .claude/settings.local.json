@@ -79,7 +79,8 @@
       "Bash(npx tsx:*)",
       "Bash(find /e/AI/src/components -name *Permission* -o -name *ToolUse* -o -name *Markdown*)",
       "Bash(grep -n \"^export\" /e/AI/src/components/design-system/*.tsx)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm publish:*)"
     ]
   }
 }
