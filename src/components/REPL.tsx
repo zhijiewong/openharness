@@ -7,6 +7,8 @@ import type { Tools } from "../Tool.js";
 import type { PermissionMode } from "../types/permissions.js";
 import { createAssistantMessage, createUserMessage } from "../types/message.js";
 import { query, type QueryConfig } from "../query.js";
+import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
+import { CostTracker, estimateCost } from "../harness/cost.js";
 import Messages from "./Messages.js";
 import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
@@ -20,6 +22,7 @@ type REPLProps = {
   systemPrompt: string;
   model?: string;
   initialMessages?: Message[];
+  resumeSessionId?: string;
 };
 
 type PendingPermission = {
@@ -45,9 +48,23 @@ export default function REPL({
   systemPrompt,
   model,
   initialMessages,
+  resumeSessionId,
 }: REPLProps) {
   const { exit } = useApp();
-  const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
+
+  // Session and cost tracking
+  const sessionRef = useRef<Session>(
+    resumeSessionId
+      ? (() => { try { return loadSession(resumeSessionId); } catch { return createSession("unknown", model ?? ""); } })()
+      : createSession("unknown", model ?? ""),
+  );
+  const costRef = useRef(new CostTracker());
+  const [totalCost, setTotalCost] = useState(0);
+  const [sessionId] = useState(sessionRef.current.id);
+
+  const [messages, setMessages] = useState<Message[]>(
+    resumeSessionId ? sessionRef.current.messages : (initialMessages ?? []),
+  );
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(new Map());
@@ -55,12 +72,21 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
 
-  // Use a ref to queue the next prompt — useEffect picks it up
+  // Save session on exit
+  useEffect(() => {
+    return () => {
+      sessionRef.current.messages = messages;
+      sessionRef.current.totalCost = costRef.current.totalCost;
+      try { saveSession(sessionRef.current); } catch { /* ignore */ }
+    };
+  }, [messages]);
+
+  // Queue prompt submissions — useEffect picks them up for async processing
   const pendingPromptRef = useRef<string | null>(null);
+  const [submitCount, setSubmitCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  // Process queued prompt in useEffect so React can render between state updates
   useEffect(() => {
     const prompt = pendingPromptRef.current;
     if (!prompt || loading) return;
@@ -134,6 +160,12 @@ export default function REPL({
 
             case "cost_update":
               setCurrentModel(event.model);
+              costRef.current.record(
+                "provider", event.model,
+                event.inputTokens, event.outputTokens,
+                event.cost || estimateCost(event.model, event.inputTokens, event.outputTokens),
+              );
+              setTotalCost(costRef.current.totalCost);
               break;
 
             case "error":
@@ -156,7 +188,7 @@ export default function REPL({
     };
 
     run();
-  }, [loading, provider, tools, systemPrompt, permissionMode]);
+  }, [submitCount, loading, provider, tools, systemPrompt, permissionMode]);
 
   const handleSubmit = useCallback(
     (input: string) => {
@@ -169,8 +201,8 @@ export default function REPL({
       const userMsg = createUserMessage(input);
       setMessages((prev) => [...prev, userMsg]);
       pendingPromptRef.current = input;
-      // Force re-render so useEffect picks up the queued prompt
-      setLoading(false);
+      // Increment counter to trigger useEffect (refs don't cause re-renders)
+      setSubmitCount((c) => c + 1);
     },
     [exit],
   );
@@ -186,6 +218,9 @@ export default function REPL({
           <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
           <Text dimColor>{` (${permissionMode})`}</Text>
         </Box>
+        <Text dimColor>
+          session {sessionId}{totalCost > 0 ? ` | $${totalCost.toFixed(4)}` : ""}
+        </Text>
         <Text dimColor>{"─".repeat(60)}</Text>
       </Box>
 

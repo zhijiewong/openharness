@@ -1,6 +1,6 @@
 {
   "name": "@zhijiewang/openharness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Open-source terminal coding agent. Build your own Claude Code with any LLM.",
   "type": "module",
   "bin": {

@@ -23,7 +23,7 @@ Open-source terminal coding agent. Build your own Claude Code with any LLM.
 ## Quick Start
 
 ```bash
-npm install -g openharness
+npm install -g @zhijiewang/openharness
 oh
 ```
 
@@ -36,13 +36,15 @@ oh --model gpt-4o                     # use OpenAI (needs OPENAI_API_KEY)
 oh --trust                            # auto-approve all tool calls
 ```
 
+<!-- ![Demo](assets/demo.gif) -->
+
 ## Install
 
 Requires **Node.js 18+**.
 
 ```bash
-# From npm (when published)
-npm install -g openharness
+# From npm
+npm install -g @zhijiewang/openharness
 
 # From source
 git clone https://github.com/zhijiewong/openharness.git
