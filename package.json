@@ -1,13 +1,54 @@
 {
-  "name": "openharness-monorepo",
-  "private": true,
-  "workspaces": [
-    "packages/cli"
-  ],
+  "name": "openharness",
+  "version": "0.1.0",
+  "description": "Open-source terminal coding agent. Build your own Claude Code with any LLM.",
+  "type": "module",
+  "bin": {
+    "openharness": "./dist/main.js",
+    "oh": "./dist/main.js"
+  },
+  "main": "./dist/main.js",
   "scripts": {
-    "build:cli": "npm run build --workspace @openharness/cli",
-    "check:cli": "npm run check --workspace @openharness/cli",
-    "dev:cli": "npm run dev --workspace @openharness/cli",
-    "test:cli": "npm run test --workspace @openharness/cli"
+    "dev": "tsx src/main.tsx",
+    "build": "tsc",
+    "test": "tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.0.0",
+    "ink": "^5.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "cli",
+    "coding-agent",
+    "terminal",
+    "claude-code",
+    "ollama",
+    "openai",
+    "anthropic"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhijiewong/openharness"
   }
 }
