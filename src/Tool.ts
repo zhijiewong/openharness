@@ -1,5 +1,5 @@
 /**
- * Tool interface — mirrors Claude Code's Tool.ts pattern.
+ * Tool interface — defines how tools are registered, validated, and executed.
  * Every tool implements this interface with Zod input validation.
  */
 

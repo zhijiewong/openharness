@@ -1,6 +1,6 @@
 /**
- * Tool execution during LLM streaming — mirrors Claude Code's concurrent
- * tool execution pattern with permission checks and queue management.
+ * Tool execution during LLM streaming — concurrent tool execution
+ * with permission checks and queue management.
  */
 
 import type { ToolCall } from "../types/message.js";

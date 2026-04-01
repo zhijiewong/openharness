@@ -1,6 +1,6 @@
 /**
  * Semantic theme system for OpenHarness terminal UI.
- * Inspired by Claude Code's 89-color theme with shimmer variants.
+ * Semantic color tokens with shimmer variants for animations.
  */
 
 import React from "react";

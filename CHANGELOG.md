@@ -6,7 +6,7 @@ Initial alpha release. TypeScript rewrite.
 
 ### Features
 - Single TypeScript process with React+Ink terminal UI
-- Agent loop with async generator streaming (mirrors Claude Code's query.ts)
+- Agent loop with async generator streaming
 - 5 LLM providers: Ollama, OpenAI, Anthropic, OpenRouter, OpenAI-compatible
 - 7 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch (all with Zod schemas)
 - Permission gate with ask/trust/deny modes and risk-based tool approval

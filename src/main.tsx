@@ -27,7 +27,7 @@ const program = new Command();
 
 program
   .name("openharness")
-  .description("Open-source terminal coding agent. Build your own Claude Code with any LLM.")
+  .description("Open-source terminal coding agent. Works with any LLM.")
   .version(VERSION);
 
 // ── Headless run command ──
