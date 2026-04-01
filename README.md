@@ -20,6 +20,10 @@ Open-source terminal coding agent. Build your own Claude Code with any LLM.
 
 ---
 
+<!-- DEMO VIDEO: drag-and-drop your .mp4 into GitHub's README editor to embed -->
+
+---
+
 ## Quick Start
 
 ```bash
