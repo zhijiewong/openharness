@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "tsx src/main.tsx",
     "build": "tsc",
+    "prepare": "tsc",
     "test": "tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit",
     "start": "node dist/main.js"
