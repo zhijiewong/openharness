@@ -172,7 +172,7 @@ export class OpenRouterProvider implements Provider {
         type: "tool_call_complete",
         callId: acc.id,
         toolName: acc.name,
-        arguments: acc.args ? JSON.parse(acc.args) : {},
+        arguments: safeParse(acc.args),
       } satisfies ToolCallComplete;
     }
   }
@@ -301,4 +301,10 @@ export class OpenRouterProvider implements Provider {
       return false;
     }
   }
+}
+
+function safeParse(json: string | undefined): Record<string, unknown> {
+  if (!json) return {};
+  try { return JSON.parse(json); }
+  catch { return {}; }
 }

@@ -14,8 +14,8 @@ import { render } from "ink";
 import { Command, Option } from "commander";
 import App from "./components/App.js";
 import { getAllTools } from "./tools.js";
-import { createRulesFile, loadRules } from "./harness/rules.js";
-import { detectProject } from "./harness/onboarding.js";
+import { createRulesFile, loadRules, loadRulesAsPrompt } from "./harness/rules.js";
+import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { MODEL_PRICING } from "./harness/cost.js";
 import { listSessions } from "./harness/session.js";
 import type { PermissionMode } from "./types/permissions.js";
@@ -29,6 +29,96 @@ program
   .name("openharness")
   .description("Open-source terminal coding agent. Build your own Claude Code with any LLM.")
   .version(VERSION);
+
+// ── Headless run command ──
+
+const DEFAULT_SYSTEM_PROMPT = `You are OpenHarness, an AI coding assistant running in the user's terminal.
+You have access to tools for reading, writing, and searching files, and running shell commands.
+Always explain what you're about to do before using tools.`;
+
+function buildSystemPrompt(): string {
+  const parts: string[] = [DEFAULT_SYSTEM_PROMPT];
+
+  const projectCtx = detectProject();
+  const projectPrompt = projectContextToPrompt(projectCtx);
+  if (projectPrompt) parts.push(projectPrompt);
+
+  const rulesPrompt = loadRulesAsPrompt();
+  if (rulesPrompt) parts.push(rulesPrompt);
+
+  return parts.join("\n\n");
+}
+
+program
+  .command("run")
+  .description("Run a single prompt non-interactively")
+  .argument("<prompt>", "The prompt to execute")
+  .option("-m, --model <model>", "Model to use")
+  .addOption(
+    new Option("--permission-mode <mode>", "Permission mode")
+      .choices(["ask", "trust", "deny"])
+      .default("trust"),
+  )
+  .option("--trust", "Auto-approve all tools")
+  .option("--deny", "Block all non-read tools")
+  .option("--json", "Output as JSON")
+  .option("--max-turns <n>", "Maximum turns", "20")
+  .action(async (prompt: string, opts: Record<string, unknown>) => {
+    const permissionMode: PermissionMode = (opts.trust
+      ? "trust"
+      : opts.deny
+        ? "deny"
+        : opts.permissionMode) as PermissionMode;
+
+    const { createProvider } = await import("./providers/index.js");
+    const { provider, model } = await createProvider(opts.model as string | undefined);
+    const { query } = await import("./query.js");
+
+    const tools = getAllTools();
+    const systemPrompt = buildSystemPrompt();
+
+    const config = {
+      provider,
+      tools,
+      systemPrompt,
+      permissionMode,
+      maxTurns: parseInt(opts.maxTurns as string),
+      model,
+    };
+
+    let fullOutput = "";
+    const toolResults: Array<{ tool: string; output: string; error: boolean | undefined }> = [];
+    const callIdToName: Record<string, string> = {};
+
+    for await (const event of query(prompt, config)) {
+      if (event.type === "text_delta") {
+        fullOutput += event.content;
+        if (!opts.json) process.stdout.write(event.content);
+      } else if (event.type === "tool_call_start") {
+        callIdToName[event.callId] = event.toolName;
+        if (!opts.json) process.stderr.write(`[tool] ${event.toolName}\n`);
+      } else if (event.type === "tool_call_end") {
+        toolResults.push({
+          tool: callIdToName[event.callId] || event.callId || "unknown",
+          output: event.output,
+          error: event.isError,
+        });
+        if (!opts.json && event.isError) process.stderr.write(`[error] ${event.output}\n`);
+      } else if (event.type === "error") {
+        if (!opts.json) process.stderr.write(`[error] ${event.message}\n`);
+      } else if (event.type === "turn_complete") {
+        if (event.reason !== "completed") {
+          process.exitCode = 1;
+        }
+      }
+    }
+
+    if (opts.json) {
+      console.log(JSON.stringify({ output: fullOutput, tools: toolResults }, null, 2));
+    } else {
+      process.stdout.write("\n");
+    }
+  });
 
 // ── Default command: just run `openharness` to start chatting ──
 program

@@ -5,10 +5,12 @@ import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
 import type { Tools } from "../Tool.js";
 import type { PermissionMode } from "../types/permissions.js";
-import { createAssistantMessage, createUserMessage } from "../types/message.js";
+import { createAssistantMessage, createUserMessage, createMessage } from "../types/message.js";
 import { query, type QueryConfig } from "../query.js";
 import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
 import { CostTracker, estimateCost } from "../harness/cost.js";
+import { processSlashCommand, type CommandContext } from "../commands/index.js";
+import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
 import Messages from "./Messages.js";
 import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
@@ -68,6 +70,8 @@ export default function REPL({
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(new Map());
+  const toolCallsRef = useRef(toolCalls);
+  toolCallsRef.current = toolCalls;
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
@@ -118,6 +122,7 @@ export default function REPL({
         systemPrompt,
         permissionMode,
         askUser,
+        model: currentModel || undefined,
       };
 
       let accumulated = "";
@@ -145,18 +150,30 @@ export default function REPL({
             case "tool_call_complete":
               break;
 
-            case "tool_call_end":
+            case "tool_call_end": {
+              const toolName = toolCallsRef.current?.get(event.callId)?.toolName ?? "unknown";
               setToolCalls((prev) => {
                 const next = new Map(prev);
                 next.set(event.callId, {
                   callId: event.callId,
-                  toolName: next.get(event.callId)?.toolName ?? "unknown",
+                  toolName,
                   status: event.isError ? "error" : "done",
                   output: event.output,
                 });
                 return next;
               });
+              // Git auto-commit for write tools
+              if (!event.isError && isGitRepo()) {
+                const writeTool = ["Edit", "Write", "Bash"].includes(toolName);
+                if (writeTool) {
+                  const hash = autoCommitAIEdits(toolName, [], process.cwd());
+                  if (hash) {
+                    setMessages((prev) => [...prev, createMessage("system", `git: committed ${hash}`)]);
+                  }
+                }
+              }
               break;
+            }
 
             case "cost_update":
               setCurrentModel(event.model);
@@ -176,6 +193,10 @@ export default function REPL({
               if (accumulated) {
                 setMessages((prev) => [...prev, createAssistantMessage(accumulated)]);
               }
+              // Auto-save session
+              sessionRef.current.messages = messagesRef.current;
+              sessionRef.current.totalCost = costRef.current.totalCost;
+              try { saveSession(sessionRef.current); } catch { /* ignore */ }
               break;
           }
         }
@@ -198,13 +219,43 @@ export default function REPL({
         return;
       }
 
+      // Process slash commands
+      if (trimmed.startsWith("/")) {
+        const ctx: CommandContext = {
+          messages: messagesRef.current,
+          model: currentModel,
+          permissionMode,
+          totalCost: costRef.current.totalCost,
+          totalInputTokens: costRef.current.totalInputTokens,
+          totalOutputTokens: costRef.current.totalOutputTokens,
+          sessionId,
+        };
+        const result = processSlashCommand(trimmed, ctx);
+        if (result) {
+          if (result.clearMessages) {
+            setMessages([]);
+          }
+          if (result.compactedMessages) {
+            setMessages(result.compactedMessages);
+          }
+          if (result.newModel) {
+            setCurrentModel(result.newModel);
+          }
+          if (result.output) {
+            // Show command output as a system message
+            setMessages((prev) => [...prev, createMessage("system", result.output)]);
+          }
+          if (result.handled) return;
+          // If not handled, fall through to send to LLM (e.g., /plan, /review)
+        }
+      }
+
       const userMsg = createUserMessage(input);
       setMessages((prev) => [...prev, userMsg]);
       pendingPromptRef.current = input;
-      // Increment counter to trigger useEffect (refs don't cause re-renders)
       setSubmitCount((c) => c + 1);
     },
-    [exit],
+    [exit, currentModel, permissionMode, sessionId],
   );
 
   return (
@@ -236,7 +287,7 @@ export default function REPL({
       )}
 
       {/* Spinner */}
-      {loading && !streamingText && <Spinner model={currentModel} />}
+      {loading && !streamingText && <Spinner model={currentModel} tokens={costRef.current.totalOutputTokens} />}
 
       {/* Error */}
       {error && (
@@ -259,6 +310,9 @@ export default function REPL({
       <Box marginTop={1}>
         <TextInput onSubmit={handleSubmit} disabled={loading} />
       </Box>
+
+      {/* Keybinding hints */}
+      <Text dimColor>{"exit to quit"}{loading ? " | Ctrl+C to interrupt" : ""}</Text>
     </Box>
   );
 }

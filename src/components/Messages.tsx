@@ -4,6 +4,7 @@ import type { Message } from "../types/message.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
 import ToolCallDisplay from "./ToolCallDisplay.js";
 import Markdown from "./Markdown.js";
+import { useTheme } from "../utils/theme.js";
 
 type MessagesProps = {
   messages: Message[];
@@ -11,14 +12,18 @@ type MessagesProps = {
 };
 
 export default function Messages({ messages, toolCalls }: MessagesProps) {
+  const theme = useTheme();
+
   return (
     <Box flexDirection="column">
       {messages.map((msg, i) => {
         const showDivider = msg.role === "user" && i > 0;
         return (
           <React.Fragment key={msg.uuid}>
-            {showDivider && <Text dimColor>{"─".repeat(50)}</Text>}
-            <MessageRow message={msg} toolCalls={toolCalls} />
+            {showDivider && (
+              <Text color={theme.dim}>{"─".repeat(60)}</Text>
+            )}
+            <MessageRow message={msg} toolCalls={toolCalls} theme={theme} />
           </React.Fragment>
         );
       })}
@@ -29,14 +34,18 @@ export default function Messages({ messages, toolCalls }: MessagesProps) {
 function MessageRow({
   message,
   toolCalls,
+  theme,
 }: {
   message: Message;
   toolCalls: Map<string, ToolCallState>;
+  theme: ReturnType<typeof import("../utils/theme.js").useTheme>;
 }) {
   if (message.role === "user") {
     return (
       <Box marginY={0}>
-        <Text color="cyan" bold>{"❯ "}</Text>
+        <Text color={theme.user} bold>
+          {"❯ "}
+        </Text>
         <Text bold>{message.content}</Text>
       </Box>
     );
@@ -47,7 +56,9 @@ function MessageRow({
       <Box flexDirection="column" marginY={0}>
         {message.content ? (
           <Box>
-            <Text color="magenta" bold>{"◆ "}</Text>
+            <Text color={theme.assistant} bold>
+              {"◆ "}
+            </Text>
             <Box flexDirection="column" flexGrow={1}>
               <Markdown>{message.content}</Markdown>
             </Box>
@@ -57,6 +68,20 @@ function MessageRow({
           const state = toolCalls.get(tc.id);
           return state ? <ToolCallDisplay key={tc.id} toolCall={state} /> : null;
         })}
+      </Box>
+    );
+  }
+
+  // Error-style for system messages
+  if (message.role === "system") {
+    return (
+      <Box
+        borderStyle="round"
+        borderColor={theme.error}
+        paddingX={1}
+        marginY={0}
+      >
+        <Text color={theme.error}>{"✗ "}{message.content}</Text>
       </Box>
     );
   }

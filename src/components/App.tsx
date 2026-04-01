@@ -5,6 +5,8 @@ import type { PermissionMode } from "../types/permissions.js";
 import type { Message } from "../types/message.js";
 import { loadRulesAsPrompt } from "../harness/rules.js";
 import { detectProject, projectContextToPrompt } from "../harness/onboarding.js";
+import { ThemeProvider, darkTheme } from "../utils/theme.js";
+import { ErrorBoundary } from "./ErrorBoundary.js";
 import REPL from "./REPL.js";
 
 type AppProps = {
@@ -28,7 +30,6 @@ export default function App({
   model,
   initialMessages,
 }: AppProps) {
-  // Build full system prompt with rules and project context
   const fullSystemPrompt = useMemo(() => {
     const parts: string[] = [systemPrompt || DEFAULT_SYSTEM_PROMPT];
 
@@ -43,14 +44,18 @@ export default function App({
   }, [systemPrompt]);
 
   return (
-    <REPL
-      provider={provider}
-      tools={tools}
-      permissionMode={permissionMode}
-      systemPrompt={fullSystemPrompt}
-      model={model}
-      initialMessages={initialMessages}
-    />
+    <ThemeProvider value={darkTheme}>
+      <ErrorBoundary>
+        <REPL
+          provider={provider}
+          tools={tools}
+          permissionMode={permissionMode}
+          systemPrompt={fullSystemPrompt}
+          model={model}
+          initialMessages={initialMessages}
+        />
+      </ErrorBoundary>
+    </ThemeProvider>
   );
 }
 

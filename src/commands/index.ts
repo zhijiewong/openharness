@@ -1,0 +1,235 @@
+/**
+ * Slash command system — /help, /clear, /diff, /undo, /cost, etc.
+ *
+ * Commands are processed in the REPL before being sent to the LLM.
+ * If input starts with /, it's treated as a command.
+ */
+
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch, getModifiedFiles } from "../git/index.js";
+import type { Message } from "../types/message.js";
+
+export type CommandResult = {
+  /** Text output to display */
+  output: string;
+  /** If true, don't send to LLM */
+  handled: boolean;
+  /** If set, clear messages */
+  clearMessages?: boolean;
+  /** If set, update model */
+  newModel?: string;
+  /** If set, replace messages with compacted version */
+  compactedMessages?: Message[];
+};
+
+type CommandHandler = (args: string, context: CommandContext) => CommandResult;
+
+export type CommandContext = {
+  messages: Message[];
+  model: string;
+  permissionMode: string;
+  totalCost: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  sessionId: string;
+};
+
+const commands = new Map<string, { description: string; handler: CommandHandler }>();
+
+function register(name: string, description: string, handler: CommandHandler) {
+  commands.set(name, { description, handler });
+}
+
+// ── Register all commands ──
+
+register("help", "Show available commands", () => {
+  const lines = ["Available commands:\n"];
+  for (const [name, { description }] of commands) {
+    lines.push(`  /${name.padEnd(12)} ${description}`);
+  }
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("clear", "Clear conversation history", () => {
+  return { output: "Conversation cleared.", handled: true, clearMessages: true };
+});
+
+register("cost", "Show session cost and token usage", (_args, ctx) => {
+  const lines = [
+    `Cost:    $${ctx.totalCost.toFixed(4)}`,
+    `Tokens:  ${ctx.totalInputTokens.toLocaleString()} input, ${ctx.totalOutputTokens.toLocaleString()} output`,
+    `Model:   ${ctx.model}`,
+    `Session: ${ctx.sessionId}`,
+  ];
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("status", "Show session status", (_args, ctx) => {
+  const lines = [
+    `Model:      ${ctx.model}`,
+    `Mode:       ${ctx.permissionMode}`,
+    `Messages:   ${ctx.messages.length}`,
+    `Cost:       $${ctx.totalCost.toFixed(4)}`,
+    `Session:    ${ctx.sessionId}`,
+  ];
+  if (isGitRepo()) {
+    lines.push(`Git branch: ${gitBranch()}`);
+  }
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("diff", "Show uncommitted git changes", () => {
+  if (!isGitRepo()) {
+    return { output: "Not a git repository.", handled: true };
+  }
+  const diff = gitDiff();
+  return { output: diff || "No uncommitted changes.", handled: true };
+});
+
+register("undo", "Undo last AI commit", () => {
+  if (!isGitRepo()) {
+    return { output: "Not a git repository.", handled: true };
+  }
+  const success = gitUndo();
+  return {
+    output: success ? "Undone. Last AI commit reverted." : "Nothing to undo (last commit wasn't from OpenHarness).",
+    handled: true,
+  };
+});
+
+register("commit", "Create a git commit", (args) => {
+  if (!isGitRepo()) {
+    return { output: "Not a git repository.", handled: true };
+  }
+  const message = args.trim() || "manual commit";
+  const success = gitCommit(message);
+  return { output: success ? `Committed: ${message}` : "Nothing to commit.", handled: true };
+});
+
+register("log", "Show recent git commits", () => {
+  if (!isGitRepo()) {
+    return { output: "Not a git repository.", handled: true };
+  }
+  return { output: gitLog(10) || "No commits yet.", handled: true };
+});
+
+register("files", "List files in context", (_args, ctx) => {
+  const files = new Set<string>();
+  for (const msg of ctx.messages) {
+    // Extract file paths from tool calls
+    if (msg.toolCalls) {
+      for (const tc of msg.toolCalls) {
+        const path = (tc.arguments as any)?.file_path ?? (tc.arguments as any)?.path;
+        if (path) files.add(String(path));
+      }
+    }
+  }
+  if (files.size === 0) return { output: "No files in context yet.", handled: true };
+  return { output: `Files in context:\n${[...files].map(f => `  ${f}`).join("\n")}`, handled: true };
+});
+
+register("model", "Switch model (e.g., /model gpt-4o)", (args) => {
+  const model = args.trim();
+  if (!model) return { output: "Usage: /model <model-name>", handled: true };
+  return { output: `Switched to ${model}.`, handled: true, newModel: model };
+});
+
+register("compact", "Compress conversation history", (_args, ctx) => {
+  const before = ctx.messages.length;
+  // Keep system messages + last 10 messages, truncate old tool results
+  const compacted: Message[] = [];
+  const keepLast = 10;
+  const messages = ctx.messages;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    const isRecent = i >= messages.length - keepLast;
+
+    if (msg.role === "system") {
+      compacted.push(msg);
+    } else if (isRecent) {
+      compacted.push(msg);
+    } else if (msg.role === "tool") {
+      // Truncate old tool results
+      compacted.push({ ...msg, content: "[compacted]" });
+    } else {
+      compacted.push(msg);
+    }
+  }
+
+  return {
+    output: `Compacted: ${before} → ${compacted.length} messages. Old tool results truncated.`,
+    handled: true,
+    compactedMessages: compacted,
+  };
+});
+
+register("export", "Export conversation to file", (_args, ctx) => {
+  const lines = ctx.messages
+    .filter(m => m.role === "user" || m.role === "assistant")
+    .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n\n");
+
+  const filename = `.oh/export-${ctx.sessionId}.md`;
+  try {
+    mkdirSync(dirname(filename), { recursive: true });
+    writeFileSync(filename, lines);
+    return { output: `Exported to ${filename}`, handled: true };
+  } catch {
+    return { output: `Export failed. Content:\n\n${lines.slice(0, 500)}`, handled: true };
+  }
+});
+
+register("config", "Show current configuration", () => {
+  return { output: "Use: oh config show (in a new terminal)", handled: true };
+});
+
+register("memory", "View memories", () => {
+  return { output: "Use: oh memory (in a new terminal)", handled: true };
+});
+
+register("plan", "Enter plan mode", () => {
+  return { output: "Plan mode: describe what you want to build. I'll create a plan before implementing.", handled: false };
+});
+
+register("review", "Review recent code changes", () => {
+  if (!isGitRepo()) {
+    return { output: "Not a git repository.", handled: true };
+  }
+  const diff = gitDiff();
+  if (!diff) return { output: "No changes to review.", handled: true };
+  // Pass to LLM for review
+  return { output: "", handled: false };
+});
+
+// ── Command Parser ──
+
+/**
+ * Check if input is a slash command. If so, execute it.
+ */
+export function processSlashCommand(input: string, context: CommandContext): CommandResult | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("/")) return null;
+
+  const spaceIdx = trimmed.indexOf(" ");
+  const name = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).toLowerCase();
+  const args = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1);
+
+  const cmd = commands.get(name);
+  if (!cmd) {
+    return {
+      output: `Unknown command: /${name}. Type /help for available commands.`,
+      handled: true,
+    };
+  }
+
+  return cmd.handler(args, context);
+}
+
+/**
+ * Get all registered command names (for autocomplete/display).
+ */
+export function getCommandNames(): string[] {
+  return [...commands.keys()];
+}

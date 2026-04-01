@@ -80,7 +80,18 @@
       "Bash(find /e/AI/src/components -name *Permission* -o -name *ToolUse* -o -name *Markdown*)",
       "Bash(grep -n \"^export\" /e/AI/src/components/design-system/*.tsx)",
       "Bash(ls:*)",
-      "Bash(npm publish:*)"
+      "Bash(npm publish:*)",
+      "Bash(wc:*)",
+      "Bash(grep -v \"^skills$\")",
+      "Bash(head:*)",
+      "Bash(find /e/Github/openCLI/src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) -exec wc -l {} +)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(gh api:*)",
+      "Bash(gh release:*)",
+      "Bash(gh label:*)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)"
     ]
   }
 }

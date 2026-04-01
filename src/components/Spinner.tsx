@@ -1,31 +1,53 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import InkSpinner from "ink-spinner";
+import { useTheme } from "../utils/theme.js";
 
-type SpinnerProps = {
-  model?: string;
-};
+type Props = { model?: string; tokens?: number };
 
-export default function Spinner({ model }: SpinnerProps) {
+export default function Spinner({ model, tokens }: Props) {
+  const theme = useTheme();
   const [elapsed, setElapsed] = useState(0);
+  const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     const start = Date.now();
     const timer = setInterval(() => {
       setElapsed(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
+      setFrame((f) => f + 1);
+    }, 50);
     return () => clearInterval(timer);
   }, []);
 
+  const text = `Thinking${model ? ` (${model})` : ""}`;
+  const baseColor =
+    elapsed > 60 ? theme.error : elapsed > 30 ? theme.stall : theme.primary;
+  const shimmerColor =
+    elapsed > 60 ? theme.stallShimmer : elapsed > 30 ? theme.warning : theme.primaryShimmer;
+  const shimmerPos = frame % (text.length + 6);
+
   return (
     <Box>
-      <Text color="magenta">
-        <InkSpinner type="dots" />
-      </Text>
-      <Text dimColor>
-        {" "}Thinking{model ? ` (${model})` : ""}
-        {elapsed > 0 ? ` ${elapsed}s` : ""}...
+      <Text color={baseColor}>{"◆ "}</Text>
+      {text.split("").map((char, i) => {
+        const dist = Math.abs(i - shimmerPos);
+        const bright = dist <= 1;
+        return (
+          <Text key={i} color={bright ? shimmerColor : baseColor} bold={bright}>
+            {char}
+          </Text>
+        );
+      })}
+      <Text color={theme.dim}>
+        {elapsed > 0 ? ` ${elapsed}s` : ""}
+        {tokens && tokens > 0 ? ` | ${formatTokens(tokens)}` : ""}
+        ...
       </Text>
     </Box>
   );
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tokens`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tokens`;
+  return `${n} tokens`;
 }
