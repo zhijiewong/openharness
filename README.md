@@ -11,31 +11,35 @@
         `--`
 ```
 
-Build your own terminal coding agent with any LLM.
+Open-source terminal coding agent. Build your own Claude Code with any LLM.
 
 ![Status: Alpha](https://img.shields.io/badge/status-alpha-orange)
-![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![Node.js 18+](https://img.shields.io/badge/node-18%2B-green)
+![TypeScript](https://img.shields.io/badge/typescript-strict-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
 ## Why OpenHarness?
 
-Most AI coding tools lock you into one provider. OpenHarness is a lightweight, open-source agent harness that works with any LLM -- local models via Ollama (free, offline, private) or cloud APIs (OpenAI, Anthropic, OpenRouter, DeepSeek, Groq, and any OpenAI-compatible endpoint). It gives you the harness features that make agents useful -- tool permission gates, project rules, reusable skills, lifecycle hooks, persistent memory -- without the weight of a full framework like LangChain or CrewAI.
+Claude Code is powerful but locked to one provider. OpenHarness gives you the same architecture -- React+Ink terminal UI, async generator agent loop, Zod tool schemas, permission gates -- but works with **any LLM**. Local models via Ollama (free, offline, private), or cloud APIs (OpenAI, Anthropic, OpenRouter, DeepSeek, Groq, and any OpenAI-compatible endpoint).
+
+Single TypeScript process. No Python dependency. No bridge overhead.
 
 ## Quick Start
 
-Requires **Python 3.11+**.
+Requires **Node.js 18+**.
 
 ```bash
-pip install openharness
-oh init
-oh chat --model ollama/llama3
+git clone https://github.com/zhijiewong/openharness.git
+cd openharness
+npm install
+npx tsx src/main.tsx chat --model ollama/llama3
 ```
 
 ## What It Does
 
-OpenHarness connects any LLM to a set of tools with permission gates, then runs an agent loop in your terminal.
+OpenHarness connects any LLM to a set of tools with permission gates, then runs an agent loop in your terminal using React+Ink for a rich interactive UI.
 
 **Providers:** Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible API
 
@@ -53,112 +57,112 @@ OpenHarness connects any LLM to a set of tools with permission gates, then runs 
 
 Low-risk tools auto-approve. Medium and high risk require confirmation in `ask` mode.
 
-**Harness features:** project rules, reusable skills, lifecycle hooks, persistent memory, cost tracking, session save/resume, project auto-detection.
+**Harness features:** project rules, cost tracking, session save/resume, project auto-detection.
 
-## Installation
+## Architecture
 
-Requires **Python 3.11+**.
+Built in TypeScript, mirroring Claude Code's patterns:
 
-```bash
-pip install openharness                  # base
-pip install "openharness[openai]"        # + OpenAI SDK
-pip install "openharness[anthropic]"     # + Anthropic SDK
-pip install "openharness[all]"           # everything
+```
+src/
+  main.tsx              CLI entry (Commander + React render)
+  query.ts              Agent loop (while-true, async generators)
+  Tool.ts               Zod-based tool interface
+  tools.ts              Tool registry
+  types/                Message, events, permissions
+  providers/            Ollama, OpenAI, Anthropic, OpenRouter
+  tools/                7 tools with Zod input schemas
+  components/           React+Ink UI (App, REPL, Spinner, PermissionPrompt)
+  harness/              Rules, cost, sessions, project detection
 ```
 
-Development:
+The agent loop streams LLM responses via async generators. Tool calls are executed with concurrency control (read-only tools run in parallel, write tools run serially). Permission checks gate every tool call based on risk level.
+
+## Commands
 
 ```bash
-git clone https://github.com/zhijiewong/openharness.git
-cd openharness
-pip install -e ".[dev]"
+openharness chat                    # Interactive agent session
+openharness chat -m gpt-4o         # Use a specific model
+openharness chat --trust            # Auto-approve all tools
+openharness chat --deny             # Block all non-read tools
+openharness chat --resume ID        # Resume a saved session
+openharness models                  # List models and pricing
+openharness tools                   # List tools and risk levels
+openharness init                    # Set up .oh/ for current project
+openharness sessions                # List saved sessions
+openharness rules                   # Show project rules
+openharness version                 # Show version
 ```
 
 ## Configuration
 
+Set your model via the `--model` flag or environment variables:
+
 ```bash
-# Local models (free)
-oh config set provider ollama
-oh config set model llama3
+# Local models (free, no API key needed)
+openharness chat --model ollama/llama3
 
-# Cloud models
-oh config set provider openai
-oh config set model gpt-4o
-oh config set providers.openai.api_key sk-...
+# Cloud models (set API key as env var)
+OPENAI_API_KEY=sk-... openharness chat --model openai/gpt-4o
+ANTHROPIC_API_KEY=sk-ant-... openharness chat --model anthropic/claude-sonnet-4-6
 
-# Permission mode: ask (default), trust, deny
-oh config set permission_mode ask
+# OpenRouter (300+ models via one key)
+OPENROUTER_API_KEY=sk-or-... openharness chat --model openrouter/deepseek/deepseek-chat
 
-# Budget ceiling
-oh config set max_cost_per_session 5.00
+# Any OpenAI-compatible endpoint
+openharness chat --model deepseek/deepseek-chat
 ```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `oh chat` | Interactive agent session |
-| `oh chat -m MODEL` | Use a specific model |
-| `oh chat --trust` | Auto-approve all tools |
-| `oh chat --resume ID` | Resume a saved session |
-| `oh init` | Set up `.oh/` for current project |
-| `oh models` | List models and pricing |
-| `oh tools` | List tools and risk levels |
-| `oh cost` | Spending summary |
-| `oh sessions` | Saved sessions |
-| `oh config show` | Current config |
-| `oh config set K V` | Update config |
-| `oh rules` | Project rules |
-| `oh skills` | Available skills |
-| `oh memory` | Stored memories |
-| `oh version` | Show installed version |
 
 ## Project Rules
 
-Create `.oh/RULES.md` in any repo (or run `oh init`):
+Create `.oh/RULES.md` in any repo (or run `openharness init`):
 
 ```markdown
 - Always run tests after changes
-- Use type hints in Python
+- Use strict TypeScript
 - Never commit to main directly
 ```
 
-Rules load automatically into every session. Load order: `~/.oh/global-rules/*.md` then `.oh/RULES.md` then `.oh/rules/*.md`.
+Rules load automatically into every session.
 
-## Project Layout
+## Tech Stack
 
-```
-oh/cli               CLI commands (chat, config, cost, etc.)
-openharness/agent    Agent loop, permissions, routing, sub-agents, context
-openharness/providers  Ollama, OpenAI, Anthropic, OpenRouter, OpenAI-compat
-openharness/tools    Read, Edit, Write, Bash, Glob, Grep, WebFetch
-openharness/harness  Rules, skills, hooks, memory, cost, onboarding
-openharness/core     Types, config, session, events
-openharness/mcp      MCP client for external tool servers
-packages/cli         TypeScript CLI frontend (bridges to Python core via stdio)
-```
+| | OpenHarness | Claude Code |
+|---|---|---|
+| Language | TypeScript (strict) | TypeScript (strict) |
+| Runtime | Node.js 18+ | Bun |
+| Terminal UI | React + Ink | React + custom Ink fork |
+| Tool schemas | Zod | Zod |
+| Agent loop | async generators | async generators |
+| Providers | Any (5 built-in) | Anthropic only |
+| License | MIT | Proprietary |
 
-The CLI calls the agent loop, which calls the LLM provider, which returns tool calls. The agent executes tools (with permission checks), feeds results back to the LLM, and repeats until the LLM responds with text.
-
-## TypeScript CLI
-
-A Node.js/TypeScript frontend is available under `packages/cli/`. It bridges to the Python core over stdio.
+## Development
 
 ```bash
-npm install && npm run build
-oh-ts chat "explain this codebase" --permission-mode ask
-oh-ts models
-oh-ts config show
+npm install
+npx tsc --noEmit            # type check
+npx tsx src/main.tsx chat    # run dev
 ```
+
+### Adding a new provider
+
+Create `src/providers/yourprovider.ts` implementing the `Provider` interface, then add a case in `src/providers/index.ts`.
+
+### Adding a new tool
+
+Create `src/tools/YourTool/index.ts` implementing the `Tool` interface with a Zod input schema, then register it in `src/tools.ts`.
+
+## Python Reference
+
+A complete Python implementation is available under `python/` with its own CLI (`oh`), 61 tests, and the same feature set. It serves as a reference implementation and alternative for Python-first users.
 
 ## Contributing
 
-1. Open an issue or discussion before larger changes
-2. Install in dev mode: `pip install -e ".[dev]"`
-3. Run tests: `pytest`
-4. Run TS type check: `cd packages/cli && npx tsc --noEmit`
-5. Keep CLI commands and README in sync
-6. No CLA required
+1. Open an issue before larger changes
+2. `npm install` and `npx tsc --noEmit` before PRs
+3. Keep README in sync with CLI
+4. No CLA required
 
 ## License
 
