@@ -201,6 +201,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 MIT
 
----
-
-This project is not affiliated with Anthropic.
