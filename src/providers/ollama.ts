@@ -125,6 +125,12 @@ export class OllamaProvider implements Provider {
           continue;
         }
 
+        // Handle Ollama errors embedded in the stream
+        if (chunk.error) {
+          yield { type: "error", message: `Ollama: ${chunk.error}` };
+          return;
+        }
+
         if (chunk.message?.content) {
           yield { type: "text_delta", content: chunk.message.content };
         }
