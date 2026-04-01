@@ -262,7 +262,7 @@ export default function REPL({
     <Box flexDirection="column">
       {/* Banner */}
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="magenta">{BANNER}</Text>
+        <Text color="magenta" wrap="truncate">{BANNER}</Text>
         <Box>
           <Text bold color="magenta">OpenHarness</Text>
           <Text dimColor> v0.1.0</Text>
