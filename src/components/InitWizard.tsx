@@ -224,13 +224,27 @@ export default function InitWizard({ onDone }: Props) {
       {step === "model" && (
         <Box flexDirection="column">
           <Text>Select model:</Text>
-          {availableModels.length > 0 ? (
-            availableModels.slice(0, 10).map((m, i) => (
-              <Text key={m} color={i === modelIdx ? "cyan" : undefined}>
-                {i === modelIdx ? "▶ " : "  "}{m}
-              </Text>
-            ))
-          ) : (
+          {availableModels.length > 0 ? (() => {
+            const WINDOW = 8;
+            const start = Math.max(0, Math.min(modelIdx - Math.floor(WINDOW / 2), availableModels.length - WINDOW));
+            const visible = availableModels.slice(start, start + WINDOW);
+            return (
+              <Box flexDirection="column">
+                {start > 0 && <Text dimColor>  ↑ {start} more</Text>}
+                {visible.map((m, vi) => {
+                  const gi = start + vi;
+                  return (
+                    <Text key={m} color={gi === modelIdx ? "cyan" : undefined}>
+                      {gi === modelIdx ? "▶ " : "  "}{m}
+                    </Text>
+                  );
+                })}
+                {start + WINDOW < availableModels.length && (
+                  <Text dimColor>  ↓ {availableModels.length - start - WINDOW} more</Text>
+                )}
+              </Box>
+            );
+          })() : (
             <Box flexDirection="column">
               <Text dimColor>Could not fetch model list. Enter model name:</Text>
               <TextInput
