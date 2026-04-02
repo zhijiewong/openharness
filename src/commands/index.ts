@@ -307,15 +307,15 @@ register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · stat
   return handleCybergotchiCommand(args);
 });
 
-register("plan", "Enter plan mode", (_args, ctx) => {
+register("plan", "Enter plan mode", (_args, _ctx) => {
   const task = _args.trim();
   if (!task) {
     return { output: "Usage: /plan <what you want to build>", handled: true };
   }
   return {
-    output: "",
+    output: `[plan mode] ${task}`,
     handled: false,
-    prependToPrompt: `You are in PLAN MODE. Do NOT write any code yet. Instead, produce a detailed implementation plan as a numbered list covering: files to create/modify, key functions/types, data flow, and edge cases. Only after the plan is approved should you implement anything.\n\nTask: `,
+    prependToPrompt: `You are in PLAN MODE. Do NOT write any code yet. Instead, produce a detailed implementation plan as a numbered list covering: files to create/modify, key functions/types, data flow, and edge cases. Only after the plan is approved should you implement anything.\n\nTask: ${task}`,
   };
 });
 
@@ -325,8 +325,9 @@ register("review", "Review recent code changes", () => {
   }
   const diff = gitDiff();
   if (!diff) return { output: "No changes to review.", handled: true };
+  const lines = diff.split("\n").length;
   return {
-    output: "",
+    output: `[review] ${lines} lines of diff`,
     handled: false,
     prependToPrompt: `Review these uncommitted changes and give feedback on correctness, style, and potential issues:\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n`,
   };
