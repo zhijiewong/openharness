@@ -412,30 +412,32 @@ export default function REPL({
   }
 
   return (
-    <Box flexDirection="row">
+    <Box flexDirection="column">
+      {/* Banner — Static renders once, outside the row so Ink can measure row height correctly */}
+      <Static items={["banner"]}>
+        {() => (
+          <Box key="banner" flexDirection="column" marginBottom={1}>
+            {BANNER.split("\n").map((line, i) => (
+              <Text key={i} color="magenta">{line}</Text>
+            ))}
+            <Box>
+              <Text bold color="magenta">OpenHarness</Text>
+              <Text dimColor> v0.3.3</Text>
+              <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
+              <Text dimColor>{` (${permissionMode})`}</Text>
+            </Box>
+            <Text dimColor>session {sessionId}</Text>
+            <Text dimColor>{"─".repeat(60)}</Text>
+            {loadCybergotchiConfig() === null && (
+              <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
+            )}
+          </Box>
+        )}
+      </Static>
+
+      <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
-        {/* Banner — Static renders once, never touched by re-renders */}
-        <Static items={["banner"]}>
-          {() => (
-            <Box key="banner" flexDirection="column" marginBottom={1}>
-              {BANNER.split("\n").map((line, i) => (
-                <Text key={i} color="magenta">{line}</Text>
-              ))}
-              <Box>
-                <Text bold color="magenta">OpenHarness</Text>
-                <Text dimColor> v0.3.3</Text>
-                <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
-                <Text dimColor>{` (${permissionMode})`}</Text>
-              </Box>
-              <Text dimColor>session {sessionId}</Text>
-              <Text dimColor>{"─".repeat(60)}</Text>
-              {loadCybergotchiConfig() === null && (
-                <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
-              )}
-            </Box>
-          )}
-        </Static>
 
         {/* Messages */}
         <Messages messages={messages} toolCalls={toolCalls} />
@@ -517,6 +519,7 @@ export default function REPL({
 
       {/* Cybergotchi side panel — self-contained, isolated from REPL re-renders */}
       <CybergotchiPanelConnected />
+      </Box>
     </Box>
   );
 }
