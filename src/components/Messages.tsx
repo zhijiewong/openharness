@@ -72,8 +72,15 @@ function MessageRow({
     );
   }
 
-  // Error-style for system messages
+  // System messages: info (dimmed) vs error (red border)
   if (message.role === "system") {
+    if (message.meta?.isInfo) {
+      return (
+        <Box marginY={0}>
+          <Text dimColor>{"  "}{message.content}</Text>
+        </Box>
+      );
+    }
     return (
       <Box
         borderStyle="round"
