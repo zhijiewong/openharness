@@ -20,6 +20,9 @@ import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { MODEL_PRICING } from "./harness/cost.js";
 import { listSessions } from "./harness/session.js";
 import { readOhConfig } from "./harness/config.js";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 
@@ -296,6 +299,56 @@ program
       return;
     }
     console.log(`  ${rules.length} rule(s) loaded.`);
+  });
+
+// ── config ──
+program
+  .command("config")
+  .description("Show or edit .oh/config.yaml")
+  .action(() => {
+    const cfg = readOhConfig();
+    if (!cfg) {
+      console.log("  No .oh/config.yaml — run: oh init");
+      return;
+    }
+    console.log();
+    console.log("  .oh/config.yaml");
+    console.log("  " + "─".repeat(40));
+    console.log(`  provider:       ${cfg.provider}`);
+    console.log(`  model:          ${cfg.model}`);
+    console.log(`  permissionMode: ${cfg.permissionMode}`);
+    if (cfg.baseUrl)  console.log(`  baseUrl:        ${cfg.baseUrl}`);
+    if (cfg.apiKey)   console.log(`  apiKey:         ${"*".repeat(8)}...`);
+    console.log();
+  });
+
+// ── memory ──
+program
+  .command("memory")
+  .description("List or search memories in .oh/memory/")
+  .argument("[term]", "Search term")
+  .action((term?: string) => {
+    const memDir = join(homedir(), ".oh", "memory");
+    if (!existsSync(memDir)) {
+      console.log("  No memory directory found.");
+      return;
+    }
+    const files = readdirSync(memDir).filter(f => f.endsWith(".md"));
+    if (files.length === 0) { console.log("  No memories."); return; }
+
+    const q = term?.toLowerCase();
+    console.log();
+    for (const file of files) {
+      try {
+        const content = readFileSync(join(memDir, file), "utf-8");
+        if (q && !content.toLowerCase().includes(q)) continue;
+        const name = content.match(/^name:\s*(.+)$/m)?.[1] ?? file;
+        const type = content.match(/^type:\s*(.+)$/m)?.[1] ?? "?";
+        const desc = content.match(/^description:\s*(.+)$/m)?.[1] ?? "";
+        console.log(`  [${type.padEnd(8)}] ${name.padEnd(28)} ${desc.slice(0, 45)}`);
+      } catch { /* skip */ }
+    }
+    console.log();
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
