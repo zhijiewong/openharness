@@ -16,6 +16,7 @@ import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
 import Messages from "./Messages.js";
 import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
+import TextInputComponent from "ink-text-input";
 import PermissionPrompt from "./PermissionPrompt.js";
 import CybergotchiPanel from "./CybergotchiPanel.js";
 import CybergotchiSetup from "./CybergotchiSetup.js";
@@ -80,6 +81,10 @@ export default function REPL({
   const toolCallsRef = useRef(toolCalls);
   toolCallsRef.current = toolCalls;
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<{
+    question: string; options?: string[]; resolve: (answer: string) => void;
+  } | null>(null);
+  const [questionAnswer, setQuestionAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
@@ -153,12 +158,23 @@ export default function REPL({
         });
       };
 
+      const askUserQuestion = (question: string, options?: string[]): Promise<string> => {
+        return new Promise((resolve) => {
+          setQuestionAnswer("");
+          setPendingQuestion({ question, options, resolve: (answer: string) => {
+            setPendingQuestion(null);
+            resolve(answer);
+          }});
+        });
+      };
+
       const config: QueryConfig = {
         provider,
         tools,
         systemPrompt,
         permissionMode,
         askUser,
+        askUserQuestion,
         model: currentModel || undefined,
       };
 
@@ -410,9 +426,32 @@ export default function REPL({
           />
         )}
 
+        {/* AskUser question prompt */}
+        {pendingQuestion && (
+          <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
+            <Text color="yellow">❓ {pendingQuestion.question}</Text>
+            {pendingQuestion.options && pendingQuestion.options.length > 0 && (
+              <Box flexDirection="column">
+                {pendingQuestion.options.map((o, i) => (
+                  <Text key={i} dimColor>  {i + 1}. {o}</Text>
+                ))}
+              </Box>
+            )}
+            <Box>
+              <Text color="yellow">{'❯ '}</Text>
+              <TextInputComponent
+                value={questionAnswer}
+                onChange={setQuestionAnswer}
+                onSubmit={(val) => { if (val.trim()) pendingQuestion.resolve(val.trim()); }}
+                focus={true}
+              />
+            </Box>
+          </Box>
+        )}
+
         {/* Input */}
         <Box marginTop={1}>
-          <TextInput onSubmit={handleSubmit} disabled={loading} />
+          <TextInput onSubmit={handleSubmit} disabled={loading || !!pendingQuestion} />
         </Box>
 
         {/* Keybinding hints */}

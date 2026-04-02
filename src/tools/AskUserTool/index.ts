@@ -8,7 +8,7 @@ const inputSchema = z.object({
 
 export const AskUserTool: Tool<typeof inputSchema> = {
   name: "AskUser",
-  description: "Ask the user a question. The REPL will display it as a prompt.",
+  description: "Pause and ask the user a question, waiting for their typed response before continuing.",
   inputSchema,
   riskLevel: "low",
 
@@ -20,17 +20,24 @@ export const AskUserTool: Tool<typeof inputSchema> = {
     return false;
   },
 
-  async call(input, _context): Promise<ToolResult> {
-    let output = `[Question] ${input.question}`;
+  async call(input, context: ToolContext): Promise<ToolResult> {
+    if (context.askUserQuestion) {
+      const answer = await context.askUserQuestion(input.question, input.options);
+      return { output: answer, isError: false };
+    }
+
+    // Headless fallback — return question as text so LLM can see it
+    let output = `[AskUser] ${input.question}`;
     if (input.options && input.options.length > 0) {
       output += "\nOptions:\n" + input.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n");
     }
+    output += "\n(No interactive session available — please answer in your next message.)";
     return { output, isError: false };
   },
 
   prompt() {
-    return `Ask the user a question. This is a signal to the UI to prompt the user. Parameters:
+    return `Pause execution and ask the user a direct question. Wait for their answer before continuing. Use this when you need clarification, a decision, or information only the user can provide. Parameters:
 - question (string, required): The question to ask.
-- options (string[], optional): List of options to present.`;
+- options (string[], optional): Suggested choices to present to the user.`;
   },
 };

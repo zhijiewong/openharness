@@ -22,6 +22,8 @@ export type ToolContext = {
   model?: string;
   tools?: Tool[];
   systemPrompt?: string;
+  /** Ask the user a question; resolves with their answer string */
+  askUserQuestion?: (question: string, options?: string[]) => Promise<string>;
 };
 
 export type Tool<Input extends z.ZodType = z.ZodType> = {

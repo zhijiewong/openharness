@@ -60,6 +60,13 @@ export type ToolOutputDelta = {
   readonly chunk: string;
 };
 
+export type AskUserRequest = {
+  readonly type: "ask_user";
+  readonly callId: string;
+  readonly question: string;
+  readonly options?: readonly string[];
+};
+
 export type StreamEvent =
   | TextDelta
   | ToolCallStart
@@ -67,6 +74,7 @@ export type StreamEvent =
   | ToolCallEnd
   | ToolOutputDelta
   | PermissionRequest
+  | AskUserRequest
   | CostUpdate
   | TurnComplete
   | ErrorEvent;

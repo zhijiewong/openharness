@@ -31,6 +31,7 @@ export type QueryConfig = {
   systemPrompt: string;
   permissionMode: PermissionMode;
   askUser?: AskUserFn;
+  askUserQuestion?: (question: string, options?: string[]) => Promise<string>;
   maxTurns?: number;
   maxCost?: number;
   model?: string;
@@ -75,6 +76,7 @@ export async function* query(
     model: config.model,
     tools: config.tools,
     systemPrompt: config.systemPrompt,
+    askUserQuestion: config.askUserQuestion,
   };
   const toolPrompts = config.tools.map((t) => t.prompt()).join("\n\n");
   const fullSystemPrompt = config.systemPrompt + "\n\n# Available Tools\n\n" + toolPrompts;
