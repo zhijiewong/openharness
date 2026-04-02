@@ -65,8 +65,8 @@ export default function REPL({
   // Session and cost tracking
   const sessionRef = useRef<Session>(
     resumeSessionId
-      ? (() => { try { return loadSession(resumeSessionId); } catch { return createSession("unknown", model ?? ""); } })()
-      : createSession("unknown", model ?? ""),
+      ? (() => { try { return loadSession(resumeSessionId); } catch { return createSession(provider.name, model ?? ""); } })()
+      : createSession(provider.name, model ?? ""),
   );
   const costRef = useRef(new CostTracker());
   const [totalCost, setTotalCost] = useState(0);
@@ -364,6 +364,14 @@ export default function REPL({
           }
           if (result.handled) return;
           // If not handled, fall through to send to LLM (e.g., /plan, /review)
+          if (result.prependToPrompt) {
+            const effectiveInput = result.prependToPrompt + input;
+            const userMsg = createUserMessage(input); // show original to user
+            setMessages((prev) => [...prev, userMsg]);
+            pendingPromptRef.current = effectiveInput; // send augmented to LLM
+            setSubmitCount((c) => c + 1);
+            return;
+          }
         }
       }
 
