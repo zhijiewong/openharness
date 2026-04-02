@@ -10,6 +10,7 @@ import { decayNeeds, applyEvent } from './needs.js';
 const TICK_MS = 500;
 const SPEECH_TTL_TICKS = 10;   // 5 seconds
 const IDLE_INTERVAL_TICKS = 120; // 60 seconds
+const SAVE_INTERVAL_TICKS = 60;  // 30 seconds — persist needs decay periodically
 
 interface UseCybergotchiResult {
   config: CybergotchiConfig | null;
@@ -43,6 +44,7 @@ export function useCybergotchi(): UseCybergotchiResult {
 
   const eventQueue = useRef<CybergotchiEvent[]>([]);
   const idleTicksRef = useRef(0);
+  const saveTicksRef = useRef(0);
 
   const reload = useCallback(() => {
     const cfg = loadCybergotchiConfig();
@@ -71,6 +73,13 @@ export function useCybergotchi(): UseCybergotchiResult {
 
       // Apply time-based decay (mutates cfg.needs in place)
       decayNeeds(cfg);
+
+      // Persist needs decay periodically
+      saveTicksRef.current += 1;
+      if (saveTicksRef.current >= SAVE_INTERVAL_TICKS) {
+        saveTicksRef.current = 0;
+        saveCybergotchiConfig(cfg);
+      }
 
       setState(prev => {
         let { frame, speech, speechTtl } = prev;
