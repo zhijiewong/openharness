@@ -5,6 +5,7 @@
 
 import type { z } from "zod";
 import type { RiskLevel } from "./types/permissions.js";
+import type { Provider } from "./providers/base.js";
 
 export type ToolResult = {
   output: string;
@@ -16,6 +17,11 @@ export type ToolContext = {
   abortSignal?: AbortSignal;
   callId?: string;
   onOutputChunk?: (callId: string, chunk: string) => void;
+  /** Available for sub-agent tools (AgentTool) */
+  provider?: Provider;
+  model?: string;
+  tools?: Tool[];
+  systemPrompt?: string;
 };
 
 export type Tool<Input extends z.ZodType = z.ZodType> = {

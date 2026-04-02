@@ -68,7 +68,14 @@ export async function* query(
   existingMessages: Message[] = [],
 ): AsyncGenerator<StreamEvent, void> {
   const maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
-  const toolContext: ToolContext = { workingDir: process.cwd(), abortSignal: config.abortSignal };
+  const toolContext: ToolContext = {
+    workingDir: process.cwd(),
+    abortSignal: config.abortSignal,
+    provider: config.provider,
+    model: config.model,
+    tools: config.tools,
+    systemPrompt: config.systemPrompt,
+  };
   const toolPrompts = config.tools.map((t) => t.prompt()).join("\n\n");
   const fullSystemPrompt = config.systemPrompt + "\n\n# Available Tools\n\n" + toolPrompts;
   const apiTools = config.tools.map(toolToAPIFormat);
