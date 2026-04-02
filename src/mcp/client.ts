@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import type { JsonRpcRequest, JsonRpcResponse, McpToolDef, McpServerConfig } from './types.js';
+import type { JsonRpcRequest, JsonRpcResponse, McpToolDef } from './types.js';
+import type { McpServerConfig } from '../harness/config.js';
 
 export class McpClient {
   readonly name: string;

@@ -7,12 +7,20 @@ import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import type { PermissionMode } from "../types/permissions.js";
 
+export type McpServerConfig = {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+};
+
 export type OhConfig = {
   provider: string;
   model: string;
   permissionMode: PermissionMode;
   apiKey?: string;
   baseUrl?: string;
+  mcpServers?: McpServerConfig[];
 };
 
 const CONFIG_DIR = ".oh";

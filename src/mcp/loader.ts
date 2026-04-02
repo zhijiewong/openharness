@@ -1,32 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import type { Tool } from '../Tool.js';
 import { McpClient } from './client.js';
 import { McpTool } from './McpTool.js';
-import type { McpServerConfig } from './types.js';
-
-interface OhConfig {
-  mcp?: {
-    servers?: McpServerConfig[];
-  };
-}
+import { readOhConfig } from '../harness/config.js';
 
 const connectedClients: McpClient[] = [];
 
-/** Load MCP tools from .oh/config.yaml. Returns empty array if no config or servers fail. */
+/** Load MCP tools from .oh/config.yaml mcpServers list. Returns empty array if none configured. */
 export async function loadMcpTools(): Promise<Tool[]> {
-  const configPath = join(process.cwd(), '.oh', 'config.yaml');
-  if (!existsSync(configPath)) return [];
-
-  let cfg: OhConfig;
-  try {
-    cfg = parseYaml(readFileSync(configPath, 'utf-8')) as OhConfig;
-  } catch {
-    return [];
-  }
-
-  const servers = cfg?.mcp?.servers ?? [];
+  const cfg = readOhConfig();
+  const servers = cfg?.mcpServers ?? [];
   if (servers.length === 0) return [];
 
   const tools: Tool[] = [];
