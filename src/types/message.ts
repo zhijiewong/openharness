@@ -23,12 +23,14 @@ export type Message = {
   readonly toolResults?: readonly ToolResult[];
   readonly uuid: string;
   readonly timestamp: number;
+  /** Optional display hints — not sent to LLM */
+  readonly meta?: { isInfo?: boolean };
 };
 
 export function createMessage(
   role: Role,
   content: string,
-  extra?: Partial<Pick<Message, "toolCalls" | "toolResults">>,
+  extra?: Partial<Pick<Message, "toolCalls" | "toolResults" | "meta">>,
 ): Message {
   return {
     role,
@@ -37,6 +39,10 @@ export function createMessage(
     timestamp: Date.now(),
     ...extra,
   };
+}
+
+export function createInfoMessage(content: string): Message {
+  return createMessage("system", content, { meta: { isInfo: true } });
 }
 
 export function createUserMessage(content: string): Message {

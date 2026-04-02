@@ -5,7 +5,7 @@ import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
 import type { Tools } from "../Tool.js";
 import type { PermissionMode } from "../types/permissions.js";
-import { createAssistantMessage, createUserMessage, createMessage } from "../types/message.js";
+import { createAssistantMessage, createUserMessage, createMessage, createInfoMessage } from "../types/message.js";
 import { query, type QueryConfig } from "../query.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -262,7 +262,7 @@ export default function REPL({
                   const files = filePath ? [filePath] : [];
                   const hash = autoCommitAIEdits(toolName, files, process.cwd());
                   if (hash) {
-                    setMessages((prev) => [...prev, createMessage("system", `git: committed ${hash}`)]);
+                    setMessages((prev) => [...prev, createInfoMessage(`git: committed ${hash}`)]);
                     cybergotchiEvents.emit('cybergotchi', { type: 'commit' });
                   }
                 }
@@ -360,7 +360,7 @@ export default function REPL({
           }
           if (result.output) {
             // Show command output as a system message
-            setMessages((prev) => [...prev, createMessage("system", result.output)]);
+            setMessages((prev) => [...prev, createInfoMessage(result.output)]);
           }
           if (result.handled) return;
           // If not handled, fall through to send to LLM (e.g., /plan, /review)
