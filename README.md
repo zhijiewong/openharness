@@ -73,6 +73,7 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 | Edit | medium | Search-and-replace edits |
 | Glob | low | Find files by pattern |
 | Grep | low | Regex content search |
+| LS | low | List directory contents with sizes |
 | WebFetch | medium | Fetch URL content (SSRF-protected) |
 | WebSearch | medium | Search the web |
 | TaskCreate | low | Create structured tasks |
