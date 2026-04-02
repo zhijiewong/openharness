@@ -417,8 +417,10 @@ export default function REPL({
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
         {/* Banner */}
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color="magenta" wrap="truncate">{BANNER}</Text>
+        <Box flexDirection="column" marginBottom={1} flexShrink={0}>
+          {BANNER.split("\n").map((line, i) => (
+            <Text key={i} color="magenta" wrap="truncate">{line}</Text>
+          ))}
           <Box>
             <Text bold color="magenta">OpenHarness</Text>
             <Text dimColor> v0.3.1</Text>
