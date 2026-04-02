@@ -8,6 +8,7 @@ export type ToolCallState = {
   status: "running" | "done" | "error";
   output?: string;
   args?: string;
+  rawArgs?: Record<string, unknown>;
   liveOutput?: string[]; // streaming lines
 };
 

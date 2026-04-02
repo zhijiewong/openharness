@@ -7,7 +7,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch, getModifiedFiles } from "../git/index.js";
+import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch } from "../git/index.js";
 import type { Message } from "../types/message.js";
 import { handleCybergotchiCommand } from "./cybergotchi.js";
 import { connectedMcpServers } from "../mcp/loader.js";

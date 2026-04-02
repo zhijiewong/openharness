@@ -201,6 +201,18 @@ export default function REPL({
               break;
 
             case "tool_call_complete":
+              setToolCalls((prev) => {
+                const next = new Map(prev);
+                const existing = next.get(event.callId);
+                if (existing) {
+                  next.set(event.callId, {
+                    ...existing,
+                    args: JSON.stringify(event.arguments).slice(0, 80),
+                    rawArgs: event.arguments,
+                  });
+                }
+                return next;
+              });
               break;
 
             case "tool_output_delta":
@@ -245,7 +257,10 @@ export default function REPL({
               if (!event.isError && isGitRepo()) {
                 const writeTool = ["Edit", "Write", "Bash"].includes(toolName);
                 if (writeTool) {
-                  const hash = autoCommitAIEdits(toolName, [], process.cwd());
+                  const rawArgs = toolCallsRef.current?.get(event.callId)?.rawArgs ?? {};
+                  const filePath = typeof rawArgs.file_path === "string" ? rawArgs.file_path : null;
+                  const files = filePath ? [filePath] : [];
+                  const hash = autoCommitAIEdits(toolName, files, process.cwd());
                   if (hash) {
                     setMessages((prev) => [...prev, createMessage("system", `git: committed ${hash}`)]);
                     cybergotchiEvents.emit('cybergotchi', { type: 'commit' });

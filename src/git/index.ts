@@ -88,20 +88,31 @@ export function autoCommitAIEdits(
   files: string[],
   cwd?: string,
 ): string | null {
-  if (!isGitRepo(cwd) || files.length === 0) return null;
+  if (!isGitRepo(cwd)) return null;
 
   try {
-    // Stage only the files the AI touched
-    for (const file of files) {
-      try {
-        execSync(`git add ${JSON.stringify(file)}`, { cwd, stdio: "pipe" });
-      } catch {
-        // File might not exist (deleted)
+    if (files.length > 0) {
+      // Stage only the files the AI touched
+      for (const file of files) {
+        try {
+          execSync(`git add ${JSON.stringify(file)}`, { cwd, stdio: "pipe" });
+        } catch {
+          // File might not exist (deleted)
+        }
       }
+    } else {
+      // Bash or unknown tool — stage all modified tracked files
+      execSync("git add -u", { cwd, stdio: "pipe" });
     }
 
+    // Nothing staged? Skip commit.
+    const staged = execSync("git diff --cached --name-only", { cwd, stdio: "pipe" }).toString().trim();
+    if (!staged) return null;
+
     // Generate commit message
-    const fileList = files.length <= 3 ? files.join(", ") : `${files.length} files`;
+    const fileList = files.length > 0
+      ? (files.length <= 3 ? files.join(", ") : `${files.length} files`)
+      : staged.split("\n").slice(0, 3).join(", ");
     const message = `oh: ${toolName} ${fileList}`;
 
     spawnSync("git", ["commit", "-m", message], { cwd, stdio: "pipe" });
