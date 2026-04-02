@@ -201,29 +201,19 @@ register("model", "Switch model (e.g., /model gpt-4o)", (args) => {
 
 register("compact", "Compress conversation history", (_args, ctx) => {
   const before = ctx.messages.length;
-  // Keep system messages + last 10 messages, truncate old tool results
-  const compacted: Message[] = [];
   const keepLast = 10;
   const messages = ctx.messages;
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]!;
-    const isRecent = i >= messages.length - keepLast;
+  // Keep system messages + the most recent keepLast non-system messages
+  const systemMsgs = messages.filter(m => m.role === "system");
+  const nonSystem = messages.filter(m => m.role !== "system");
+  const kept = nonSystem.slice(-keepLast);
 
-    if (msg.role === "system") {
-      compacted.push(msg);
-    } else if (isRecent) {
-      compacted.push(msg);
-    } else if (msg.role === "tool") {
-      // Truncate old tool results
-      compacted.push({ ...msg, content: "[compacted]" });
-    } else {
-      compacted.push(msg);
-    }
-  }
+  const compacted = [...systemMsgs, ...kept];
+  const dropped = before - compacted.length;
 
   return {
-    output: `Compacted: ${before} → ${compacted.length} messages. Old tool results truncated.`,
+    output: `Compacted: ${before} → ${compacted.length} messages (dropped ${dropped} older turns).`,
     handled: true,
     compactedMessages: compacted,
   };
