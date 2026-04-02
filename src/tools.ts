@@ -24,6 +24,7 @@ import { AgentTool } from "./tools/AgentTool/index.js";
 import { EnterPlanModeTool } from "./tools/EnterPlanModeTool/index.js";
 import { ExitPlanModeTool } from "./tools/ExitPlanModeTool/index.js";
 import { NotebookEditTool } from "./tools/NotebookEditTool/index.js";
+import { ImageReadTool } from "./tools/ImageReadTool/index.js";
 
 /**
  * Returns all registered tools.
@@ -33,6 +34,7 @@ export function getAllTools(): Tools {
     // Core (always available)
     BashTool,
     FileReadTool,
+    ImageReadTool,
     FileWriteTool,
     FileEditTool,
     GlobTool,

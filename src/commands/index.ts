@@ -9,6 +9,11 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch, getModifiedFiles } from "../git/index.js";
 import type { Message } from "../types/message.js";
+import { handleCybergotchiCommand } from "./cybergotchi.js";
+import { connectedMcpServers } from "../mcp/loader.js";
+import { listSessions, loadSession } from "../harness/session.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export type CommandResult = {
   /** Text output to display */
@@ -21,6 +26,8 @@ export type CommandResult = {
   newModel?: string;
   /** If set, replace messages with compacted version */
   compactedMessages?: Message[];
+  /** If true, open the cybergotchi setup UI */
+  openCybergotchiSetup?: boolean;
 };
 
 type CommandHandler = (args: string, context: CommandContext) => CommandResult;
@@ -76,6 +83,10 @@ register("status", "Show session status", (_args, ctx) => {
   if (isGitRepo()) {
     lines.push(`Git branch: ${gitBranch()}`);
   }
+  const mcp = connectedMcpServers();
+  if (mcp.length > 0) {
+    lines.push(`MCP servers: ${mcp.join(', ')}`);
+  }
   return { output: lines.join("\n"), handled: true };
 });
 
@@ -112,6 +123,42 @@ register("log", "Show recent git commits", () => {
     return { output: "Not a git repository.", handled: true };
   }
   return { output: gitLog(10) || "No commits yet.", handled: true };
+});
+
+register("history", "List recent sessions or search across them", (args) => {
+  const parts = args.trim().split(/\s+/);
+  const sessionDir = join(homedir(), ".oh", "sessions");
+
+  if (parts[0] === "search" && parts[1]) {
+    const term = parts.slice(1).join(" ").toLowerCase();
+    const sessions = listSessions(sessionDir);
+    const matches: string[] = [];
+    for (const s of sessions) {
+      try {
+        const full = loadSession(s.id, sessionDir);
+        const hit = full.messages.find(m =>
+          typeof m.content === "string" && m.content.toLowerCase().includes(term)
+        );
+        if (hit) {
+          const date = new Date(s.updatedAt).toLocaleDateString();
+          matches.push(`  ${s.id}  ${date}  ${s.model || "?"}`);
+        }
+      } catch { /* skip */ }
+    }
+    if (matches.length === 0) return { output: `No sessions matching "${term}".`, handled: true };
+    return { output: `Sessions matching "${term}":\n${matches.join("\n")}`, handled: true };
+  }
+
+  const n = parseInt(parts[0] ?? "10", 10) || 10;
+  const sessions = listSessions(sessionDir).slice(0, n);
+  if (sessions.length === 0) return { output: "No saved sessions.", handled: true };
+
+  const lines = sessions.map(s => {
+    const date = new Date(s.updatedAt).toLocaleDateString();
+    const cost = s.cost > 0 ? ` $${s.cost.toFixed(4)}` : "";
+    return `  ${s.id}  ${date}  ${String(s.messages).padStart(3)} msgs  ${(s.model || "?").slice(0, 24)}${cost}`;
+  });
+  return { output: `Recent sessions (use /resume <id> to continue):\n${lines.join("\n")}`, handled: true };
 });
 
 register("files", "List files in context", (_args, ctx) => {
@@ -187,6 +234,10 @@ register("config", "Show current configuration", () => {
 
 register("memory", "View memories", () => {
   return { output: "Use: oh memory (in a new terminal)", handled: true };
+});
+
+register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · status · rename · reset", (args) => {
+  return handleCybergotchiCommand(args);
 });
 
 register("plan", "Enter plan mode", () => {

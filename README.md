@@ -37,6 +37,7 @@ oh
 That's it. OpenHarness auto-detects Ollama and starts chatting. No API key needed.
 
 ```bash
+oh init                               # interactive setup wizard (provider + cybergotchi)
 oh                                    # auto-detect local model
 oh --model ollama/qwen2.5:7b         # specific model
 oh --model gpt-4o                     # cloud model (needs OPENAI_API_KEY)
@@ -52,7 +53,7 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 |---|---|---|---|---|
 | Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
 | Free local models | Ollama native | No | Yes | Yes |
-| Tools | 17 with permission gates | 40+ | File-focused | 20+ |
+| Tools | 18 with permission gates | 40+ | File-focused | 20+ |
 | Git integration | Auto-commit + /undo | Yes | Deep git | Basic |
 | Slash commands | 16 built-in | 80+ | Some | Some |
 | Headless/CI mode | `oh run --json` | Yes | Yes | Yes |
@@ -61,12 +62,13 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 | License | MIT | Proprietary | Apache 2.0 | MIT |
 | Price | Free (BYOK) | $20+/month | Free (BYOK) | Free (BYOK) |
 
-## Tools (17)
+## Tools (18)
 
 | Tool | Risk | Description |
 |------|------|-------------|
-| Bash | high | Execute shell commands with timeout |
+| Bash | high | Execute shell commands with live streaming output |
 | Read | low | Read files with line ranges |
+| ImageRead | low | Read images/PDFs for multimodal analysis |
 | Write | medium | Create or overwrite files |
 | Edit | medium | Search-and-replace edits |
 | Glob | low | Find files by pattern |
@@ -85,7 +87,7 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 
 Low-risk read-only tools auto-approve. Medium and high risk tools require confirmation in `ask` mode. Use `--trust` to skip all prompts.
 
-## Slash Commands (16)
+## Slash Commands (18)
 
 Type these during a chat session:
 
@@ -94,11 +96,12 @@ Type these during a chat session:
 | `/help` | Show all available commands |
 | `/clear` | Clear conversation history |
 | `/cost` | Show session cost and token usage |
-| `/status` | Show model, mode, git branch, session info |
+| `/status` | Show model, mode, git branch, MCP servers |
 | `/diff` | Show uncommitted git changes |
 | `/undo` | Undo last AI commit |
 | `/commit [msg]` | Create a git commit |
 | `/log` | Show recent git commits |
+| `/history [n]` | List recent sessions; `/history search <term>` to search |
 | `/files` | List files in context |
 | `/model <name>` | Switch model mid-session |
 | `/compact` | Compress conversation to free context |
@@ -107,6 +110,56 @@ Type these during a chat session:
 | `/review` | Review recent code changes |
 | `/config` | Show configuration |
 | `/memory` | View memories |
+| `/cybergotchi` | Feed, pet, rest, status, rename, or reset your companion |
+
+## Cybergotchi
+
+OpenHarness ships with a Tamagotchi-style companion that lives in the side panel. It reacts to your session in real time — celebrating streaks, complaining when tools fail, and getting hungry if you ignore it.
+
+**Hatch one:**
+```
+oh init        # wizard includes cybergotchi setup
+/cybergotchi   # or hatch mid-session
+```
+
+**Commands:**
+```
+/cybergotchi feed      # +30 hunger
+/cybergotchi pet       # +20 happiness
+/cybergotchi rest      # +40 energy
+/cybergotchi status    # show needs + lifetime stats
+/cybergotchi rename    # give it a new name
+/cybergotchi reset     # start over with a new species
+```
+
+**Needs** decay over time (hunger fastest, happiness slowest). Feed and pet your gotchi to keep it happy.
+
+**Evolution** — your gotchi evolves based on lifetime milestones:
+- Stage 1 (✦ magenta): 10 sessions or 50 commits
+- Stage 2 (★ yellow + crown): 100 tasks completed or a 25-tool streak
+
+**18 species** to choose from: duck, cat, owl, penguin, rabbit, turtle, snail, octopus, axolotl, cactus, mushroom, chonk, capybara, goose, and more.
+
+## MCP Servers
+
+Connect any MCP (Model Context Protocol) server by editing `.oh/config.yaml`:
+
+```yaml
+provider: anthropic
+model: claude-sonnet-4-6
+permissionMode: ask
+mcpServers:
+  - name: filesystem
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+  - name: github
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ghp_...
+```
+
+MCP tools appear alongside built-in tools. `/status` shows connected servers.
 
 ## Git Integration
 

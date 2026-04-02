@@ -6,6 +6,7 @@ import type { Message, ToolCall } from "../types/message.js";
 import type { StreamEvent, ToolCallComplete } from "../types/events.js";
 import { createAssistantMessage } from "../types/message.js";
 import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
+import { IMAGE_PREFIX } from "../tools/ImageReadTool/index.js";
 
 export class OpenAIProvider implements Provider {
   readonly name: string;
@@ -44,11 +45,20 @@ export class OpenAIProvider implements Provider {
         });
       } else if (msg.role === "tool" && msg.toolResults?.length) {
         for (const tr of msg.toolResults) {
-          out.push({
-            role: "tool",
-            tool_call_id: tr.callId,
-            content: tr.output,
-          });
+          if (!tr.isError && tr.output.startsWith(IMAGE_PREFIX + ":")) {
+            const [, mediaType, data] = tr.output.split(":");
+            out.push({
+              role: "tool",
+              tool_call_id: tr.callId,
+              content: [{ type: "image_url", image_url: { url: `data:${mediaType};base64,${data}` } }],
+            });
+          } else {
+            out.push({
+              role: "tool",
+              tool_call_id: tr.callId,
+              content: tr.output,
+            });
+          }
         }
       } else {
         out.push({ role: msg.role, content: msg.content });

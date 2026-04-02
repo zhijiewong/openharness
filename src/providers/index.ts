@@ -11,7 +11,10 @@ import { OpenRouterProvider } from "./openrouter.js";
 /**
  * Create a provider from a model string like "ollama/llama3" or "gpt-4o".
  */
-export async function createProvider(modelArg?: string): Promise<{ provider: Provider; model: string }> {
+export async function createProvider(
+  modelArg?: string,
+  overrides?: Partial<ProviderConfig>,
+): Promise<{ provider: Provider; model: string }> {
   let providerName = "ollama";
   let model = "llama3";
 
@@ -30,11 +33,14 @@ export async function createProvider(modelArg?: string): Promise<{ provider: Pro
     name: providerName,
     apiKey: process.env[`${providerName.toUpperCase()}_API_KEY`],
     defaultModel: model,
+    ...overrides,
   };
 
   const provider = createProviderInstance(providerName, config);
   return { provider, model };
 }
+
+export { createProviderInstance };
 
 function createProviderInstance(name: string, config: ProviderConfig): Provider {
   switch (name) {

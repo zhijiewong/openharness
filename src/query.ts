@@ -229,6 +229,11 @@ export async function* query(
     const completedResults = [...streamingExecutor.getCompletedResults()];
     const executedIds = new Set(completedResults.map(r => r.toolCall.id));
 
+    // Yield streaming output chunks collected during execution
+    for (const { callId, chunk } of streamingExecutor.outputChunks) {
+      yield { type: 'tool_output_delta', callId, chunk };
+    }
+
     for (const { toolCall: tc, result } of completedResults) {
       yield { type: "tool_call_end", callId: tc.id, output: result.output, isError: result.isError };
       state.messages.push(createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }));
@@ -258,12 +263,20 @@ async function* executeToolCalls(
 ): AsyncGenerator<StreamEvent, void> {
   const batches = partitionToolCalls(toolCalls, tools);
 
+  // Collect streaming output chunks to yield as tool_output_delta events
+  const outputChunks: StreamEvent[] = [];
+  const onOutputChunk = (callId: string, chunk: string) => {
+    outputChunks.push({ type: 'tool_output_delta', callId, chunk });
+  };
+
   // tool_call_start already yielded by the provider stream — only yield tool_call_end here
   for (const batch of batches) {
     if (batch.concurrent) {
       const results = await Promise.all(
-        batch.calls.map((tc) => executeSingleTool(tc, tools, context, permissionMode, askUser)),
+        batch.calls.map((tc) => executeSingleTool(tc, tools, { ...context, callId: tc.id, onOutputChunk }, permissionMode, askUser)),
       );
+      // Yield accumulated output chunks before end events
+      for (const chunk of outputChunks.splice(0)) yield chunk;
       for (let i = 0; i < batch.calls.length; i++) {
         const tc = batch.calls[i]!;
         const result = results[i]!;
@@ -272,7 +285,8 @@ async function* executeToolCalls(
       }
     } else {
       for (const tc of batch.calls) {
-        const result = await executeSingleTool(tc, tools, context, permissionMode, askUser);
+        const result = await executeSingleTool(tc, tools, { ...context, callId: tc.id, onOutputChunk }, permissionMode, askUser);
+        for (const chunk of outputChunks.splice(0)) yield chunk;
         yield { type: "tool_call_end", callId: tc.id, output: result.output, isError: result.isError };
         state?.messages.push(createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }));
       }

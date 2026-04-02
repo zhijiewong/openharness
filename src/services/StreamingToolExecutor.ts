@@ -24,6 +24,7 @@ const MAX_CONCURRENCY = 10;
 
 export class StreamingToolExecutor {
   private tracked: TrackedTool[] = [];
+  readonly outputChunks: Array<{ callId: string; chunk: string }> = [];
 
   constructor(
     private tools: Tools,
@@ -98,9 +99,15 @@ export class StreamingToolExecutor {
       return;
     }
 
-    // Execute
+    // Execute with per-call context (streaming output chunks)
+    const callId = tracked.toolCall.id;
+    const callContext: ToolContext = {
+      ...this.context,
+      callId,
+      onOutputChunk: (id, chunk) => { this.outputChunks.push({ callId: id, chunk }); },
+    };
     try {
-      tracked.result = await tool.call(parsed.data, this.context);
+      tracked.result = await tool.call(parsed.data, callContext);
     } catch (err) {
       tracked.result = {
         output: `Error: ${err instanceof Error ? err.message : String(err)}`,

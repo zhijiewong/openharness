@@ -14,6 +14,8 @@ export type ToolResult = {
 export type ToolContext = {
   workingDir: string;
   abortSignal?: AbortSignal;
+  callId?: string;
+  onOutputChunk?: (callId: string, chunk: string) => void;
 };
 
 export type Tool<Input extends z.ZodType = z.ZodType> = {

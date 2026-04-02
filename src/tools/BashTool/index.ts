@@ -49,11 +49,19 @@ export const BashTool: Tool<typeof inputSchema> = {
       }, timeoutMs);
 
       proc.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
+        const text = chunk.toString();
+        stdout += text;
+        if (context.onOutputChunk && context.callId) {
+          context.onOutputChunk(context.callId, text);
+        }
       });
 
       proc.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
+        const text = chunk.toString();
+        stderr += text;
+        if (context.onOutputChunk && context.callId) {
+          context.onOutputChunk(context.callId, text);
+        }
       });
 
       if (context.abortSignal) {

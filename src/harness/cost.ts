@@ -93,3 +93,24 @@ export function estimateCost(model: string, inputTokens: number, outputTokens: n
   if (!pricing) return 0;
   return (inputTokens / 1_000_000) * pricing[0] + (outputTokens / 1_000_000) * pricing[1];
 }
+
+/** Context window sizes in tokens per model (approximate) */
+export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gpt-4o":            128_000,
+  "gpt-4o-mini":       128_000,
+  "o3-mini":           200_000,
+  "o3":                200_000,
+  "claude-sonnet-4-6": 200_000,
+  "claude-haiku-4-5":  200_000,
+  "claude-opus-4-6":   200_000,
+  "deepseek-chat":     64_000,
+  "deepseek-coder":    64_000,
+  "qwen-turbo":        131_072,
+};
+
+/** Returns context usage as a fraction 0–1, or null if model unknown */
+export function contextUsage(model: string, inputTokens: number): number | null {
+  const limit = MODEL_CONTEXT_LIMITS[model];
+  if (!limit) return null;
+  return inputTokens / limit;
+}

@@ -6,6 +6,7 @@ import type { Message, ToolCall } from "../types/message.js";
 import type { StreamEvent, ToolCallComplete } from "../types/events.js";
 import { createAssistantMessage } from "../types/message.js";
 import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
+import { IMAGE_PREFIX } from "../tools/ImageReadTool/index.js";
 
 export class AnthropicProvider implements Provider {
   readonly name = "anthropic";
@@ -53,12 +54,22 @@ export class AnthropicProvider implements Provider {
         }
         out.push({ role: "assistant", content });
       } else if (msg.role === "tool" && msg.toolResults?.length) {
-        const content = msg.toolResults.map((tr) => ({
-          type: "tool_result",
-          tool_use_id: tr.callId,
-          content: tr.output,
-          is_error: tr.isError,
-        }));
+        const content = msg.toolResults.map((tr) => {
+          if (!tr.isError && tr.output.startsWith(IMAGE_PREFIX + ":")) {
+            const [, mediaType, data] = tr.output.split(":");
+            return {
+              type: "tool_result",
+              tool_use_id: tr.callId,
+              content: [{ type: "image", source: { type: "base64", media_type: mediaType, data } }],
+            };
+          }
+          return {
+            type: "tool_result",
+            tool_use_id: tr.callId,
+            content: tr.output,
+            is_error: tr.isError,
+          };
+        });
         out.push({ role: "user", content });
       } else if (msg.role === "assistant") {
         out.push({ role: "assistant", content: msg.content });

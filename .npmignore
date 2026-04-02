@@ -1,5 +1,6 @@
 src/
 .claude/
+.oh/
 .git/
 .gitignore
 .pytest_cache/
@@ -7,4 +8,6 @@ python/
 packages/
 node_modules/
 tsconfig.json
+tsconfig*.json
 *.test.ts
+docs/

@@ -14,14 +14,16 @@ import { render } from "ink";
 import { Command, Option } from "commander";
 import App from "./components/App.js";
 import { getAllTools } from "./tools.js";
+import { loadMcpTools, disconnectMcpClients, connectedMcpServers } from "./mcp/loader.js";
 import { createRulesFile, loadRules, loadRulesAsPrompt } from "./harness/rules.js";
 import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { MODEL_PRICING } from "./harness/cost.js";
 import { listSessions } from "./harness/session.js";
+import { readOhConfig } from "./harness/config.js";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.3.0";
 
 const program = new Command();
 
@@ -134,18 +136,19 @@ program
   .option("--deny", "Block all non-read tool calls")
   .option("--resume <id>", "Resume a saved session")
   .action(async (opts) => {
-    const permissionMode: PermissionMode = opts.trust
-      ? "trust"
-      : opts.deny
-        ? "deny"
-        : (opts.permissionMode as PermissionMode);
+    // Load saved config as defaults (env vars + CLI flags override)
+    const savedConfig = readOhConfig();
+    const effectiveModel = opts.model ?? savedConfig?.model;
+    const effectivePermMode: PermissionMode = opts.trust ? "trust" : opts.deny ? "deny"
+      : opts.permissionMode !== "ask" ? opts.permissionMode as PermissionMode
+      : (savedConfig?.permissionMode ?? "ask");
 
     // Auto-detect provider or prompt for setup
     let provider: Provider;
     let resolvedModel: string;
     try {
       const { createProvider } = await import("./providers/index.js");
-      const result = await createProvider(opts.model);
+      const result = await createProvider(effectiveModel, savedConfig?.apiKey ? { apiKey: savedConfig.apiKey, baseUrl: savedConfig.baseUrl } : undefined);
       provider = result.provider;
       resolvedModel = result.model;
     } catch (err) {
@@ -168,13 +171,21 @@ program
       process.exit(0);
     }
 
-    const tools = getAllTools();
+    const mcpTools = await loadMcpTools();
+    const mcpNames = connectedMcpServers();
+    if (mcpNames.length > 0) {
+      console.log(`[mcp] Connected: ${mcpNames.join(', ')}`);
+    }
+    const tools = [...getAllTools(), ...mcpTools];
+
+    process.on('exit', () => disconnectMcpClients());
+    process.on('SIGINT', () => { disconnectMcpClients(); process.exit(0); });
 
     render(
       <App
         provider={provider}
         tools={tools}
-        permissionMode={permissionMode}
+        permissionMode={effectivePermMode}
         model={resolvedModel}
       />,
     );
@@ -226,22 +237,22 @@ program
 // ── init ──
 program
   .command("init")
-  .description("Initialize OpenHarness for the current project")
-  .action(() => {
+  .description("Initialize OpenHarness for the current project (interactive setup wizard)")
+  .action(async () => {
+    const { default: InitWizard } = await import("./components/InitWizard.js");
     const rulesPath = createRulesFile();
     const ctx = detectProject();
     console.log();
-    console.log("  OpenHarness initialized!");
-    console.log(`  Created: ${rulesPath}`);
     if (ctx.language !== "unknown") {
       console.log(`  Detected: ${ctx.language}${ctx.framework ? ` (${ctx.framework})` : ""}`);
     }
     if (ctx.hasGit) {
       console.log(`  Git branch: ${ctx.gitBranch}`);
     }
+    console.log(`  Rules file: ${rulesPath}`);
     console.log();
-    console.log("  Next: npx openharness --model ollama/llama3");
-    console.log();
+    const { waitUntilExit } = render(<InitWizard onDone={() => process.exit(0)} />);
+    await waitUntilExit();
   });
 
 // ── sessions ──

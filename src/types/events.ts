@@ -54,11 +54,18 @@ export type ErrorEvent = {
   readonly message: string;
 };
 
+export type ToolOutputDelta = {
+  readonly type: "tool_output_delta";
+  readonly callId: string;
+  readonly chunk: string;
+};
+
 export type StreamEvent =
   | TextDelta
   | ToolCallStart
   | ToolCallComplete
   | ToolCallEnd
+  | ToolOutputDelta
   | PermissionRequest
   | CostUpdate
   | TurnComplete

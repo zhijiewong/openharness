@@ -8,14 +8,23 @@ export type ToolCallState = {
   status: "running" | "done" | "error";
   output?: string;
   args?: string;
+  liveOutput?: string[]; // streaming lines
 };
 
 type Props = {
   toolCall: ToolCallState;
 };
 
+const MAX_LIVE_LINES = 10;
+
 export default function ToolCallDisplay({ toolCall }: Props) {
-  const { toolName, status, output, args } = toolCall;
+  const { toolName, status, output, args, liveOutput } = toolCall;
+
+  const liveLines = liveOutput ?? [];
+  const overflow = liveLines.length > MAX_LIVE_LINES
+    ? liveLines.length - MAX_LIVE_LINES
+    : 0;
+  const visibleLive = overflow > 0 ? liveLines.slice(-MAX_LIVE_LINES) : liveLines;
 
   return (
     <Box flexDirection="column" marginLeft={2} marginY={0}>
@@ -33,6 +42,19 @@ export default function ToolCallDisplay({ toolCall }: Props) {
         )}
       </Box>
 
+      {/* Live streaming output while running */}
+      {status === "running" && liveLines.length > 0 && (
+        <Box flexDirection="column" marginLeft={4}>
+          {overflow > 0 && (
+            <Text dimColor>{`... (${overflow} earlier lines)`}</Text>
+          )}
+          {visibleLive.map((line, i) => (
+            <Text key={i} dimColor>{line}</Text>
+          ))}
+        </Box>
+      )}
+
+      {/* Final output after completion */}
       {output != null && status !== "running" && (
         <Box marginLeft={4}>
           <Text color={status === "error" ? "red" : "gray"} dimColor>
