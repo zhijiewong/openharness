@@ -421,7 +421,7 @@ export default function REPL({
           <Text color="magenta" wrap="truncate">{BANNER}</Text>
           <Box>
             <Text bold color="magenta">OpenHarness</Text>
-            <Text dimColor> v0.3.0</Text>
+            <Text dimColor> v0.3.1</Text>
             <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
             <Text dimColor>{` (${permissionMode})`}</Text>
           </Box>

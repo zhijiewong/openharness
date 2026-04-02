@@ -184,6 +184,12 @@ Run a single prompt without interactive UI — perfect for CI/CD:
 oh run "fix the failing tests" --model ollama/llama3 --trust
 oh run "add error handling to api.ts" --json    # JSON output
 oh run "explain this codebase" --model gpt-4o
+
+# Pipe stdin — prompt from stdin, or prepend context
+cat error.log | oh run "what's wrong here?"
+git diff | oh run "review these changes"
+oh run - < prompt.txt                           # read full prompt from file
+oh run "fix this:" < broken.py                  # prepend arg, append stdin
 ```
 
 Exit code 0 on success, 1 on failure.
