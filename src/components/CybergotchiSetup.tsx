@@ -76,19 +76,31 @@ export default function CybergotchiSetup({ onComplete, onSkip }: Props) {
         <Text dimColor>Esc to skip</Text>
         <Text>{' '}</Text>
 
-        {step === 'species' && (
-          <Box flexDirection="column">
-            <Text bold>Choose your cybergotchi species:</Text>
-            <Text dimColor>↑↓ to browse · Enter to select</Text>
-            <Text>{' '}</Text>
-            {SPECIES.map((s, i) => (
-              <Text key={s.name} color={i === speciesIdx ? 'cyan' : undefined}>
-                {i === speciesIdx ? '▶ ' : '  '}
-                {s.label.padEnd(12)} <Text dimColor>{s.traitHint}</Text>
-              </Text>
-            ))}
-          </Box>
-        )}
+        {step === 'species' && (() => {
+          const WINDOW = 8;
+          const start = Math.max(0, Math.min(speciesIdx - Math.floor(WINDOW / 2), SPECIES.length - WINDOW));
+          const visible = SPECIES.slice(start, start + WINDOW);
+          return (
+            <Box flexDirection="column">
+              <Text bold>Choose your cybergotchi species:</Text>
+              <Text dimColor>↑↓ to browse · Enter to select</Text>
+              <Text>{' '}</Text>
+              {start > 0 && <Text dimColor>  ↑ {start} more</Text>}
+              {visible.map((s, vi) => {
+                const gi = start + vi;
+                return (
+                  <Text key={s.name} color={gi === speciesIdx ? 'cyan' : undefined}>
+                    {gi === speciesIdx ? '▶ ' : '  '}
+                    {s.label.padEnd(12)} <Text dimColor>{s.traitHint}</Text>
+                  </Text>
+                );
+              })}
+              {start + WINDOW < SPECIES.length && (
+                <Text dimColor>  ↓ {SPECIES.length - start - WINDOW} more</Text>
+              )}
+            </Box>
+          );
+        })()}
 
         {step === 'name' && (
           <Box flexDirection="column">
