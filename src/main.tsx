@@ -26,7 +26,7 @@ import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 const program = new Command();
 
@@ -56,8 +56,8 @@ function buildSystemPrompt(): string {
 
 program
   .command("run")
-  .description("Run a single prompt non-interactively")
-  .argument("<prompt>", "The prompt to execute")
+  .description("Run a single prompt non-interactively (use - to read prompt from stdin)")
+  .argument("[prompt]", "The prompt to execute (omit to read from stdin)")
   .option("-m, --model <model>", "Model to use")
   .addOption(
     new Option("--permission-mode <mode>", "Permission mode")
@@ -68,7 +68,19 @@ program
   .option("--deny", "Block all non-read tools")
   .option("--json", "Output as JSON")
   .option("--max-turns <n>", "Maximum turns", "20")
-  .action(async (prompt: string, opts: Record<string, unknown>) => {
+  .action(async (promptArg: string | undefined, opts: Record<string, unknown>) => {
+    // Read from stdin if prompt is "-" or omitted and stdin is not a TTY
+    let prompt: string;
+    if (!promptArg || promptArg === "-" || !process.stdin.isTTY) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+      const stdin = Buffer.concat(chunks).toString("utf-8").trim();
+      prompt = promptArg && promptArg !== "-" ? `${promptArg}\n\n${stdin}` : stdin;
+      if (!prompt) { process.stderr.write("Error: no prompt provided\n"); process.exit(1); }
+    } else {
+      prompt = promptArg;
+    }
+
     const savedConfig = readOhConfig();
     const permissionMode: PermissionMode = (opts.trust
       ? "trust"
