@@ -381,10 +381,10 @@ export default function REPL({
           if (result.handled) return;
           // If not handled, fall through to send to LLM (e.g., /plan, /review)
           if (result.prependToPrompt) {
-            const effectiveInput = result.prependToPrompt + input;
+            // prependToPrompt already contains the full LLM prompt; don't append the raw slash command
             const userMsg = createUserMessage(input); // show original to user
             setMessages((prev) => [...prev, userMsg]);
-            pendingPromptRef.current = effectiveInput; // send augmented to LLM
+            pendingPromptRef.current = result.prependToPrompt;
             setSubmitCount((c) => c + 1);
             return;
           }
