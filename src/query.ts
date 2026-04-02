@@ -399,16 +399,40 @@ function estimateMessagesTokens(messages: Message[]): number {
   }, 0);
 }
 
-const CONTEXT_WINDOWS: Record<string, number> = {
-  "llama3": 8192, "qwen2.5:7b-instruct": 32768,
-  "gpt-4o": 128000, "gpt-4o-mini": 128000, "o3-mini": 200000,
-  "claude-sonnet-4-6": 200000, "claude-haiku-4-5": 200000, "claude-opus-4-6": 200000,
-  "deepseek-chat": 64000, "deepseek-coder": 64000,
-};
+const CONTEXT_WINDOW_PREFIXES: Array<[string, number]> = [
+  // Anthropic
+  ["claude-", 200_000],
+  // OpenAI
+  ["gpt-4o", 128_000],
+  ["gpt-4-turbo", 128_000],
+  ["gpt-3.5", 16_000],
+  ["o1", 200_000],
+  ["o3", 200_000],
+  // Llama 3.x — 128K context
+  ["llama3", 128_000],
+  ["llama-3", 128_000],
+  // Qwen 2.x
+  ["qwen2", 128_000],
+  ["qwen2.5", 128_000],
+  // Mistral / Mixtral
+  ["mistral", 32_000],
+  ["mixtral", 32_000],
+  // DeepSeek
+  ["deepseek", 64_000],
+  // Phi-3 / Phi-4
+  ["phi", 128_000],
+  // Gemma 2
+  ["gemma2", 8_192],
+  ["gemma", 8_192],
+];
 
 function getContextWindow(model?: string): number {
-  if (!model) return 8192;
-  return CONTEXT_WINDOWS[model] ?? 32768;
+  if (!model) return 8_192;
+  const lower = model.toLowerCase();
+  for (const [prefix, window] of CONTEXT_WINDOW_PREFIXES) {
+    if (lower.startsWith(prefix)) return window;
+  }
+  return 32_768; // conservative default
 }
 
 function compressMessages(messages: Message[], targetTokens: number): Message[] {
