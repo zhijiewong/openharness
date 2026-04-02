@@ -26,7 +26,7 @@ import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 
-const VERSION = "0.3.1";
+const VERSION = "0.3.2";
 
 const program = new Command();
 
