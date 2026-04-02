@@ -79,6 +79,7 @@ export class StreamingToolExecutor {
       const allowed = await this.askUser(
         tool.name,
         JSON.stringify(tracked.toolCall.arguments).slice(0, 200),
+        tool.riskLevel,
       );
       if (!allowed) {
         tracked.result = { output: "Permission denied.", isError: true };

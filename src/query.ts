@@ -324,7 +324,7 @@ async function executeSingleTool(
   const perm = checkPermission(permissionMode, tool.riskLevel, tool.isReadOnly(parsed.data));
   if (!perm.allowed) {
     if (perm.reason === "needs-approval" && askUser) {
-      const allowed = await askUser(tool.name, JSON.stringify(toolCall.arguments).slice(0, 200));
+      const allowed = await askUser(tool.name, JSON.stringify(toolCall.arguments).slice(0, 200), tool.riskLevel);
       if (!allowed) {
         return { output: "Permission denied by user.", isError: true };
       }

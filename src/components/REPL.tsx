@@ -154,12 +154,12 @@ export default function REPL({
       setError(null);
       setToolCalls(new Map());
 
-      const askUser = (toolName: string, description: string): Promise<boolean> => {
+      const askUser = (toolName: string, description: string, riskLevel?: string): Promise<boolean> => {
         return new Promise((resolve) => {
           setPendingPermission({
             toolName,
             description,
-            riskLevel: "medium",
+            riskLevel: riskLevel ?? "medium",
             resolve: (allowed: boolean) => {
               setPendingPermission(null);
               resolve(allowed);

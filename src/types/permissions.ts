@@ -15,6 +15,7 @@ export type PermissionResult = {
 export type AskUserFn = (
   toolName: string,
   description: string,
+  riskLevel?: RiskLevel,
 ) => Promise<boolean>;
 
 /**
