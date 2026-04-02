@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, Static, useApp, useInput } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -50,33 +50,6 @@ const BANNER = `        ___
        ((  ))
         \`--\``;
 
-const REPLBanner = React.memo(function REPLBanner({
-  model, permissionMode, sessionId, totalCost, isSetupNeeded,
-}: {
-  model: string; permissionMode: string; sessionId: string;
-  totalCost: number; isSetupNeeded: boolean;
-}) {
-  return (
-    <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-      {BANNER.split("\n").map((line, i) => (
-        <Text key={i} color="magenta" wrap="truncate">{line}</Text>
-      ))}
-      <Box>
-        <Text bold color="magenta">OpenHarness</Text>
-        <Text dimColor> v0.3.3</Text>
-        <Text color="cyan">{model ? ` ${model}` : ""}</Text>
-        <Text dimColor>{` (${permissionMode})`}</Text>
-      </Box>
-      <Text dimColor>
-        session {sessionId}{totalCost > 0 ? ` | $${totalCost.toFixed(4)}` : ""}
-      </Text>
-      <Text dimColor>{"─".repeat(60)}</Text>
-      {isSetupNeeded && (
-        <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
-      )}
-    </Box>
-  );
-});
 
 export default function REPL({
   provider,
@@ -442,14 +415,27 @@ export default function REPL({
     <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
-        {/* Banner — memoized, never re-renders on cybergotchi ticks */}
-        <REPLBanner
-          model={currentModel}
-          permissionMode={permissionMode}
-          sessionId={sessionId}
-          totalCost={totalCost}
-          isSetupNeeded={loadCybergotchiConfig() === null}
-        />
+        {/* Banner — Static renders once, never touched by re-renders */}
+        <Static items={["banner"]}>
+          {() => (
+            <Box key="banner" flexDirection="column" marginBottom={1}>
+              {BANNER.split("\n").map((line, i) => (
+                <Text key={i} color="magenta">{line}</Text>
+              ))}
+              <Box>
+                <Text bold color="magenta">OpenHarness</Text>
+                <Text dimColor> v0.3.3</Text>
+                <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
+                <Text dimColor>{` (${permissionMode})`}</Text>
+              </Box>
+              <Text dimColor>session {sessionId}</Text>
+              <Text dimColor>{"─".repeat(60)}</Text>
+              {loadCybergotchiConfig() === null && (
+                <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
+              )}
+            </Box>
+          )}
+        </Static>
 
         {/* Messages */}
         <Messages messages={messages} toolCalls={toolCalls} />
