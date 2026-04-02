@@ -18,10 +18,9 @@ import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
 import TextInputComponent from "ink-text-input";
 import PermissionPrompt from "./PermissionPrompt.js";
-import CybergotchiPanel from "./CybergotchiPanel.js";
+import CybergotchiPanelConnected from "./CybergotchiPanelConnected.js";
 import CybergotchiSetup from "./CybergotchiSetup.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
-import { useCybergotchi } from "../cybergotchi/useCybergotchi.js";
 import { cybergotchiEvents } from "../cybergotchi/events.js";
 import { loadCybergotchiConfig, saveCybergotchiConfig } from "../cybergotchi/config.js";
 
@@ -50,6 +49,34 @@ const BANNER = `        ___
         ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
        ((  ))
         \`--\``;
+
+const REPLBanner = React.memo(function REPLBanner({
+  model, permissionMode, sessionId, totalCost, isSetupNeeded,
+}: {
+  model: string; permissionMode: string; sessionId: string;
+  totalCost: number; isSetupNeeded: boolean;
+}) {
+  return (
+    <Box flexDirection="column" marginBottom={1} flexShrink={0}>
+      {BANNER.split("\n").map((line, i) => (
+        <Text key={i} color="magenta" wrap="truncate">{line}</Text>
+      ))}
+      <Box>
+        <Text bold color="magenta">OpenHarness</Text>
+        <Text dimColor> v0.3.2</Text>
+        <Text color="cyan">{model ? ` ${model}` : ""}</Text>
+        <Text dimColor>{` (${permissionMode})`}</Text>
+      </Box>
+      <Text dimColor>
+        session {sessionId}{totalCost > 0 ? ` | $${totalCost.toFixed(4)}` : ""}
+      </Text>
+      <Text dimColor>{"─".repeat(60)}</Text>
+      {isSetupNeeded && (
+        <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
+      )}
+    </Box>
+  );
+});
 
 export default function REPL({
   provider,
@@ -89,7 +116,6 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
-  const cybergotchi = useCybergotchi();
 
   // Increment session count on mount
   useEffect(() => {
@@ -331,12 +357,15 @@ export default function REPL({
       }
 
       // Check if user is addressing the cybergotchi
-      if (cybergotchi.config) {
-        const name = cybergotchi.config.name.toLowerCase();
-        const lower = trimmed.toLowerCase();
-        if (lower.startsWith(`@${name}`) || lower.startsWith(`${name},`) || lower.startsWith(`${name} `)) {
-          cybergotchiEvents.emit('cybergotchi', { type: 'userAddressed', text: trimmed });
-          return;
+      {
+        const gotchiCfg = loadCybergotchiConfig();
+        if (gotchiCfg) {
+          const name = gotchiCfg.name.toLowerCase();
+          const lower = trimmed.toLowerCase();
+          if (lower.startsWith(`@${name}`) || lower.startsWith(`${name},`) || lower.startsWith(`${name} `)) {
+            cybergotchiEvents.emit('cybergotchi', { type: 'userAddressed', text: trimmed });
+            return;
+          }
         }
       }
 
@@ -396,17 +425,14 @@ export default function REPL({
       pendingPromptRef.current = input;
       setSubmitCount((c) => c + 1);
     },
-    [exit, currentModel, permissionMode, sessionId, cybergotchi.config],
+    [exit, currentModel, permissionMode, sessionId],
   );
 
   // Show cybergotchi setup if needed (first run or /cybergotchi reset)
-  if (cybergotchi.isSetupNeeded || showCybergotchiSetup) {
+  if (loadCybergotchiConfig() === null || showCybergotchiSetup) {
     return (
       <CybergotchiSetup
-        onComplete={() => {
-          cybergotchi.reload();
-          setShowCybergotchiSetup(false);
-        }}
+        onComplete={() => setShowCybergotchiSetup(false)}
         onSkip={() => setShowCybergotchiSetup(false)}
       />
     );
@@ -416,25 +442,14 @@ export default function REPL({
     <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
-        {/* Banner */}
-        <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-          {BANNER.split("\n").map((line, i) => (
-            <Text key={i} color="magenta" wrap="truncate">{line}</Text>
-          ))}
-          <Box>
-            <Text bold color="magenta">OpenHarness</Text>
-            <Text dimColor> v0.3.2</Text>
-            <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
-            <Text dimColor>{` (${permissionMode})`}</Text>
-          </Box>
-          <Text dimColor>
-            session {sessionId}{totalCost > 0 ? ` | $${totalCost.toFixed(4)}` : ""}
-          </Text>
-          <Text dimColor>{"─".repeat(60)}</Text>
-          {cybergotchi.isSetupNeeded && (
-            <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
-          )}
-        </Box>
+        {/* Banner — memoized, never re-renders on cybergotchi ticks */}
+        <REPLBanner
+          model={currentModel}
+          permissionMode={permissionMode}
+          sessionId={sessionId}
+          totalCost={totalCost}
+          isSetupNeeded={loadCybergotchiConfig() === null}
+        />
 
         {/* Messages */}
         <Messages messages={messages} toolCalls={toolCalls} />
@@ -498,7 +513,7 @@ export default function REPL({
         {/* Keybinding hints */}
         <Text dimColor>
           {"exit to quit"}{loading ? " | Ctrl+C to interrupt" : ""}
-          {cybergotchi.config ? ` | @${cybergotchi.config.name} to chat` : ""}
+          {loadCybergotchiConfig()?.name ? ` | @${loadCybergotchiConfig()!.name} to chat` : ""}
         </Text>
 
         {/* Token context warning */}
@@ -514,10 +529,8 @@ export default function REPL({
         })()}
       </Box>
 
-      {/* Cybergotchi side panel */}
-      {cybergotchi.config && (
-        <CybergotchiPanel config={cybergotchi.config} state={cybergotchi.state} />
-      )}
+      {/* Cybergotchi side panel — self-contained, isolated from REPL re-renders */}
+      <CybergotchiPanelConnected />
     </Box>
   );
 }
