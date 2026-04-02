@@ -11,6 +11,7 @@ import { FileWriteTool } from "./tools/FileWriteTool/index.js";
 import { FileEditTool } from "./tools/FileEditTool/index.js";
 import { GlobTool } from "./tools/GlobTool/index.js";
 import { GrepTool } from "./tools/GrepTool/index.js";
+import { LSTool } from "./tools/LSTool/index.js";
 import { WebFetchTool } from "./tools/WebFetchTool/index.js";
 
 // Advanced tools
@@ -39,6 +40,7 @@ export function getAllTools(): Tools {
     FileEditTool,
     GlobTool,
     GrepTool,
+    LSTool,
     WebFetchTool,
     WebSearchTool,
     // Task management

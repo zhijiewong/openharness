@@ -12,7 +12,30 @@ const inputSchema = z.object({
 
 const MAX_MATCHES = 100;
 
-async function walkDir(dir: string, globFilter?: string): Promise<string[]> {
+function matchGlob(filePath: string, pattern: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  const escaped = pattern
+    .replace(/\\/g, "/")
+    .split("")
+    .map((c, i, arr) => {
+      if (c === "*" && arr[i + 1] === "*") return null;
+      if (c === "*" && arr[i - 1] === "*") return "GLOBSTAR";
+      if (c === "*") return "[^/]*";
+      if (c === "?") return "[^/]";
+      if (c === ".") return "\\.";
+      return c;
+    })
+    .filter((c) => c !== null)
+    .join("")
+    .replace(/GLOBSTAR/g, ".*");
+  try {
+    return new RegExp("(^|/)" + escaped + "$").test(normalized);
+  } catch {
+    return normalized.includes(pattern.replace(/\*/g, ""));
+  }
+}
+
+async function walkDir(dir: string): Promise<string[]> {
   const results: string[] = [];
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -20,19 +43,8 @@ async function walkDir(dir: string, globFilter?: string): Promise<string[]> {
       if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        results.push(...(await walkDir(full, globFilter)));
+        results.push(...(await walkDir(full)));
       } else {
-        if (globFilter) {
-          // Simple extension-based filter from glob like "*.ts" or "*.{ts,tsx}"
-          const ext = path.extname(entry.name);
-          const bracketMatch = globFilter.match(/\*\.(?:\{([^}]+)\}|(\w+))/);
-          if (bracketMatch) {
-            const exts = (bracketMatch[1] || bracketMatch[2])
-              .split(",")
-              .map((e) => "." + e.trim());
-            if (!exts.includes(ext)) continue;
-          }
-        }
         results.push(full);
       }
     }
@@ -73,7 +85,10 @@ export const GrepTool: Tool<typeof inputSchema> = {
     }
 
     try {
-      const files = await walkDir(baseDir, input.glob);
+      const allFiles = await walkDir(baseDir);
+      const files = input.glob
+        ? allFiles.filter(f => matchGlob(path.relative(baseDir, f), input.glob!))
+        : allFiles;
       const matches: string[] = [];
 
       for (const file of files) {
