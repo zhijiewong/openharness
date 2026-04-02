@@ -23,20 +23,22 @@ export type OhConfig = {
   mcpServers?: McpServerConfig[];
 };
 
-const CONFIG_DIR = ".oh";
-const CONFIG_PATH = join(CONFIG_DIR, "config.yaml");
+function configPath(root?: string): string {
+  return join(root ?? ".", ".oh", "config.yaml");
+}
 
-export function readOhConfig(): OhConfig | null {
-  if (!existsSync(CONFIG_PATH)) return null;
+export function readOhConfig(root?: string): OhConfig | null {
+  const p = configPath(root);
+  if (!existsSync(p)) return null;
   try {
-    const raw = readFileSync(CONFIG_PATH, "utf-8");
-    return parse(raw) as OhConfig;
+    return parse(readFileSync(p, "utf-8")) as OhConfig;
   } catch {
     return null;
   }
 }
 
-export function writeOhConfig(cfg: OhConfig): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, stringify(cfg));
+export function writeOhConfig(cfg: OhConfig, root?: string): void {
+  const p = configPath(root);
+  mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
+  writeFileSync(p, stringify(cfg));
 }
