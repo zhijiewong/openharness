@@ -208,7 +208,10 @@ program
     try {
       const { createProvider } = await import("./providers/index.js");
       const { provider } = await createProvider("ollama/llama3");
-      for (const m of provider.listModels()) {
+      const ollamaModels = "fetchModels" in provider && typeof (provider as any).fetchModels === "function"
+        ? await (provider as any).fetchModels()
+        : provider.listModels();
+      for (const m of ollamaModels) {
         console.log(`  ${m.id.padEnd(30)} ${"ollama".padEnd(12)} free`);
       }
     } catch { /* Ollama not running */ }

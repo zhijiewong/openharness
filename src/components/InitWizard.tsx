@@ -117,8 +117,10 @@ export default function InitWizard({ onDone }: Props) {
         baseUrl: url || prov.defaultBaseUrl,
         defaultModel: prov.defaultModel,
       });
-      const models = p.listModels();
-      const modelNames = models.map(m => m.id);
+      const fetched = "fetchModels" in p && typeof (p as any).fetchModels === "function"
+        ? await (p as any).fetchModels()
+        : p.listModels();
+      const modelNames = fetched.map((m: any) => m.id as string);
       setAvailableModels(modelNames.length > 0 ? modelNames : [prov.defaultModel]);
       setTestStatus("ok");
       setTimeout(() => setStep("model"), 600);
