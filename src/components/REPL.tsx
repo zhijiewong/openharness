@@ -63,7 +63,7 @@ const REPLBanner = React.memo(function REPLBanner({
       ))}
       <Box>
         <Text bold color="magenta">OpenHarness</Text>
-        <Text dimColor> v0.3.2</Text>
+        <Text dimColor> v0.3.3</Text>
         <Text color="cyan">{model ? ` ${model}` : ""}</Text>
         <Text dimColor>{` (${permissionMode})`}</Text>
       </Box>
