@@ -7,6 +7,8 @@ import type { Tools } from "../Tool.js";
 import type { PermissionMode } from "../types/permissions.js";
 import { createAssistantMessage, createUserMessage, createMessage } from "../types/message.js";
 import { query, type QueryConfig } from "../query.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
 import { CostTracker, estimateCost, contextUsage } from "../harness/cost.js";
 import { processSlashCommand, type CommandContext } from "../commands/index.js";
@@ -307,6 +309,14 @@ export default function REPL({
           if (result.openCybergotchiSetup) {
             setShowCybergotchiSetup(true);
             return;
+          }
+          if (result.resumeSessionId) {
+            const sessionDir = join(homedir(), ".oh", "sessions");
+            try {
+              const sess = loadSession(result.resumeSessionId, sessionDir);
+              sessionRef.current = sess;
+              setMessages(sess.messages);
+            } catch { /* already shown error in output */ }
           }
           if (result.clearMessages) {
             setMessages([]);

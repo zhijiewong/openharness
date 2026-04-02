@@ -187,6 +187,7 @@ program
         tools={tools}
         permissionMode={effectivePermMode}
         model={resolvedModel}
+        resumeSessionId={opts.resume as string | undefined}
       />,
     );
   });

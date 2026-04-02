@@ -16,6 +16,7 @@ type AppProps = {
   systemPrompt?: string;
   model?: string;
   initialMessages?: Message[];
+  resumeSessionId?: string;
 };
 
 const DEFAULT_SYSTEM_PROMPT = `You are OpenHarness, an AI coding assistant running in the user's terminal.
@@ -29,6 +30,7 @@ export default function App({
   systemPrompt,
   model,
   initialMessages,
+  resumeSessionId,
 }: AppProps) {
   const fullSystemPrompt = useMemo(() => {
     const parts: string[] = [systemPrompt || DEFAULT_SYSTEM_PROMPT];
@@ -53,6 +55,7 @@ export default function App({
           systemPrompt={fullSystemPrompt}
           model={model}
           initialMessages={initialMessages}
+          resumeSessionId={resumeSessionId}
         />
       </ErrorBoundary>
     </ThemeProvider>

@@ -28,6 +28,8 @@ export type CommandResult = {
   compactedMessages?: Message[];
   /** If true, open the cybergotchi setup UI */
   openCybergotchiSetup?: boolean;
+  /** If set, resume this session ID */
+  resumeSessionId?: string;
 };
 
 type CommandHandler = (args: string, context: CommandContext) => CommandResult;
@@ -159,6 +161,18 @@ register("history", "List recent sessions or search across them", (args) => {
     return `  ${s.id}  ${date}  ${String(s.messages).padStart(3)} msgs  ${(s.model || "?").slice(0, 24)}${cost}`;
   });
   return { output: `Recent sessions (use /resume <id> to continue):\n${lines.join("\n")}`, handled: true };
+});
+
+register("resume", "Resume a saved session by ID", (args) => {
+  const id = args.trim();
+  if (!id) return { output: "Usage: /resume <session-id>", handled: true };
+  const sessionDir = join(homedir(), ".oh", "sessions");
+  try {
+    loadSession(id, sessionDir); // validate it exists
+    return { output: `Resuming session ${id}...`, handled: true, resumeSessionId: id };
+  } catch {
+    return { output: `Session not found: ${id}`, handled: true };
+  }
 });
 
 register("files", "List files in context", (_args, ctx) => {
