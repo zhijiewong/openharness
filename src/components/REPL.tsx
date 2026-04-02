@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Box, Text, useApp } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -76,6 +76,7 @@ export default function REPL({
     resumeSessionId ? sessionRef.current.messages : (initialMessages ?? []),
   );
   const [loading, setLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(new Map());
   const toolCallsRef = useRef(toolCalls);
@@ -127,6 +128,13 @@ export default function REPL({
     };
   }, [loading]);
 
+  // Ctrl+C during loading aborts the current query
+  useInput((_input, key) => {
+    if (key.ctrl && _input === "c" && loading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  });
+
   // Queue prompt submissions — useEffect picks them up for async processing
   const pendingPromptRef = useRef<string | null>(null);
   const [submitCount, setSubmitCount] = useState(0);
@@ -139,6 +147,8 @@ export default function REPL({
     pendingPromptRef.current = null;
 
     const run = async () => {
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       setLoading(true);
       setStreamingText("");
       setError(null);
@@ -176,6 +186,7 @@ export default function REPL({
         askUser,
         askUserQuestion,
         model: currentModel || undefined,
+        abortSignal: abortController.signal,
       };
 
       let accumulated = "";
@@ -296,8 +307,13 @@ export default function REPL({
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (abortController.signal.aborted) {
+          // Interrupted by user — not an error
+        } else {
+          setError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
+        abortControllerRef.current = null;
         setLoading(false);
         setStreamingText("");
       }
