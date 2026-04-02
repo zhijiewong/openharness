@@ -28,7 +28,7 @@ type Provider = {
 };
 
 const PROVIDERS: Provider[] = [
-  { key: "ollama",     label: "Ollama (local, free)",      defaultModel: "llama3",           needsApiKey: false, defaultBaseUrl: "http://localhost:11434/v1" },
+  { key: "ollama",     label: "Ollama (local, free)",      defaultModel: "llama3",           needsApiKey: false, defaultBaseUrl: "http://localhost:11434" },
   { key: "openai",     label: "OpenAI",                    defaultModel: "gpt-4o",           needsApiKey: true  },
   { key: "anthropic",  label: "Anthropic (Claude)",        defaultModel: "claude-sonnet-4-6",needsApiKey: true  },
   { key: "openrouter", label: "OpenRouter",                defaultModel: "openai/gpt-4o",    needsApiKey: true,  defaultBaseUrl: "https://openrouter.ai/api/v1" },
