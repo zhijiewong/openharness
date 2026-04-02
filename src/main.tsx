@@ -69,14 +69,20 @@ program
   .option("--json", "Output as JSON")
   .option("--max-turns <n>", "Maximum turns", "20")
   .action(async (prompt: string, opts: Record<string, unknown>) => {
+    const savedConfig = readOhConfig();
     const permissionMode: PermissionMode = (opts.trust
       ? "trust"
       : opts.deny
         ? "deny"
-        : opts.permissionMode) as PermissionMode;
+        : opts.permissionMode !== "trust" ? opts.permissionMode
+        : (savedConfig?.permissionMode ?? "trust")) as PermissionMode;
 
     const { createProvider } = await import("./providers/index.js");
-    const { provider, model } = await createProvider(opts.model as string | undefined);
+    const effectiveModel = (opts.model as string | undefined) ?? savedConfig?.model;
+    const { provider, model } = await createProvider(
+      effectiveModel,
+      savedConfig?.apiKey ? { apiKey: savedConfig.apiKey, baseUrl: savedConfig.baseUrl } : undefined,
+    );
     const { query } = await import("./query.js");
 
     const tools = getAllTools();
