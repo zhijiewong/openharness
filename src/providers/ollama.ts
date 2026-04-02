@@ -20,8 +20,11 @@ export class OllamaProvider implements Provider {
   private convertMessages(
     messages: Message[],
     systemPrompt: string,
-  ): { system: string; messages: unknown[] } {
+  ): unknown[] {
     const converted: unknown[] = [];
+    if (systemPrompt) {
+      converted.push({ role: "system", content: systemPrompt });
+    }
     for (const msg of messages) {
       if (msg.role === "system") continue;
 
@@ -53,7 +56,7 @@ export class OllamaProvider implements Provider {
         });
       }
     }
-    return { system: systemPrompt, messages: converted };
+    return converted;
   }
 
   private convertTools(tools?: APIToolDef[]): unknown[] | undefined {
@@ -75,11 +78,10 @@ export class OllamaProvider implements Provider {
     model?: string,
   ): AsyncGenerator<StreamEvent, void> {
     const m = model ?? this.defaultModel;
-    const { system, messages: msgs } = this.convertMessages(messages, systemPrompt);
+    const msgs = this.convertMessages(messages, systemPrompt);
     const body: Record<string, unknown> = {
       model: m,
       messages: msgs,
-      system,
       stream: true,
     };
     const ollamaTools = this.convertTools(tools);
@@ -179,11 +181,10 @@ export class OllamaProvider implements Provider {
     model?: string,
   ): Promise<Message> {
     const m = model ?? this.defaultModel;
-    const { system, messages: msgs } = this.convertMessages(messages, systemPrompt);
+    const msgs = this.convertMessages(messages, systemPrompt);
     const body: Record<string, unknown> = {
       model: m,
       messages: msgs,
-      system,
       stream: false,
     };
     const ollamaTools = this.convertTools(tools);
@@ -218,10 +219,16 @@ export class OllamaProvider implements Provider {
   }
 
   listModels(): ModelInfo[] {
-    // Static list; dynamic discovery via healthCheck + /api/tags
-    return [
-      {
-        id: "llama3.1",
+    return [];
+  }
+
+  async fetchModels(): Promise<ModelInfo[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/tags`);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      return (data.models ?? []).map((m: any) => ({
+        id: m.name as string,
         provider: "ollama",
         contextWindow: 128_000,
         supportsTools: true,
@@ -229,28 +236,10 @@ export class OllamaProvider implements Provider {
         supportsVision: false,
         inputCostPerMtok: 0,
         outputCostPerMtok: 0,
-      },
-      {
-        id: "llama3.1:70b",
-        provider: "ollama",
-        contextWindow: 128_000,
-        supportsTools: true,
-        supportsStreaming: true,
-        supportsVision: false,
-        inputCostPerMtok: 0,
-        outputCostPerMtok: 0,
-      },
-      {
-        id: "qwen2.5-coder",
-        provider: "ollama",
-        contextWindow: 32_000,
-        supportsTools: true,
-        supportsStreaming: true,
-        supportsVision: false,
-        inputCostPerMtok: 0,
-        outputCostPerMtok: 0,
-      },
-    ];
+      }));
+    } catch {
+      return [];
+    }
   }
 
   async healthCheck(): Promise<boolean> {
