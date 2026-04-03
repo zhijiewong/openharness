@@ -257,6 +257,15 @@ Create `src/providers/yourprovider.ts` implementing the `Provider` interface, ad
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Community
+Join the OpenHarness community to get help, share your workflows, and discuss the future of AI coding agents!
+
+Discord: [Join our Discord Server to chat with developers and get real-time support.](https://discord.gg/ezVrqy3qu)
+
+WeChat: ![img_v3_0210d_7dd91edc-c2ae-4bec-97dd-a7f7d3b9c0fg](https://github.com/user-attachments/assets/adcf291a-9ffe-4738-8608-f46a21e18db0)
+
+Feishu: Join our Feishu Group to collaborate with the community.
+
 ## License
 
 MIT
