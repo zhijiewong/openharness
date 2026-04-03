@@ -258,13 +258,14 @@ Create `src/providers/yourprovider.ts` implementing the `Provider` interface, ad
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Community
-Discord: Join our Discord Server to chat with developers and get real-time support.
 
-WeChat: Scan the QR code below to join our WeChat group.
+Join the OpenHarness community to get help, share your workflows, and discuss the future of AI coding agents!
 
-<img src="https://github.com/user-attachments/assets/adcf291a-9ffe-4738-8608-f46a21e18db0" width="200" alt="WeChat Group QR Code">
-
-Feishu / Lark: Join our Feishu Group to collaborate with the community.
+| Platform | Details & Links |
+| :--- | :--- |
+| 🟣 **Discord** | [**Join our Discord Server**](https://discord.gg/ezVrqy3qu) to chat with developers and get real-time support. |
+| 🔵 **Feishu / Lark** | Scan the QR code below to collaborate with the community:<br><br><img src="https://github.com/user-attachments/assets/54ade077-22ad-45d2-b38a-623464677d53" width="160" alt="Feishu Group QR Code"> |
+| 🟢 **WeChat** | Scan the QR code below to join our WeChat group:<br><br><img src="https://github.com/user-attachments/assets/adcf291a-9ffe-4738-8608-f46a21e18db0" width="160" alt="WeChat Group QR Code"> |
 
 ## License
 
