@@ -261,6 +261,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 Discord: Join our Discord Server to chat with developers and get real-time support.
 
 WeChat: Scan the QR code below to join our WeChat group.
+
 <img src="https://github.com/user-attachments/assets/adcf291a-9ffe-4738-8608-f46a21e18db0" width="200" alt="WeChat Group QR Code">
 
 Feishu / Lark: Join our Feishu Group to collaborate with the community.
