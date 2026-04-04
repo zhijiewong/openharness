@@ -231,6 +231,10 @@ export default function REPL({
       try {
         for await (const event of query(prompt, config, messagesRef.current)) {
           switch (event.type) {
+            case "rate_limited":
+              setStreamingText(`⏳ Rate limited — retrying in ${event.retryIn}s… (attempt ${event.attempt}/3)`);
+              break;
+
             case "text_delta":
               accumulated += event.content;
               setStreamingText(accumulated);

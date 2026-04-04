@@ -54,6 +54,12 @@ export type ErrorEvent = {
   readonly message: string;
 };
 
+export type RateLimited = {
+  readonly type: "rate_limited";
+  readonly retryIn: number;   // seconds
+  readonly attempt: number;   // 1-based
+};
+
 export type ToolOutputDelta = {
   readonly type: "tool_output_delta";
   readonly callId: string;
@@ -77,4 +83,5 @@ export type StreamEvent =
   | AskUserRequest
   | CostUpdate
   | TurnComplete
-  | ErrorEvent;
+  | ErrorEvent
+  | RateLimited;

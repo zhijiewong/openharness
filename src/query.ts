@@ -61,6 +61,12 @@ const DEFAULT_MAX_TURNS = 50;
 const MAX_CONSECUTIVE_ERRORS = 3;
 const MAX_TOOL_RESULT_CHARS = 100_000; // 100KB cap per tool result
 const CHARS_PER_TOKEN = 4; // rough estimation
+const MAX_RATE_LIMIT_RETRIES = 3;
+
+function isRateLimitError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests");
+}
 
 // ── Main Entry ──
 
@@ -193,6 +199,20 @@ export async function* query(
 
       // Error recovery cascade
       const errorMsg = streamError.message.toLowerCase();
+
+      // Rate limit → exponential backoff retry (max 3 attempts)
+      if (isRateLimitError(streamError)) {
+        const attempt = state.consecutiveErrors;
+        if (attempt <= MAX_RATE_LIMIT_RETRIES) {
+          const retryIn = Math.pow(2, attempt); // 2, 4, 8 seconds
+          yield { type: "rate_limited", retryIn, attempt };
+          await new Promise((r) => setTimeout(r, retryIn * 1000));
+          continue;
+        }
+        yield { type: "error", message: `Rate limit exceeded after ${MAX_RATE_LIMIT_RETRIES} retries.` };
+        yield { type: "turn_complete", reason: "error" };
+        return;
+      }
 
       if (errorMsg.includes("prompt") && errorMsg.includes("long")) {
         // Prompt too long → compress and retry
