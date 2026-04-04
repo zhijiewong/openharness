@@ -54,6 +54,37 @@ test("writeOhConfig() preserves optional fields", () => {
   assert.equal(cfg.mcpServers?.[0]?.name, "fs");
 });
 
+test("writeOhConfig() llamacpp roundtrip", () => {
+  const dir = tmp();
+  writeOhConfig({
+    provider: "llamacpp",
+    model: "llama3-local",
+    permissionMode: "ask",
+    baseUrl: "http://localhost:8080",
+  }, dir);
+  const cfg = readOhConfig(dir);
+  assert.ok(cfg !== null);
+  assert.equal(cfg.provider, "llamacpp");
+  assert.equal(cfg.model, "llama3-local");
+  assert.equal(cfg.permissionMode, "ask");
+  assert.equal(cfg.baseUrl, "http://localhost:8080");
+});
+
+test("writeOhConfig() llamacpp model with colon roundtrips correctly", () => {
+  const dir = tmp();
+  writeOhConfig({
+    provider: "llamacpp",
+    model: "my:model",
+    permissionMode: "trust",
+    apiKey: "secret#key",
+  }, dir);
+  const cfg = readOhConfig(dir);
+  assert.ok(cfg !== null);
+  assert.equal(cfg.model, "my:model");
+  assert.equal(cfg.apiKey, "secret#key");
+  assert.equal(cfg.permissionMode, "trust");
+});
+
 test("writeOhConfig() overwrites existing config", () => {
   const dir = tmp();
   writeOhConfig({ provider: "openai", model: "gpt-4o", permissionMode: "ask" }, dir);

@@ -23,6 +23,10 @@ export type OhConfig = {
   mcpServers?: McpServerConfig[];
 };
 
+function yamlScalar(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 function configPath(root?: string): string {
   return join(root ?? ".", ".oh", "config.yaml");
 }
@@ -40,5 +44,30 @@ export function readOhConfig(root?: string): OhConfig | null {
 export function writeOhConfig(cfg: OhConfig, root?: string): void {
   const p = configPath(root);
   mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
+
+  if (cfg.provider === "llamacpp") {
+    const lines = [
+      "# openHarness configuration",
+      `provider: llamacpp`,
+      "",
+      "# Model alias — must match --alias passed to llama-server",
+      "# Example: llama-server --model ./llama3.gguf --port 8080 --alias llama3-local",
+      `model: ${yamlScalar(cfg.model || "")}`,
+      "",
+      "# URL where llama-server is running (default port: 8080)",
+      "# Note: do not include /v1 — it is added automatically",
+      `baseUrl: ${yamlScalar(cfg.baseUrl || "http://localhost:8080")}`,
+      "",
+      `permissionMode: ${yamlScalar(cfg.permissionMode)}`,
+    ];
+    if (cfg.apiKey) lines.push(`apiKey: ${yamlScalar(cfg.apiKey)}`);
+    if (cfg.mcpServers?.length) {
+      // fall back to stringify for mcpServers since it's complex
+      lines.push("", stringify({ mcpServers: cfg.mcpServers }).trim());
+    }
+    writeFileSync(p, lines.join("\n") + "\n");
+    return;
+  }
+
   writeFileSync(p, stringify(cfg));
 }

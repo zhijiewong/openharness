@@ -227,16 +227,27 @@ export class OllamaProvider implements Provider {
       const res = await fetch(`${this.baseUrl}/api/tags`);
       if (!res.ok) return [];
       const data: any = await res.json();
-      return (data.models ?? []).map((m: any) => ({
-        id: m.name as string,
-        provider: "ollama",
-        contextWindow: 128_000,
-        supportsTools: true,
-        supportsStreaming: true,
-        supportsVision: false,
-        inputCostPerMtok: 0,
-        outputCostPerMtok: 0,
-      }));
+      return (data.models ?? []).map((m: any) => {
+        // Detect vision support from model families
+        // Presence of "clip" or "llava" in families indicates vision capability
+        const families = m.details?.families ?? [];
+        const supportsVision = Array.isArray(families) &&
+          families.some((f: string) => f.includes("clip") || f.includes("llava"));
+
+        return {
+          id: m.name as string,
+          provider: "ollama",
+          // Default context window: Ollama's /api/tags doesn't expose context_window,
+          // so 128K is a reasonable default for modern LLMs
+          contextWindow: 128_000,
+          // Safe default: modern models typically support tools
+          supportsTools: true,
+          supportsStreaming: true,
+          supportsVision,
+          inputCostPerMtok: 0,
+          outputCostPerMtok: 0,
+        };
+      });
     } catch {
       return [];
     }
