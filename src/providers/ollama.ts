@@ -105,7 +105,10 @@ export class OllamaProvider implements Provider {
     }
 
     const reader = res.body?.getReader();
-    if (!reader) return;
+    if (!reader) {
+      yield { type: "error", message: "Ollama: response body is not readable" };
+      return;
+    }
 
     const decoder = new TextDecoder();
     let buffer = "";
