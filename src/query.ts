@@ -22,6 +22,7 @@ import type { AskUserFn, PermissionMode } from "./types/permissions.js";
 import { checkPermission } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 import { StreamingToolExecutor } from "./services/StreamingToolExecutor.js";
+import { getContextWindow } from "./harness/cost.js";
 
 // ── Configuration ──
 
@@ -60,6 +61,12 @@ const DEFAULT_MAX_TURNS = 50;
 const MAX_CONSECUTIVE_ERRORS = 3;
 const MAX_TOOL_RESULT_CHARS = 100_000; // 100KB cap per tool result
 const CHARS_PER_TOKEN = 4; // rough estimation
+const MAX_RATE_LIMIT_RETRIES = 3;
+
+function isRateLimitError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests");
+}
 
 // ── Main Entry ──
 
@@ -76,6 +83,7 @@ export async function* query(
     model: config.model,
     tools: config.tools,
     systemPrompt: config.systemPrompt,
+    permissionMode: config.permissionMode,
     askUserQuestion: config.askUserQuestion,
   };
   const toolPrompts = config.tools.map((t) => t.prompt()).join("\n\n");
@@ -191,6 +199,20 @@ export async function* query(
 
       // Error recovery cascade
       const errorMsg = streamError.message.toLowerCase();
+
+      // Rate limit → exponential backoff retry (max 3 attempts)
+      if (isRateLimitError(streamError)) {
+        const attempt = state.consecutiveErrors;
+        if (attempt <= MAX_RATE_LIMIT_RETRIES) {
+          const retryIn = Math.pow(2, attempt); // 2, 4, 8 seconds
+          yield { type: "rate_limited", retryIn, attempt };
+          await new Promise((r) => setTimeout(r, retryIn * 1000));
+          continue;
+        }
+        yield { type: "error", message: `Rate limit exceeded after ${MAX_RATE_LIMIT_RETRIES} retries.` };
+        yield { type: "turn_complete", reason: "error" };
+        return;
+      }
 
       if (errorMsg.includes("prompt") && errorMsg.includes("long")) {
         // Prompt too long → compress and retry
@@ -408,41 +430,6 @@ function estimateMessagesTokens(messages: Message[]): number {
   }, 0);
 }
 
-const CONTEXT_WINDOW_PREFIXES: Array<[string, number]> = [
-  // Anthropic
-  ["claude-", 200_000],
-  // OpenAI
-  ["gpt-4o", 128_000],
-  ["gpt-4-turbo", 128_000],
-  ["gpt-3.5", 16_000],
-  ["o1", 200_000],
-  ["o3", 200_000],
-  // Llama 3.x — 128K context
-  ["llama3", 128_000],
-  ["llama-3", 128_000],
-  // Qwen 2.x
-  ["qwen2", 128_000],
-  ["qwen2.5", 128_000],
-  // Mistral / Mixtral
-  ["mistral", 32_000],
-  ["mixtral", 32_000],
-  // DeepSeek
-  ["deepseek", 64_000],
-  // Phi-3 / Phi-4
-  ["phi", 128_000],
-  // Gemma 2
-  ["gemma2", 8_192],
-  ["gemma", 8_192],
-];
-
-function getContextWindow(model?: string): number {
-  if (!model) return 8_192;
-  const lower = model.toLowerCase();
-  for (const [prefix, window] of CONTEXT_WINDOW_PREFIXES) {
-    if (lower.startsWith(prefix)) return window;
-  }
-  return 32_768; // conservative default
-}
 
 function compressMessages(messages: Message[], targetTokens: number): Message[] {
   if (messages.length <= 2) return messages;
@@ -466,7 +453,20 @@ function compressMessages(messages: Message[], targetTokens: number): Message[] 
     result.splice(firstNonSystem, 1);
   }
 
-  return result;
+  // Phase 3: Remove orphaned tool results — tool msgs with no preceding
+  // assistant message that issued the matching tool call. Sending orphaned
+  // tool results to Anthropic causes a 400 error.
+  const validCallIds = new Set<string>();
+  for (const msg of result) {
+    if (msg.role === "assistant" && msg.toolCalls) {
+      for (const tc of msg.toolCalls) validCallIds.add(tc.id);
+    }
+  }
+  return result.filter((msg) => {
+    if (msg.role !== "tool") return true;
+    return (msg.toolResults?.length ?? 0) > 0 &&
+           msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
+  });
 }
 
 export type { QueryLoopState };

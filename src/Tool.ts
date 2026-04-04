@@ -4,7 +4,7 @@
  */
 
 import type { z } from "zod";
-import type { RiskLevel } from "./types/permissions.js";
+import type { PermissionMode, RiskLevel } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 
 export type ToolResult = {
@@ -22,6 +22,8 @@ export type ToolContext = {
   model?: string;
   tools?: Tool[];
   systemPrompt?: string;
+  /** Permission mode inherited from parent session */
+  permissionMode?: PermissionMode;
   /** Ask the user a question; resolves with their answer string */
   askUserQuestion?: (question: string, options?: string[]) => Promise<string>;
 };
