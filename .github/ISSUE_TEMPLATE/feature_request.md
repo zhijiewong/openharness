@@ -1,17 +1,17 @@
 ---
 name: Feature request
-about: Suggest an idea for OpenHarness
+about: Suggest an idea or improvement
 labels: enhancement
 ---
 
 **Problem / motivation**
-What problem does this solve, or what use case does it enable?
+What problem does this solve? Who benefits?
 
 **Proposed solution**
-Describe the feature you'd like.
+What would you like to see added or changed?
 
 **Alternatives considered**
 Any other approaches you've thought about?
 
 **Additional context**
-Screenshots, examples, or links if relevant.
+Any other relevant info, links, or examples.

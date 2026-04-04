@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug in OpenHarness
+about: Something isn't working
 labels: bug
 ---
 
@@ -8,9 +8,7 @@ labels: bug
 A clear description of what the bug is.
 
 **To reproduce**
-Steps to reproduce the behavior:
-1. Run `oh ...`
-2. See error
+Steps to reproduce the behavior.
 
 **Expected behavior**
 What you expected to happen.
@@ -18,10 +16,15 @@ What you expected to happen.
 **Environment**
 - OS:
 - Node version:
-- OpenHarness version:
+- OpenHarness version (`oh --version`):
 - LLM provider:
 
 **Logs / error output**
 ```
-paste any relevant output here
+(paste here)
+```
+
+**Config (`.oh/config.yaml`, remove apiKey)**
+```yaml
+(paste here)
 ```
