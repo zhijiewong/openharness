@@ -110,6 +110,7 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
+  const cybergotchiConfigRef = useRef(loadCybergotchiConfig());
 
   // Print new finalized messages to stdout (outside Ink's live area) to prevent
   // Ink height miscounting from causing the cybergotchi panel to expand on each tick.
@@ -129,7 +130,7 @@ export default function REPL({
 
   // Increment session count on mount
   useEffect(() => {
-    const cfg = loadCybergotchiConfig();
+    const cfg = cybergotchiConfigRef.current;
     if (cfg) {
       cfg.lifetime.totalSessions += 1;
       saveCybergotchiConfig(cfg);
@@ -230,6 +231,10 @@ export default function REPL({
       try {
         for await (const event of query(prompt, config, messagesRef.current)) {
           switch (event.type) {
+            case "rate_limited":
+              setStreamingText(`⏳ Rate limited — retrying in ${event.retryIn}s… (attempt ${event.attempt}/3)`);
+              break;
+
             case "text_delta":
               accumulated += event.content;
               setStreamingText(accumulated);
@@ -368,7 +373,7 @@ export default function REPL({
 
       // Check if user is addressing the cybergotchi
       {
-        const gotchiCfg = loadCybergotchiConfig();
+        const gotchiCfg = cybergotchiConfigRef.current;
         if (gotchiCfg) {
           const name = gotchiCfg.name.toLowerCase();
           const lower = trimmed.toLowerCase();
@@ -440,11 +445,11 @@ export default function REPL({
   );
 
   // Show cybergotchi setup if needed (first run or /cybergotchi reset)
-  if (loadCybergotchiConfig() === null || showCybergotchiSetup) {
+  if (cybergotchiConfigRef.current === null || showCybergotchiSetup) {
     return (
       <CybergotchiSetup
-        onComplete={() => setShowCybergotchiSetup(false)}
-        onSkip={() => setShowCybergotchiSetup(false)}
+        onComplete={() => { cybergotchiConfigRef.current = loadCybergotchiConfig(); setShowCybergotchiSetup(false); }}
+        onSkip={() => { cybergotchiConfigRef.current = loadCybergotchiConfig(); setShowCybergotchiSetup(false); }}
       />
     );
   }
@@ -513,13 +518,13 @@ export default function REPL({
         {/* Keybinding hints */}
         <Text dimColor>
           {"exit to quit"}{loading ? " | Ctrl+C to interrupt" : ""}
-          {loadCybergotchiConfig()?.name ? ` | @${loadCybergotchiConfig()!.name} to chat` : ""}
+          {cybergotchiConfigRef.current?.name ? ` | @${cybergotchiConfigRef.current!.name} to chat` : ""}
         </Text>
 
         {/* Token context warning */}
         {(() => {
           const usage = contextUsage(currentModel, costRef.current.totalInputTokens);
-          if (!usage || usage < 0.75) return null;
+          if (usage < 0.75) return null;
           const critical = usage >= 0.9;
           return (
             <Text color={critical ? "yellow" : undefined} bold={critical} dimColor={!critical}>
