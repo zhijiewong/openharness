@@ -216,7 +216,7 @@ export default function InitWizard({ onDone }: Props) {
         </Box>
       )}
 
-      {step === "testing" && provider.key === "llamacpp" && (
+      {step === "testing" && provider.key === "llamacpp" && testStatus !== "ok" && (
         <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} marginBottom={1}>
           <Text color="cyan">llama.cpp setup</Text>
           <Text dimColor>To use llama.cpp, start llama-server first:</Text>
