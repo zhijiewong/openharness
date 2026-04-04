@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useApp, useInput } from "ink";
+import chalk from "chalk";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -13,7 +14,6 @@ import { createSession, saveSession, loadSession, type Session } from "../harnes
 import { CostTracker, estimateCost, contextUsage } from "../harness/cost.js";
 import { processSlashCommand, type CommandContext } from "../commands/index.js";
 import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
-import Messages from "./Messages.js";
 import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
 import TextInputComponent from "ink-text-input";
@@ -22,6 +22,36 @@ import CybergotchiPanelConnected from "./CybergotchiPanelConnected.js";
 import CybergotchiSetup from "./CybergotchiSetup.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
 import { cybergotchiEvents } from "../cybergotchi/events.js";
+
+/** Print a finalized message directly to stdout (outside Ink's managed live area). */
+function printMessageToStdout(msg: Message, showDivider: boolean): void {
+  if (msg.role === 'tool') return;
+
+  let out = '';
+  if (showDivider) {
+    out += chalk.gray('─'.repeat(60)) + '\n';
+  }
+
+  if (msg.role === 'user') {
+    out += chalk.cyan.bold('❯ ') + chalk.bold(msg.content) + '\n';
+  } else if (msg.role === 'assistant') {
+    if (msg.content) {
+      out += chalk.magenta.bold('◆ ') + msg.content + '\n';
+    }
+  } else if (msg.role === 'system') {
+    if (msg.meta?.isInfo) {
+      out += chalk.gray('  ' + msg.content) + '\n';
+    } else {
+      const inner = '✗ ' + msg.content;
+      const width = inner.length + 2;
+      out += chalk.red('╭' + '─'.repeat(width) + '╮') + '\n';
+      out += chalk.red('│ ' + inner + ' │') + '\n';
+      out += chalk.red('╰' + '─'.repeat(width) + '╯') + '\n';
+    }
+  }
+
+  if (out) process.stdout.write(out);
+}
 import { loadCybergotchiConfig, saveCybergotchiConfig } from "../cybergotchi/config.js";
 
 type REPLProps = {
@@ -80,6 +110,22 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
+
+  // Print new finalized messages to stdout (outside Ink's live area) to prevent
+  // Ink height miscounting from causing the cybergotchi panel to expand on each tick.
+  const printedRef = useRef(new Set<string>());
+  useEffect(() => {
+    const printed = printedRef.current;
+    let userCount = 0;
+    messages.forEach((msg) => {
+      if (msg.role === 'user') userCount++;
+      if (!printed.has(msg.uuid)) {
+        const showDivider = msg.role === 'user' && userCount > 1;
+        printMessageToStdout(msg, showDivider);
+        printed.add(msg.uuid);
+      }
+    });
+  }, [messages]);
 
   // Increment session count on mount
   useEffect(() => {
@@ -406,9 +452,6 @@ export default function REPL({
     <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
-
-        {/* Messages */}
-        <Messages messages={messages} toolCalls={toolCalls} />
 
         {/* Streaming response */}
         {loading && streamingText && (
