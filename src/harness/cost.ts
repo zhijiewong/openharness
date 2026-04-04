@@ -94,23 +94,47 @@ export function estimateCost(model: string, inputTokens: number, outputTokens: n
   return (inputTokens / 1_000_000) * pricing[0] + (outputTokens / 1_000_000) * pricing[1];
 }
 
-/** Context window sizes in tokens per model (approximate) */
-export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
-  "gpt-4o":            128_000,
-  "gpt-4o-mini":       128_000,
-  "o3-mini":           200_000,
-  "o3":                200_000,
-  "claude-sonnet-4-6": 200_000,
-  "claude-haiku-4-5":  200_000,
-  "claude-opus-4-6":   200_000,
-  "deepseek-chat":     64_000,
-  "deepseek-coder":    64_000,
-  "qwen-turbo":        131_072,
-};
+/** Context window sizes — prefix-matched, most-specific prefix first */
+const CONTEXT_WINDOW_PREFIXES: Array<[string, number]> = [
+  // Anthropic
+  ["claude-", 200_000],
+  // OpenAI
+  ["gpt-4o", 128_000],
+  ["gpt-4-turbo", 128_000],
+  ["gpt-3.5", 16_000],
+  ["o1", 200_000],
+  ["o3", 200_000],
+  // Llama 3.x
+  ["llama3", 128_000],
+  ["llama-3", 128_000],
+  // Qwen
+  ["qwen2.5", 128_000],
+  ["qwen2", 128_000],
+  ["qwen-turbo", 131_072],
+  // Mistral / Mixtral
+  ["mistral", 32_000],
+  ["mixtral", 32_000],
+  // DeepSeek
+  ["deepseek", 64_000],
+  // Phi
+  ["phi", 128_000],
+  // Gemma
+  ["gemma2", 8_192],
+  ["gemma", 8_192],
+];
 
-/** Returns context usage as a fraction 0–1, or null if model unknown */
+/** Returns the context window size in tokens for a given model name. */
+export function getContextWindow(model?: string): number {
+  if (!model) return 8_192;
+  const lower = model.toLowerCase();
+  for (const [prefix, window] of CONTEXT_WINDOW_PREFIXES) {
+    if (lower.startsWith(prefix)) return window;
+  }
+  return 32_768;
+}
+
+/** Returns context usage as a fraction 0–1 */
 export function contextUsage(model: string, inputTokens: number): number | null {
-  const limit = MODEL_CONTEXT_LIMITS[model];
-  if (!limit) return null;
-  return inputTokens / limit;
+  const window = getContextWindow(model);
+  return inputTokens / window;
 }
