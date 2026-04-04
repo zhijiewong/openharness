@@ -210,6 +210,37 @@ OPENROUTER_API_KEY=sk-or-... oh --model openrouter/deepseek-chat
 oh --model deepseek/deepseek-chat
 ```
 
+### llama.cpp / GGUF (local, no Ollama needed)
+
+For direct GGUF support via `llama-server`, without the overhead of Ollama. Often faster for large models.
+
+**Prerequisites:**
+- Install llama.cpp: `brew install llama.cpp` or download from [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)
+- Download a GGUF model (e.g., from [HuggingFace](https://huggingface.co))
+
+**Start llama-server:**
+```bash
+llama-server --model ./your-model.gguf --port 8080 --alias my-model
+```
+
+**Configure via `oh init`:**
+- Run `oh init` and select "llama.cpp / GGUF" when prompted
+
+**Or configure manually** in `.oh/config.yaml`:
+```yaml
+provider: llamacpp
+model: my-model
+baseUrl: http://localhost:8080
+permissionMode: ask
+```
+
+**Run:**
+```bash
+oh
+oh --model llamacpp/my-model
+oh models                    # list available models
+```
+
 ## Project Rules
 
 Create `.oh/RULES.md` in any repo (or run `oh init`):
