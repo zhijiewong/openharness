@@ -56,6 +56,9 @@ function createProviderInstance(name: string, config: ProviderConfig): Provider 
     case "llamacpp":
     case "llama.cpp":
       return new LlamaCppProvider(config);
+    case "lmstudio":
+    case "lm studio":
+      return new LlamaCppProvider({ ...config, baseUrl: config.baseUrl ?? "http://localhost:1234" });
     default:
       // Treat as OpenAI-compatible
       return new OpenAIProvider({ ...config, baseUrl: config.baseUrl ?? `https://api.${name}.com/v1` });
