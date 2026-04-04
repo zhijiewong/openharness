@@ -54,6 +54,7 @@ function createProviderInstance(name: string, config: ProviderConfig): Provider 
     case "openrouter":
       return new OpenRouterProvider(config);
     case "llamacpp":
+    case "llama.cpp":
       return new LlamaCppProvider(config);
     default:
       // Treat as OpenAI-compatible

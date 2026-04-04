@@ -55,6 +55,7 @@ export function writeOhConfig(cfg: OhConfig, root?: string): void {
       `model: ${yamlScalar(cfg.model || "")}`,
       "",
       "# URL where llama-server is running (default port: 8080)",
+      "# Note: do not include /v1 — it is added automatically",
       `baseUrl: ${yamlScalar(cfg.baseUrl || "http://localhost:8080")}`,
       "",
       `permissionMode: ${yamlScalar(cfg.permissionMode)}`,
