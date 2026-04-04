@@ -519,7 +519,7 @@ export default function REPL({
         {/* Token context warning */}
         {(() => {
           const usage = contextUsage(currentModel, costRef.current.totalInputTokens);
-          if (!usage || usage < 0.75) return null;
+          if (usage < 0.75) return null;
           const critical = usage >= 0.9;
           return (
             <Text color={critical ? "yellow" : undefined} bold={critical} dimColor={!critical}>

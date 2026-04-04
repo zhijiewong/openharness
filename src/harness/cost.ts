@@ -134,7 +134,7 @@ export function getContextWindow(model?: string): number {
 }
 
 /** Returns context usage as a fraction 0–1 */
-export function contextUsage(model: string, inputTokens: number): number | null {
+export function contextUsage(model: string, inputTokens: number): number {
   const window = getContextWindow(model);
   return inputTokens / window;
 }
