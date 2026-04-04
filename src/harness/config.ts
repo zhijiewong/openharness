@@ -45,18 +45,23 @@ export function writeOhConfig(cfg: OhConfig, root?: string): void {
   const p = configPath(root);
   mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
 
-  if (cfg.provider === "llamacpp") {
+  if (cfg.provider === "llamacpp" || cfg.provider === "lmstudio") {
+    const isLmStudio = cfg.provider === "lmstudio";
     const lines = [
       "# openHarness configuration",
-      `provider: llamacpp`,
+      `provider: ${cfg.provider}`,
       "",
-      "# Model alias — must match --alias passed to llama-server",
-      "# Example: llama-server --model ./llama3.gguf --port 8080 --alias llama3-local",
+      isLmStudio
+        ? "# Model name — must match the model loaded in LM Studio"
+        : "# Model alias — must match --alias passed to llama-server",
+      ...(isLmStudio ? [] : ["# Example: llama-server --model ./llama3.gguf --port 8080 --alias llama3-local"]),
       `model: ${yamlScalar(cfg.model || "")}`,
       "",
-      "# URL where llama-server is running (default port: 8080)",
+      isLmStudio
+        ? "# URL where LM Studio local server is running (default port: 1234)"
+        : "# URL where llama-server is running (default port: 8080)",
       "# Note: do not include /v1 — it is added automatically",
-      `baseUrl: ${yamlScalar(cfg.baseUrl || "http://localhost:8080")}`,
+      `baseUrl: ${yamlScalar(cfg.baseUrl || (isLmStudio ? "http://localhost:1234" : "http://localhost:8080"))}`,
       "",
       `permissionMode: ${yamlScalar(cfg.permissionMode)}`,
     ];

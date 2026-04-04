@@ -33,6 +33,7 @@ const PROVIDERS: Provider[] = [
   { key: "anthropic",  label: "Anthropic (Claude)",        defaultModel: "claude-sonnet-4-6",needsApiKey: true  },
   { key: "openrouter", label: "OpenRouter",                defaultModel: "openai/gpt-4o",    needsApiKey: true,  defaultBaseUrl: "https://openrouter.ai/api/v1" },
   { key: "llamacpp",   label: "llama.cpp / GGUF (local, no Ollama needed)", defaultModel: "", needsApiKey: false, defaultBaseUrl: "http://localhost:8080" },
+  { key: "lmstudio",   label: "LM Studio (local, OpenAI-compatible)",       defaultModel: "", needsApiKey: false, defaultBaseUrl: "http://localhost:1234" },
   { key: "custom",     label: "Custom (OpenAI-compatible)",defaultModel: "",                 needsApiKey: true  },
 ];
 
@@ -225,12 +226,30 @@ export default function InitWizard({ onDone }: Props) {
         </Box>
       )}
 
+      {step === "testing" && provider.key === "lmstudio" && testStatus !== "ok" && (
+        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} marginBottom={1}>
+          <Text color="cyan">LM Studio setup</Text>
+          <Text dimColor>Enable the local server in LM Studio:</Text>
+          <Text dimColor>  Settings → Local Server → Start Server (port 1234)</Text>
+          <Text dimColor>Then load a model and set the model name below.</Text>
+        </Box>
+      )}
+
       {step === "testing" && (
         <Box flexDirection="column">
           {testStatus === "testing" && <Text color="yellow">⟳ Testing connection to {provider.label}...</Text>}
           {testStatus === "ok"      && <Text color="green">✓ Connected!</Text>}
-          {testStatus === "fail" && provider.key !== "llamacpp" && (
+          {testStatus === "fail" && provider.key !== "llamacpp" && provider.key !== "lmstudio" && (
             <Text color="red">✗ Failed: <Text dimColor>{testError}</Text></Text>
+          )}
+          {testStatus === "fail" && provider.key === "lmstudio" && (
+            <Box flexDirection="column" borderStyle="single" borderColor="red" paddingX={1} marginTop={1}>
+              <Text color="red">✗ Could not connect to LM Studio.</Text>
+              <Text dimColor>{testError}</Text>
+              <Text> </Text>
+              <Text color="yellow">Make sure LM Studio local server is running:</Text>
+              <Text dimColor>  Settings → Local Server → Start Server (port 1234)</Text>
+            </Box>
           )}
           {testStatus === "fail" && provider.key === "llamacpp" && (
             <Box flexDirection="column" borderStyle="single" borderColor="red" paddingX={1} marginTop={1}>
