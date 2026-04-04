@@ -221,6 +221,15 @@ export async function* query(
       return;
     }
 
+    // Guard against empty turns (e.g. unreadable body yielded an error event)
+    if (assistantContent === "" && toolCalls.length === 0) {
+      yield {
+        type: "error",
+        message: "No response received. Check that your model server is running and the model name is correct.",
+      };
+      return;
+    }
+
     // Add assistant message to history
     state.messages.push(
       createAssistantMessage(assistantContent, toolCalls.length > 0 ? toolCalls : undefined),
