@@ -13,7 +13,7 @@ export class LlamaCppProvider implements Provider {
   private defaultModel: string;
 
   constructor(config: ProviderConfig) {
-    this.baseUrl = (config.baseUrl ?? "http://localhost:8080/v1").replace(/\/$/, "");
+    this.baseUrl = (config.baseUrl ?? "http://localhost:8080").replace(/\/$/, "");
     this.defaultModel = config.defaultModel ?? "";
   }
 
@@ -88,7 +88,7 @@ export class LlamaCppProvider implements Provider {
 
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
+      res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -182,13 +182,6 @@ export class LlamaCppProvider implements Provider {
         arguments: safeParse(acc.args),
       } satisfies ToolCallComplete;
     }
-
-    // If no usage chunk was emitted, emit a zero cost_update so callers always get one
-    if (toolCallAccumulators.size === 0) {
-      // Only emit if we never got usage — llama-server may not send it
-      // We already emitted inside the loop if chunk.usage existed, so this is a no-op guard.
-      // (No action needed here; guard is implicit.)
-    }
   }
 
   async complete(
@@ -206,7 +199,7 @@ export class LlamaCppProvider implements Provider {
     const convertedTools = this.convertTools(tools);
     if (convertedTools) body.tools = convertedTools;
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -238,7 +231,7 @@ export class LlamaCppProvider implements Provider {
 
   async fetchModels(): Promise<ModelInfo[]> {
     try {
-      const res = await fetch(`${this.baseUrl}/models`);
+      const res = await fetch(`${this.baseUrl}/v1/models`);
       if (!res.ok) return [];
       const data: any = await res.json();
       return (data.data ?? []).map((m: any) => ({
@@ -258,7 +251,7 @@ export class LlamaCppProvider implements Provider {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/models`);
+      const res = await fetch(`${this.baseUrl}/v1/models`);
       return res.ok;
     } catch {
       return false;
