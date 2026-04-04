@@ -35,7 +35,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
       provider: context.provider,
       tools: context.tools,
       systemPrompt,
-      permissionMode: "trust" as const, // sub-agents inherit trust from parent
+      permissionMode: context.permissionMode ?? "trust",
       model: context.model,
       maxTurns: 20,
       abortSignal: context.abortSignal,

@@ -80,9 +80,15 @@ export const WebFetchTool: Tool<typeof inputSchema> = {
     try {
       const response = await fetch(input.url, {
         headers: { "User-Agent": "OpenHarness/1.0" },
-        redirect: "error",  // Block redirects — prevents SSRF via redirect to private IPs
+        redirect: "follow",
         signal: AbortSignal.timeout(30_000),
       });
+
+      // Re-check host after redirect to prevent SSRF via open redirects
+      const finalUrl = new URL(response.url);
+      if (isBlockedHost(finalUrl.hostname)) {
+        return { output: "Error: Redirect to private/internal host blocked.", isError: true };
+      }
 
       if (!response.ok) {
         return {
