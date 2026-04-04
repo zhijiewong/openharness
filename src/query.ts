@@ -432,7 +432,19 @@ function compressMessages(messages: Message[], targetTokens: number): Message[] 
     result.splice(firstNonSystem, 1);
   }
 
-  return result;
+  // Phase 3: Remove orphaned tool results — tool msgs with no preceding
+  // assistant message that issued the matching tool call. Sending orphaned
+  // tool results to Anthropic causes a 400 error.
+  const validCallIds = new Set<string>();
+  for (const msg of result) {
+    if (msg.role === "assistant" && msg.toolCalls) {
+      for (const tc of msg.toolCalls) validCallIds.add(tc.id);
+    }
+  }
+  return result.filter((msg) => {
+    if (msg.role !== "tool") return true;
+    return msg.toolResults?.every((tr) => validCallIds.has(tr.callId)) ?? true;
+  });
 }
 
 export type { QueryLoopState };
