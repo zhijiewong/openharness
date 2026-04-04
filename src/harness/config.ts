@@ -23,6 +23,10 @@ export type OhConfig = {
   mcpServers?: McpServerConfig[];
 };
 
+function yamlScalar(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 function configPath(root?: string): string {
   return join(root ?? ".", ".oh", "config.yaml");
 }
@@ -48,14 +52,14 @@ export function writeOhConfig(cfg: OhConfig, root?: string): void {
       "",
       "# Model alias — must match --alias passed to llama-server",
       "# Example: llama-server --model ./llama3.gguf --port 8080 --alias llama3-local",
-      `model: ${cfg.model || ""}`,
+      `model: ${yamlScalar(cfg.model || "")}`,
       "",
       "# URL where llama-server is running (default port: 8080)",
-      `baseUrl: ${cfg.baseUrl || "http://localhost:8080"}`,
+      `baseUrl: ${yamlScalar(cfg.baseUrl || "http://localhost:8080")}`,
       "",
-      `permissionMode: ${cfg.permissionMode}`,
+      `permissionMode: ${yamlScalar(cfg.permissionMode)}`,
     ];
-    if (cfg.apiKey) lines.push(`apiKey: ${cfg.apiKey}`);
+    if (cfg.apiKey) lines.push(`apiKey: ${yamlScalar(cfg.apiKey)}`);
     if (cfg.mcpServers?.length) {
       // fall back to stringify for mcpServers since it's complex
       lines.push("", stringify({ mcpServers: cfg.mcpServers }).trim());
