@@ -26,7 +26,16 @@ import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
+
+const BANNER = `        ___
+       /   \\
+      (     )        ___  ___  ___ _  _ _  _   _ ___ _  _ ___ ___ ___
+       \`~w~\`        / _ \\| _ \\| __| \\| | || | /_\\ | _ \\ \\| | __/ __/ __|
+       (( ))       | (_) |  _/| _|| .\` | __ |/ _ \\|   / .\` | _|\\__ \\__ \\
+        ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
+       ((  ))
+        \`--\``;
 
 const program = new Command();
 
@@ -207,6 +216,10 @@ program
 
     process.on('exit', () => disconnectMcpClients());
     process.on('SIGINT', () => { disconnectMcpClients(); process.exit(0); });
+
+    process.stdout.write(BANNER + "\n");
+    process.stdout.write(`\x1b[35mOpenHarness\x1b[0m \x1b[2mv${VERSION}\x1b[0m \x1b[36m${resolvedModel}\x1b[0m \x1b[2m(${effectivePermMode})\x1b[0m\n`);
+    process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
 
     render(
       <App
