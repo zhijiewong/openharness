@@ -13,7 +13,9 @@ export class LlamaCppProvider implements Provider {
   private defaultModel: string;
 
   constructor(config: ProviderConfig) {
-    this.baseUrl = (config.baseUrl ?? "http://localhost:8080").replace(/\/$/, "");
+    this.baseUrl = (config.baseUrl ?? "http://localhost:8080")
+      .replace(/\/$/, "")
+      .replace(/\/v1$/, "");
     this.defaultModel = config.defaultModel ?? "";
   }
 
