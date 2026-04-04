@@ -443,7 +443,8 @@ function compressMessages(messages: Message[], targetTokens: number): Message[] 
   }
   return result.filter((msg) => {
     if (msg.role !== "tool") return true;
-    return msg.toolResults?.every((tr) => validCallIds.has(tr.callId)) ?? true;
+    return (msg.toolResults?.length ?? 0) > 0 &&
+           msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
   });
 }
 
