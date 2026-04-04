@@ -24,7 +24,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
-import type { Provider } from "./providers/base.js";
+import type { Provider, ProviderConfig } from "./providers/base.js";
 
 const VERSION = "0.4.0";
 
@@ -91,9 +91,12 @@ program
 
     const { createProvider } = await import("./providers/index.js");
     const effectiveModel = (opts.model as string | undefined) ?? savedConfig?.model;
+    const overrides: Partial<ProviderConfig> = {};
+    if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
+    if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
     const { provider, model } = await createProvider(
       effectiveModel,
-      savedConfig?.apiKey ? { apiKey: savedConfig.apiKey, baseUrl: savedConfig.baseUrl } : undefined,
+      Object.keys(overrides).length ? overrides : undefined,
     );
     const { query } = await import("./query.js");
 
@@ -169,7 +172,10 @@ program
     let resolvedModel: string;
     try {
       const { createProvider } = await import("./providers/index.js");
-      const result = await createProvider(effectiveModel, savedConfig?.apiKey ? { apiKey: savedConfig.apiKey, baseUrl: savedConfig.baseUrl } : undefined);
+      const overrides: Partial<ProviderConfig> = {};
+      if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
+      if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
+      const result = await createProvider(effectiveModel, Object.keys(overrides).length ? overrides : undefined);
       provider = result.provider;
       resolvedModel = result.model;
     } catch (err) {
@@ -411,11 +417,3 @@ program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exitCode = 1;
 });
-
-function guessProvider(model: string): string {
-  if (model.includes("gpt") || model.startsWith("o3")) return "openai";
-  if (model.includes("claude")) return "anthropic";
-  if (model.includes("deepseek")) return "deepseek";
-  if (model.includes("qwen")) return "qwen";
-  return "unknown";
-}
