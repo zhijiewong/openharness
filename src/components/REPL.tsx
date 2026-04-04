@@ -384,6 +384,7 @@ export default function REPL({
         const ctx: CommandContext = {
           messages: messagesRef.current,
           model: currentModel,
+          providerName: provider.name,
           permissionMode,
           totalCost: costRef.current.totalCost,
           totalInputTokens: costRef.current.totalInputTokens,

@@ -9,6 +9,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync } from 
 import { dirname } from "node:path";
 import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch } from "../git/index.js";
 import type { Message } from "../types/message.js";
+import { guessProviderFromModel } from "../providers/index.js";
 import { handleCybergotchiCommand } from "./cybergotchi.js";
 import { connectedMcpServers } from "../mcp/loader.js";
 import { listSessions, loadSession } from "../harness/session.js";
@@ -40,6 +41,7 @@ type CommandHandler = (args: string, context: CommandContext) => CommandResult;
 export type CommandContext = {
   messages: Message[];
   model: string;
+  providerName: string;
   permissionMode: string;
   totalCost: number;
   totalInputTokens: number;
@@ -193,10 +195,28 @@ register("files", "List files in context", (_args, ctx) => {
   return { output: `Files in context:\n${[...files].map(f => `  ${f}`).join("\n")}`, handled: true };
 });
 
-register("model", "Switch model (e.g., /model gpt-4o)", (args) => {
+register("model", "Switch model (e.g., /model llama3.2 or /model ollama/llama3.2)", (args, ctx) => {
   const model = args.trim();
-  if (!model) return { output: "Usage: /model <model-name>", handled: true };
-  return { output: `Switched to ${model}.`, handled: true, newModel: model };
+  if (!model) return { output: "Usage: /model <model-name>  (prefix with provider/ to switch providers)", handled: true };
+
+  // Detect the provider implied by the new model
+  let newProviderName: string;
+  if (model.includes("/")) {
+    newProviderName = model.split("/")[0]!;
+  } else {
+    newProviderName = guessProviderFromModel(model);
+  }
+
+  if (newProviderName !== ctx.providerName) {
+    return {
+      output: `Cannot switch to '${model}': requires the '${newProviderName}' provider but current session uses '${ctx.providerName}'.\nRestart with: oh --model ${newProviderName}/${model.includes("/") ? model.split("/").slice(1).join("/") : model}`,
+      handled: true,
+    };
+  }
+
+  // Strip provider prefix if present (provider is already correct)
+  const modelName = model.includes("/") ? model.split("/").slice(1).join("/") : model;
+  return { output: `Switched to ${modelName}.`, handled: true, newModel: modelName };
 });
 
 register("compact", "Compress conversation history", (_args, ctx) => {
