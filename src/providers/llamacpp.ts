@@ -104,7 +104,10 @@ export class LlamaCppProvider implements Provider {
     }
 
     const reader = res.body?.getReader();
-    if (!reader) return;
+    if (!reader) {
+      yield { type: "error", message: "LlamaCpp: response body is not readable" };
+      return;
+    }
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -164,8 +167,9 @@ export class LlamaCppProvider implements Provider {
             } else {
               // Continuation delta
               const acc = toolCallAccumulators.get(idx);
-              if (acc && tc.function?.arguments) {
-                acc.args += tc.function.arguments;
+              if (acc) {
+                if (tc.function?.name) acc.name += tc.function.name;
+                if (tc.function?.arguments) acc.args += tc.function.arguments;
               }
             }
           }
