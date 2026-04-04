@@ -68,6 +68,7 @@ function createProviderInstance(name: string, config: ProviderConfig): Provider 
 function guessProviderFromModel(model: string): string {
   if (model.includes("gpt") || model.startsWith("o3")) return "openai";
   if (model.includes("claude")) return "anthropic";
+  if (model.includes("gguf") || model.startsWith("llamacpp")) return "llamacpp";
   if (model.includes("llama") || model.includes("mistral") || model.includes("phi") || model.includes("qwen")) return "ollama";
   return "openai"; // default fallback
 }
