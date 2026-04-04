@@ -41,7 +41,7 @@ export async function createProvider(
   return { provider, model };
 }
 
-export { createProviderInstance };
+export { createProviderInstance, guessProviderFromModel };
 
 function createProviderInstance(name: string, config: ProviderConfig): Provider {
   switch (name) {

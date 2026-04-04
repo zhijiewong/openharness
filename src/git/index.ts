@@ -95,7 +95,7 @@ export function autoCommitAIEdits(
       // Stage only the files the AI touched
       for (const file of files) {
         try {
-          execSync(`git add ${JSON.stringify(file)}`, { cwd, stdio: "pipe" });
+          spawnSync("git", ["add", "--", file], { cwd, stdio: "pipe" });
         } catch {
           // File might not exist (deleted)
         }
