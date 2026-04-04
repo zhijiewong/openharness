@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { PermissionMode } from "../../types/permissions.js";
 
 const inputSchema = z.object({
   prompt: z.string(),
@@ -35,7 +36,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
       provider: context.provider,
       tools: context.tools,
       systemPrompt,
-      permissionMode: "trust" as const, // sub-agents inherit trust from parent
+      permissionMode: (context.permissionMode ?? "trust") as PermissionMode,
       model: context.model,
       maxTurns: 20,
       abortSignal: context.abortSignal,

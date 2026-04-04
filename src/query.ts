@@ -77,6 +77,7 @@ export async function* query(
     model: config.model,
     tools: config.tools,
     systemPrompt: config.systemPrompt,
+    permissionMode: config.permissionMode,
     askUserQuestion: config.askUserQuestion,
   };
   const toolPrompts = config.tools.map((t) => t.prompt()).join("\n\n");
