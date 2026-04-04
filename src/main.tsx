@@ -256,7 +256,9 @@ program
 
     const providerLabel = config.baseUrl
       ? `${config.provider} (${config.baseUrl})`
-      : config.provider;
+      : config.provider === "ollama"
+        ? `${config.provider} (http://localhost:11434)`
+        : config.provider;
     console.log();
     console.log(`  Provider: ${providerLabel}`);
     console.log("  " + "─".repeat(43));
