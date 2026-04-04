@@ -225,7 +225,7 @@ program
       console.log();
       console.log("  No config found, defaulting to Ollama");
       console.log();
-      console.log(`  Provider: ollama`);
+      console.log(`  Provider: ollama (http://localhost:11434)`);
       console.log("  " + "─".repeat(43));
       try {
         const { provider } = await createProvider("ollama/llama3");
@@ -233,7 +233,7 @@ program
           ? await (provider as any).fetchModels()
           : provider.listModels();
         if (models.length === 0) {
-          console.log("  No models found. Make sure llama-server is running.");
+          console.log("  No models found. Make sure Ollama is running: ollama serve");
         } else {
           for (const m of models) {
             const ctx = (m as any).contextWindow ? `  ctx:${(m as any).contextWindow}` : "";
@@ -242,7 +242,7 @@ program
           }
         }
       } catch {
-        console.log("  No models found. Make sure llama-server is running.");
+        console.log("  No models found. Make sure Ollama is running: ollama serve");
       }
       console.log();
       return;
