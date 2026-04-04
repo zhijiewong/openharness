@@ -18,7 +18,7 @@
     "build": "tsc",
     "prepare": "tsc",
     "prepublishOnly": "npm run build",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "start": "node dist/main.js"
   },
