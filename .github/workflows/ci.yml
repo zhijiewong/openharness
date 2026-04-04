@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -27,4 +27,18 @@ jobs:
       - run: npm run build
 
       - run: npm test
+        shell: bash
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - run: |
+          if [ "${{ needs.test.result }}" = "success" ]; then
+            echo "All checks passed"
+          else
+            echo "One or more checks failed"
+            exit 1
+          fi
         shell: bash
