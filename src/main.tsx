@@ -216,30 +216,65 @@ program
 // ── models ──
 program
   .command("models")
-  .description("List available models and pricing")
+  .description("List available models from configured provider")
   .action(async () => {
-    console.log();
-    console.log("  Model                         Provider     Input/1M    Output/1M");
-    console.log("  " + "─".repeat(65));
+    const { createProvider } = await import("./providers/index.js");
+    const config = readOhConfig();
 
-    // Try listing Ollama local models
+    if (!config) {
+      console.log();
+      console.log("  No config found, defaulting to Ollama");
+      console.log();
+      console.log(`  Provider: ollama`);
+      console.log("  " + "─".repeat(43));
+      try {
+        const { provider } = await createProvider("ollama/llama3");
+        const models = "fetchModels" in provider && typeof (provider as any).fetchModels === "function"
+          ? await (provider as any).fetchModels()
+          : provider.listModels();
+        if (models.length === 0) {
+          console.log("  No models found. Make sure llama-server is running.");
+        } else {
+          for (const m of models) {
+            const ctx = (m as any).contextWindow ? `  ctx:${(m as any).contextWindow}` : "";
+            const tools = (m as any).supportsTools !== undefined ? `  tools:${(m as any).supportsTools ? "yes" : "no"}` : "";
+            console.log(`  ${m.id.padEnd(20)}${ctx}${tools}`);
+          }
+        }
+      } catch {
+        console.log("  No models found. Make sure llama-server is running.");
+      }
+      console.log();
+      return;
+    }
+
+    const providerLabel = config.baseUrl
+      ? `${config.provider} (${config.baseUrl})`
+      : config.provider;
+    console.log();
+    console.log(`  Provider: ${providerLabel}`);
+    console.log("  " + "─".repeat(43));
+
     try {
-      const { createProvider } = await import("./providers/index.js");
-      const { provider } = await createProvider("ollama/llama3");
-      const ollamaModels = "fetchModels" in provider && typeof (provider as any).fetchModels === "function"
+      const modelId = `${config.provider}/${config.model}`;
+      const overrides: Record<string, string> = {};
+      if (config.baseUrl) overrides.baseUrl = config.baseUrl;
+      if (config.apiKey) overrides.apiKey = config.apiKey;
+      const { provider } = await createProvider(modelId, overrides);
+      const models = "fetchModels" in provider && typeof (provider as any).fetchModels === "function"
         ? await (provider as any).fetchModels()
         : provider.listModels();
-      for (const m of ollamaModels) {
-        console.log(`  ${m.id.padEnd(30)} ${"ollama".padEnd(12)} free`);
+      if (models.length === 0) {
+        console.log("  No models found. Make sure llama-server is running.");
+      } else {
+        for (const m of models) {
+          const ctx = (m as any).contextWindow ? `  ctx:${(m as any).contextWindow}` : "";
+          const tools = (m as any).supportsTools !== undefined ? `  tools:${(m as any).supportsTools ? "yes" : "no"}` : "";
+          console.log(`  ${m.id.padEnd(20)}${ctx}${tools}`);
+        }
       }
-    } catch { /* Ollama not running */ }
-
-    // Cloud models from pricing registry
-    for (const [model, [inp, out]] of Object.entries(MODEL_PRICING).sort()) {
-      if (inp === 0) continue;
-      console.log(
-        `  ${model.padEnd(30)} ${guessProvider(model).padEnd(12)} $${inp.toFixed(2).padStart(6)}    $${out.toFixed(2).padStart(6)}`,
-      );
+    } catch {
+      console.log("  No models found. Make sure llama-server is running.");
     }
     console.log();
   });
