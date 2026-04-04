@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Box, Text, Static, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -40,15 +40,6 @@ type PendingPermission = {
   riskLevel: string;
   resolve: (allowed: boolean) => void;
 };
-
-const BANNER = `        ___
-       /   \\
-      (     )        ___  ___  ___ _  _ _  _   _ ___ _  _ ___ ___ ___
-       \`~w~\`        / _ \\| _ \\| __| \\| | || | /_\\ | _ \\ \\| | __/ __/ __|
-       (( ))       | (_) |  _/| _|| .\` | __ |/ _ \\|   / .\` | _|\\__ \\__ \\
-        ))((        \\___/|_|  |___|_|\\_|_||_/_/ \\_\\_|_\\_|\\_|___|___/___/
-       ((  ))
-        \`--\``;
 
 
 export default function REPL({
@@ -412,30 +403,7 @@ export default function REPL({
   }
 
   return (
-    <Box flexDirection="column">
-      {/* Banner — Static renders once, outside the row so Ink can measure row height correctly */}
-      <Static items={["banner"]}>
-        {() => (
-          <Box key="banner" flexDirection="column" marginBottom={1}>
-            {BANNER.split("\n").map((line, i) => (
-              <Text key={i} color="magenta">{line}</Text>
-            ))}
-            <Box>
-              <Text bold color="magenta">OpenHarness</Text>
-              <Text dimColor> v0.4.0</Text>
-              <Text color="cyan">{currentModel ? ` ${currentModel}` : ""}</Text>
-              <Text dimColor>{` (${permissionMode})`}</Text>
-            </Box>
-            <Text dimColor>session {sessionId}</Text>
-            <Text dimColor>{"─".repeat(60)}</Text>
-            {loadCybergotchiConfig() === null && (
-              <Text color="cyan">{"✦ No cybergotchi yet — run /cybergotchi to hatch one"}</Text>
-            )}
-          </Box>
-        )}
-      </Static>
-
-      <Box flexDirection="row">
+    <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
 
@@ -519,7 +487,6 @@ export default function REPL({
 
       {/* Cybergotchi side panel — self-contained, isolated from REPL re-renders */}
       <CybergotchiPanelConnected />
-      </Box>
     </Box>
   );
 }
