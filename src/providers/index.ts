@@ -7,6 +7,7 @@ import { OllamaProvider } from "./ollama.js";
 import { OpenAIProvider } from "./openai.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { OpenRouterProvider } from "./openrouter.js";
+import { LlamaCppProvider } from "./llamacpp.js";
 
 /**
  * Create a provider from a model string like "ollama/llama3" or "gpt-4o".
@@ -52,6 +53,8 @@ function createProviderInstance(name: string, config: ProviderConfig): Provider 
       return new AnthropicProvider(config);
     case "openrouter":
       return new OpenRouterProvider(config);
+    case "llamacpp":
+      return new LlamaCppProvider(config);
     default:
       // Treat as OpenAI-compatible
       return new OpenAIProvider({ ...config, baseUrl: config.baseUrl ?? `https://api.${name}.com/v1` });
