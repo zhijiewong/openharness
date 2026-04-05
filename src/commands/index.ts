@@ -12,7 +12,7 @@ import type { Message } from "../types/message.js";
 import { guessProviderFromModel } from "../providers/index.js";
 import { handleCybergotchiCommand } from "./cybergotchi.js";
 import { connectedMcpServers } from "../mcp/loader.js";
-import { listSessions, loadSession } from "../harness/session.js";
+import { listSessions, loadSession, createSession, saveSession } from "../harness/session.js";
 import { readOhConfig } from "../harness/config.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -180,6 +180,16 @@ register("resume", "Resume a saved session by ID", (args) => {
   } catch {
     return { output: `Session not found: ${id}`, handled: true };
   }
+});
+
+register("fork", "Fork current session (create a branch you can resume later)", (_args, ctx) => {
+  const forked = createSession("", "");
+  forked.messages = [...ctx.messages];
+  saveSession(forked);
+  return {
+    output: `Session forked as ${forked.id}. Resume later with: oh --resume ${forked.id}`,
+    handled: true,
+  };
 });
 
 register("files", "List files in context", (_args, ctx) => {
