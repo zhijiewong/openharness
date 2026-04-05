@@ -222,6 +222,11 @@ program
     process.stdout.write(`\x1b[35mOpenHarness\x1b[0m \x1b[2mv${VERSION}\x1b[0m \x1b[36m${resolvedModel}\x1b[0m \x1b[2m(${effectivePermMode})\x1b[0m\n`);
     process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
 
+    emitHook("sessionStart");
+    const emitEnd = () => { emitHook("sessionEnd"); };
+    process.on("exit", emitEnd);
+    process.on("SIGINT", () => { emitEnd(); process.exit(0); });
+
     render(
       <App
         provider={provider}
@@ -231,8 +236,6 @@ program
         resumeSessionId={opts.resume as string | undefined}
       />,
     );
-    emitHook("sessionStart");
-    process.on("exit", () => emitHook("sessionEnd"));
   });
 
 // ── models ──

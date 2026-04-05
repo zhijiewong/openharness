@@ -57,7 +57,7 @@ export function emitHook(event: HookEvent, ctx: HookContext = {}): boolean {
     });
 
     // preToolUse: non-zero exit blocks the tool call
-    if (event === "preToolUse" && result.status !== 0) {
+    if (event === "preToolUse" && (result.status !== 0 || result.error)) {
       return false;
     }
   }
