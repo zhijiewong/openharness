@@ -76,3 +76,9 @@ export function listSessions(dir?: string): Array<{
     .filter((s): s is NonNullable<typeof s> => s !== null)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
+
+/** Returns the ID of the most recently updated session, or null if none exist. */
+export function getLastSessionId(dir?: string): string | null {
+  const sessions = listSessions(dir);
+  return sessions.length > 0 ? sessions[0]!.id : null;
+}
