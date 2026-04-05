@@ -112,6 +112,8 @@ export class OllamaProvider implements Provider {
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let inThinkBlock = false;
+    let thinkBuffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -137,7 +139,37 @@ export class OllamaProvider implements Provider {
         }
 
         if (chunk.message?.content) {
-          yield { type: "text_delta", content: chunk.message.content };
+          // Parse <think> tags — yield thinking_delta for think blocks, text_delta for normal text
+          let remaining = chunk.message.content;
+          while (remaining.length > 0) {
+            if (inThinkBlock) {
+              const closeIdx = remaining.indexOf("</think>");
+              if (closeIdx !== -1) {
+                thinkBuffer += remaining.slice(0, closeIdx);
+                if (thinkBuffer) {
+                  yield { type: "thinking_delta" as const, content: thinkBuffer };
+                }
+                thinkBuffer = "";
+                inThinkBlock = false;
+                remaining = remaining.slice(closeIdx + "</think>".length);
+              } else {
+                thinkBuffer += remaining;
+                remaining = "";
+              }
+            } else {
+              const openIdx = remaining.indexOf("<think>");
+              if (openIdx !== -1) {
+                if (openIdx > 0) {
+                  yield { type: "text_delta", content: remaining.slice(0, openIdx) };
+                }
+                inThinkBlock = true;
+                remaining = remaining.slice(openIdx + "<think>".length);
+              } else {
+                yield { type: "text_delta", content: remaining };
+                remaining = "";
+              }
+            }
+          }
         }
 
         if (chunk.message?.tool_calls) {
