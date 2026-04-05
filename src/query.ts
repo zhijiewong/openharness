@@ -352,7 +352,7 @@ async function executeSingleTool(
   }
 
   // Permission check — BLOCKS until user responds
-  const perm = checkPermission(permissionMode, tool.riskLevel, tool.isReadOnly(parsed.data));
+  const perm = checkPermission(permissionMode, tool.riskLevel, tool.isReadOnly(parsed.data), tool.name);
   if (!perm.allowed) {
     if (perm.reason === "needs-approval" && askUser) {
       const allowed = await askUser(tool.name, JSON.stringify(toolCall.arguments).slice(0, 200), tool.riskLevel);
