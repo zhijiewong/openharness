@@ -23,6 +23,7 @@ import { checkPermission } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 import { StreamingToolExecutor } from "./services/StreamingToolExecutor.js";
 import { getContextWindow } from "./harness/cost.js";
+import { emitHook } from "./harness/hooks.js";
 
 // ── Configuration ──
 
@@ -352,7 +353,7 @@ async function executeSingleTool(
   }
 
   // Permission check — BLOCKS until user responds
-  const perm = checkPermission(permissionMode, tool.riskLevel, tool.isReadOnly(parsed.data));
+  const perm = checkPermission(permissionMode, tool.riskLevel, tool.isReadOnly(parsed.data), tool.name);
   if (!perm.allowed) {
     if (perm.reason === "needs-approval" && askUser) {
       const allowed = await askUser(tool.name, JSON.stringify(toolCall.arguments).slice(0, 200), tool.riskLevel);
@@ -365,9 +366,24 @@ async function executeSingleTool(
     }
   }
 
+  // Hook: preToolUse — can block execution
+  const hookAllowed = emitHook("preToolUse", {
+    toolName: tool.name,
+    toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+  });
+  if (!hookAllowed) {
+    return { output: "Blocked by preToolUse hook.", isError: true };
+  }
+
   // Execute with result budgeting
   try {
     const result = await tool.call(parsed.data, context);
+    // Hook: postToolUse
+    emitHook("postToolUse", {
+      toolName: tool.name,
+      toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+      toolOutput: result.output.slice(0, 1000),
+    });
     // Cap large outputs
     if (result.output.length > MAX_TOOL_RESULT_CHARS) {
       return {
@@ -431,7 +447,7 @@ function estimateMessagesTokens(messages: Message[]): number {
 }
 
 
-function compressMessages(messages: Message[], targetTokens: number): Message[] {
+export function compressMessages(messages: Message[], targetTokens: number): Message[] {
   if (messages.length <= 2) return messages;
 
   const result = [...messages];
