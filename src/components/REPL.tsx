@@ -23,30 +23,69 @@ import CybergotchiSetup from "./CybergotchiSetup.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
 import { cybergotchiEvents } from "../cybergotchi/events.js";
 
+/** Width of the cybergotchi panel (22 content + 2 border + 2 padding + 1 margin) */
+const PANEL_TOTAL_WIDTH = 27;
+/** Minimum terminal width to show the cybergotchi panel */
+const MIN_WIDTH_FOR_PANEL = 60;
+
+function getTerminalWidth(): number {
+  return process.stdout.columns ?? 80;
+}
+
+function getChatWidth(): number {
+  const tw = getTerminalWidth();
+  return tw >= MIN_WIDTH_FOR_PANEL ? tw - PANEL_TOTAL_WIDTH : tw;
+}
+
+/** Truncate a string to fit within maxWidth columns */
+function truncateLine(line: string, maxWidth: number): string {
+  // Strip ANSI codes for length measurement, but keep them in output
+  const stripped = line.replace(/\x1b\[[0-9;]*m/g, '');
+  if (stripped.length <= maxWidth) return line;
+  // Rough truncation — cut at maxWidth chars of visible content
+  let visible = 0;
+  let i = 0;
+  while (i < line.length && visible < maxWidth - 1) {
+    if (line[i] === '\x1b') {
+      const end = line.indexOf('m', i);
+      if (end !== -1) { i = end + 1; continue; }
+    }
+    visible++;
+    i++;
+  }
+  return line.slice(0, i) + '…';
+}
+
 /** Print a finalized message directly to stdout (outside Ink's managed live area). */
 function printMessageToStdout(msg: Message, showDivider: boolean): void {
   if (msg.role === 'tool') return;
 
+  const maxWidth = getChatWidth();
   let out = '';
   if (showDivider) {
-    out += chalk.gray('─'.repeat(60)) + '\n';
+    out += chalk.gray('─'.repeat(Math.min(60, maxWidth))) + '\n';
   }
 
   if (msg.role === 'user') {
-    out += chalk.cyan.bold('❯ ') + chalk.bold(msg.content) + '\n';
+    out += truncateLine(chalk.cyan.bold('❯ ') + chalk.bold(msg.content), maxWidth) + '\n';
   } else if (msg.role === 'assistant') {
     if (msg.content) {
-      out += chalk.magenta.bold('◆ ') + msg.content + '\n';
+      // Truncate each line of assistant content
+      const lines = msg.content.split('\n');
+      const prefix = chalk.magenta.bold('◆ ');
+      out += lines.map((line, i) =>
+        truncateLine(i === 0 ? prefix + line : '  ' + line, maxWidth)
+      ).join('\n') + '\n';
     }
   } else if (msg.role === 'system') {
     if (msg.meta?.isInfo) {
-      out += chalk.gray('  ' + msg.content) + '\n';
+      out += truncateLine(chalk.gray('  ' + msg.content), maxWidth) + '\n';
     } else {
       const inner = '✗ ' + msg.content;
-      const width = inner.length + 2;
-      out += chalk.red('╭' + '─'.repeat(width) + '╮') + '\n';
-      out += chalk.red('│ ' + inner + ' │') + '\n';
-      out += chalk.red('╰' + '─'.repeat(width) + '╯') + '\n';
+      const boxWidth = Math.min(inner.length + 2, maxWidth - 2);
+      out += chalk.red('╭' + '─'.repeat(boxWidth) + '╮') + '\n';
+      out += chalk.red('│ ' + inner.slice(0, boxWidth - 1) + ' │') + '\n';
+      out += chalk.red('╰' + '─'.repeat(boxWidth) + '╯') + '\n';
     }
   }
 
@@ -463,8 +502,8 @@ export default function REPL({
 
   return (
     <Box flexDirection="row">
-      {/* Main chat column */}
-      <Box flexDirection="column" flexGrow={1}>
+      {/* Main chat column — capped to prevent overlap with cybergotchi panel */}
+      <Box flexDirection="column" flexGrow={1} width={getChatWidth()}>
 
         {/* Thinking */}
         {thinkingText && (
@@ -548,8 +587,8 @@ export default function REPL({
         })()}
       </Box>
 
-      {/* Cybergotchi side panel — self-contained, isolated from REPL re-renders */}
-      <CybergotchiPanelConnected />
+      {/* Cybergotchi side panel — hidden when terminal is too narrow */}
+      {getTerminalWidth() >= MIN_WIDTH_FOR_PANEL && <CybergotchiPanelConnected />}
     </Box>
   );
 }
