@@ -2,7 +2,7 @@
  * Permission types — tool permission context and risk-based gating.
  */
 
-export type PermissionMode = "ask" | "trust" | "deny";
+export type PermissionMode = "ask" | "trust" | "deny" | "acceptEdits" | "plan";
 
 export type RiskLevel = "low" | "medium" | "high";
 
@@ -18,19 +18,17 @@ export type AskUserFn = (
   riskLevel?: RiskLevel,
 ) => Promise<boolean>;
 
-/**
- * Permission gate — decides if a tool call should be allowed.
- *
- * Decision matrix:
- * - LOW risk + read-only: always allow
- * - trust mode: always allow
- * - deny mode: only allow LOW read-only
- * - ask mode: prompt user for MEDIUM/HIGH risk
- */
+/** Tools auto-approved in acceptEdits mode */
+const EDIT_SAFE_TOOLS = new Set([
+  "FileRead", "FileWrite", "FileEdit", "Glob", "Grep", "LS",
+  "ImageRead", "NotebookEdit",
+]);
+
 export function checkPermission(
   mode: PermissionMode,
   riskLevel: RiskLevel,
   isReadOnly: boolean,
+  toolName?: string,
 ): PermissionResult {
   // Always allow low-risk read-only
   if (riskLevel === "low" && isReadOnly) {
@@ -45,6 +43,20 @@ export function checkPermission(
     return { allowed: false, reason: "deny-mode", riskLevel };
   }
 
-  // ask mode — needs user approval (handled by caller)
+  if (mode === "plan") {
+    if (isReadOnly) {
+      return { allowed: true, reason: "plan-mode-readonly", riskLevel };
+    }
+    return { allowed: false, reason: "plan-mode-no-writes", riskLevel };
+  }
+
+  if (mode === "acceptEdits") {
+    if (toolName && EDIT_SAFE_TOOLS.has(toolName)) {
+      return { allowed: true, reason: "acceptEdits-auto", riskLevel };
+    }
+    return { allowed: false, reason: "needs-approval", riskLevel };
+  }
+
+  // ask mode — needs user approval
   return { allowed: false, reason: "needs-approval", riskLevel };
 }
