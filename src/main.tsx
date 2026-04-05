@@ -20,6 +20,7 @@ import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { MODEL_PRICING } from "./harness/cost.js";
 import { listSessions } from "./harness/session.js";
 import { readOhConfig } from "./harness/config.js";
+import { emitHook } from "./harness/hooks.js";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -220,6 +221,11 @@ program
     process.stdout.write(BANNER + "\n");
     process.stdout.write(`\x1b[35mOpenHarness\x1b[0m \x1b[2mv${VERSION}\x1b[0m \x1b[36m${resolvedModel}\x1b[0m \x1b[2m(${effectivePermMode})\x1b[0m\n`);
     process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
+
+    emitHook("sessionStart");
+    const emitEnd = () => { emitHook("sessionEnd"); };
+    process.on("exit", emitEnd);
+    process.on("SIGINT", () => { emitEnd(); process.exit(0); });
 
     render(
       <App
