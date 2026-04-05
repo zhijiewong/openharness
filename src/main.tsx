@@ -27,7 +27,7 @@ import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
 
-const VERSION = "0.4.2";
+const VERSION = "0.5.0";
 
 const BANNER = `        ___
        /   \\
