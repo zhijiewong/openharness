@@ -105,13 +105,64 @@ Type these during a chat session:
 | `/history [n]` | List recent sessions; `/history search <term>` to search |
 | `/files` | List files in context |
 | `/model <name>` | Switch model mid-session |
-| `/compact` | Compress conversation to free context |
+| `/compact` | Compress conversation to free context (smart: truncates old tool results, drops oldest messages, removes orphaned tool results, targets 60% of model context window) |
 | `/export` | Export conversation to markdown |
 | `/plan` | Enter plan mode |
 | `/review` | Review recent code changes |
 | `/config` | Show configuration |
 | `/memory` | View memories |
 | `/cybergotchi` | Feed, pet, rest, status, rename, or reset your companion |
+
+## Permission Modes
+
+Control how aggressively OpenHarness auto-approves tool calls:
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| `ask` | `--permission-mode ask` | Prompt for medium/high risk operations (default) |
+| `trust` | `--trust` | Auto-approve everything |
+| `deny` | `--deny` | Only allow low-risk read-only operations |
+| `acceptEdits` | `--permission-mode acceptEdits` | Auto-approve file edits, ask for Bash/WebFetch/Agent |
+| `plan` | `--permission-mode plan` | Read-only mode — block all write operations |
+
+Set permanently in `.oh/config.yaml`: `permissionMode: 'acceptEdits'`
+
+## Hooks
+
+Run shell scripts automatically at key session events by adding a `hooks` block to `.oh/config.yaml`:
+
+```yaml
+hooks:
+  - event: sessionStart
+    command: "echo 'Session started' >> ~/.oh/session.log"
+
+  - event: preToolUse
+    command: "scripts/check-tool.sh"
+    match: Bash   # optional: only trigger for this tool name
+
+  - event: postToolUse
+    command: "scripts/after-tool.sh"
+
+  - event: sessionEnd
+    command: "scripts/cleanup.sh"
+```
+
+**Event types:**
+- `sessionStart` — fires once when the session begins
+- `preToolUse` — fires before each tool call; **exit code 1 blocks the tool** and returns an error to the model
+- `postToolUse` — fires after each tool call completes
+- `sessionEnd` — fires when the session ends
+
+**Environment variables** available to hook scripts:
+
+| Variable | Description |
+|----------|-------------|
+| `OH_EVENT` | Event type (`sessionStart`, `preToolUse`, etc.) |
+| `OH_TOOL_NAME` | Name of the tool being called (tool events only) |
+| `OH_TOOL_ARGS` | JSON-encoded tool arguments (tool events only) |
+| `OH_TOOL_OUTPUT` | JSON-encoded tool output (`postToolUse` only) |
+
+Use `match` to restrict a hook to a specific tool name (e.g., `match: Bash` only triggers for the Bash tool).
 
 ## Cybergotchi
 
@@ -199,15 +250,18 @@ Exit code 0 on success, 1 on failure.
 ```bash
 # Local (free, no API key needed)
 oh --model ollama/llama3
-oh --model ollama/qwen2.5:7b-instruct
+oh --model ollama/qwen2.5:7b
 
 # Cloud
 OPENAI_API_KEY=sk-... oh --model gpt-4o
 ANTHROPIC_API_KEY=sk-ant-... oh --model claude-sonnet-4-6
-OPENROUTER_API_KEY=sk-or-... oh --model openrouter/deepseek-chat
+OPENROUTER_API_KEY=sk-or-... oh --model openrouter/meta-llama/llama-3-70b
 
-# Any OpenAI-compatible endpoint
-oh --model deepseek/deepseek-chat
+# llama.cpp / GGUF
+oh --model llamacpp/my-model
+
+# LM Studio
+oh --model lmstudio/my-model
 ```
 
 ### llama.cpp / GGUF (local, no Ollama needed)
