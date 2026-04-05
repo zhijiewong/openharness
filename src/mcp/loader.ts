@@ -19,7 +19,7 @@ export async function loadMcpTools(): Promise<Tool[]> {
       connectedClients.push(client);
       const defs = await client.listTools();
       for (const def of defs) {
-        tools.push(new McpTool(client, def));
+        tools.push(new McpTool(client, def, server.riskLevel));
       }
     } catch (err) {
       console.warn(`[mcp] Failed to connect to '${server.name}': ${err instanceof Error ? err.message : String(err)}`);

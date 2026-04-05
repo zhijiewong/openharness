@@ -8,14 +8,15 @@ export class McpTool implements Tool<z.ZodType> {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: z.ZodType;
-  readonly riskLevel = 'medium' as const;
+  readonly riskLevel: "low" | "medium" | "high";
 
   private client: McpClient;
   private def: McpToolDef;
 
-  constructor(client: McpClient, def: McpToolDef) {
+  constructor(client: McpClient, def: McpToolDef, riskLevel: "low" | "medium" | "high" = "medium") {
     this.client = client;
     this.def = def;
+    this.riskLevel = riskLevel;
     this.name = `${client.name}__${def.name}`;
     this.description = def.description ?? def.name;
 
