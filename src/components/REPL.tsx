@@ -512,13 +512,6 @@ export default function REPL({
           </Box>
         )}
 
-        {/* Thinking */}
-        {thinkingText && (
-          <Box marginY={0}>
-            <Text dimColor>{"💭 "}{thinkingText.length > 200 ? thinkingText.slice(-200) + "…" : thinkingText}</Text>
-          </Box>
-        )}
-
         {/* Streaming response */}
         {loading && streamingText && (
           <Box marginY={0}>
