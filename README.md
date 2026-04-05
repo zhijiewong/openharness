@@ -1,7 +1,5 @@
 # OpenHarness
 
-[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
-
 ```
         ___
        /   \
@@ -14,6 +12,8 @@
 ```
 
 AI coding agent in your terminal. Works with any LLM -- free local models or cloud APIs.
+
+[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
 
 ---
 
