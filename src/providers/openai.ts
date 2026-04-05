@@ -89,6 +89,11 @@ export class OpenAIProvider implements Provider {
     };
     if (tools?.length) body.tools = tools;
 
+    // Enable reasoning for o-series models
+    if (m.startsWith("o1") || m.startsWith("o3")) {
+      body.reasoning_effort = "medium";
+    }
+
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -155,6 +160,10 @@ export class OpenAIProvider implements Provider {
 
         if (delta.content) {
           yield { type: "text_delta", content: delta.content };
+        }
+
+        if (delta.reasoning_content) {
+          yield { type: "thinking_delta" as const, content: delta.reasoning_content };
         }
 
         if (delta.tool_calls) {

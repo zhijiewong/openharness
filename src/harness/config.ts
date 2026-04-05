@@ -12,6 +12,8 @@ export type McpServerConfig = {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  riskLevel?: "low" | "medium" | "high";
+  timeout?: number; // ms, default 5000
 };
 
 export type HookDef = {

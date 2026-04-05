@@ -9,10 +9,15 @@ export class McpClient {
   private nextId = 1;
   private pending = new Map<number, { resolve: (r: JsonRpcResponse) => void; reject: (e: Error) => void }>();
   private ready = false;
+  private dead = false;
+  private cfg: McpServerConfig;
+  private timeoutMs: number;
 
-  private constructor(name: string, proc: ChildProcess) {
+  private constructor(name: string, proc: ChildProcess, cfg: McpServerConfig, timeoutMs: number) {
     this.name = name;
     this.proc = proc;
+    this.cfg = cfg;
+    this.timeoutMs = timeoutMs;
 
     const rl = createInterface({ input: proc.stdout! });
     rl.on('line', (line) => {
@@ -29,6 +34,7 @@ export class McpClient {
     });
 
     proc.on('exit', () => {
+      this.dead = true;
       for (const p of this.pending.values()) {
         p.reject(new Error(`MCP server '${name}' exited`));
       }
@@ -36,13 +42,13 @@ export class McpClient {
     });
   }
 
-  static async connect(cfg: McpServerConfig, timeoutMs = 5_000): Promise<McpClient> {
+  static async connect(cfg: McpServerConfig, timeoutMs = cfg.timeout ?? 5_000): Promise<McpClient> {
     const proc = spawn(cfg.command, cfg.args ?? [], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...(cfg.env ?? {}) },
     });
 
-    const client = new McpClient(cfg.name, proc);
+    const client = new McpClient(cfg.name, proc, cfg, timeoutMs);
 
     // Initialize handshake
     await Promise.race([
@@ -67,6 +73,14 @@ export class McpClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
+    if (this.dead) {
+      try {
+        const fresh = await McpClient.connect(this.cfg, this.timeoutMs);
+        Object.assign(this, { proc: fresh.proc, dead: false, ready: true, nextId: 1, pending: new Map() });
+      } catch {
+        throw new Error(`MCP server '${this.name}' died and restart failed`);
+      }
+    }
     const res = await this.call('tools/call', { name, arguments: args });
     if (res.error) throw new Error(res.error.message);
     const content = (res.result as any)?.content ?? [];
