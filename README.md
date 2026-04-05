@@ -1,5 +1,9 @@
 # OpenHarness
 
+[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness)
+[![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness)
+[![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE)
+
 ```
         ___
        /   \
