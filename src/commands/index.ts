@@ -16,6 +16,8 @@ import { listSessions, loadSession } from "../harness/session.js";
 import { readOhConfig } from "../harness/config.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { compressMessages } from "../query.js";
+import { getContextWindow } from "../harness/cost.js";
 
 export type CommandResult = {
   /** Text output to display */
@@ -221,15 +223,8 @@ register("model", "Switch model (e.g., /model llama3.2 or /model ollama/llama3.2
 
 register("compact", "Compress conversation history", (_args, ctx) => {
   const before = ctx.messages.length;
-  const keepLast = 10;
-  const messages = ctx.messages;
-
-  // Keep system messages + the most recent keepLast non-system messages
-  const systemMsgs = messages.filter(m => m.role === "system");
-  const nonSystem = messages.filter(m => m.role !== "system");
-  const kept = nonSystem.slice(-keepLast);
-
-  const compacted = [...systemMsgs, ...kept];
+  const targetTokens = Math.floor(getContextWindow(ctx.model) * 0.6);
+  const compacted = compressMessages(ctx.messages, targetTokens);
   const dropped = before - compacted.length;
 
   return {

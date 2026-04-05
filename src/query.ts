@@ -431,7 +431,7 @@ function estimateMessagesTokens(messages: Message[]): number {
 }
 
 
-function compressMessages(messages: Message[], targetTokens: number): Message[] {
+export function compressMessages(messages: Message[], targetTokens: number): Message[] {
   if (messages.length <= 2) return messages;
 
   const result = [...messages];
