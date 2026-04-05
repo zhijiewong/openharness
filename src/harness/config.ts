@@ -14,6 +14,18 @@ export type McpServerConfig = {
   env?: Record<string, string>;
 };
 
+export type HookDef = {
+  command: string;
+  match?: string; // tool name pattern for preToolUse/postToolUse
+};
+
+export type HooksConfig = {
+  sessionStart?: HookDef[];
+  sessionEnd?: HookDef[];
+  preToolUse?: HookDef[];
+  postToolUse?: HookDef[];
+};
+
 export type OhConfig = {
   provider: string;
   model: string;
@@ -21,6 +33,7 @@ export type OhConfig = {
   apiKey?: string;
   baseUrl?: string;
   mcpServers?: McpServerConfig[];
+  hooks?: HooksConfig;
 };
 
 function yamlScalar(value: string): string {
