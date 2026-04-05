@@ -60,6 +60,11 @@ export type RateLimited = {
   readonly attempt: number;   // 1-based
 };
 
+export type ThinkingDelta = {
+  readonly type: "thinking_delta";
+  readonly content: string;
+};
+
 export type ToolOutputDelta = {
   readonly type: "tool_output_delta";
   readonly callId: string;
@@ -84,4 +89,5 @@ export type StreamEvent =
   | CostUpdate
   | TurnComplete
   | ErrorEvent
-  | RateLimited;
+  | RateLimited
+  | ThinkingDelta;

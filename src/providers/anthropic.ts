@@ -103,6 +103,8 @@ export class AnthropicProvider implements Provider {
       messages: this.convertMessages(messages),
       stream: true,
     };
+    // Enable extended thinking for Claude models
+    body.thinking = { type: "enabled", budget_tokens: 10000 };
     const anthropicTools = this.convertTools(tools);
     if (anthropicTools) body.tools = anthropicTools;
 
@@ -135,6 +137,7 @@ export class AnthropicProvider implements Provider {
     let currentToolId = "";
     let currentToolName = "";
     let currentToolArgs = "";
+    let inThinkingBlock = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -177,6 +180,9 @@ export class AnthropicProvider implements Provider {
                 callId: block.id,
               };
             }
+            if (block?.type === "thinking") {
+              inThinkingBlock = true;
+            }
             break;
           }
           case "content_block_delta": {
@@ -187,9 +193,13 @@ export class AnthropicProvider implements Provider {
             if (delta?.type === "input_json_delta" && delta.partial_json) {
               currentToolArgs += delta.partial_json;
             }
+            if (delta?.type === "thinking_delta" && delta.thinking) {
+              yield { type: "thinking_delta", content: delta.thinking };
+            }
             break;
           }
           case "content_block_stop": {
+            inThinkingBlock = false;
             if (currentToolId) {
               yield {
                 type: "tool_call_complete",

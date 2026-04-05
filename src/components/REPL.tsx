@@ -99,6 +99,7 @@ export default function REPL({
   const [loading, setLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [streamingText, setStreamingText] = useState("");
+  const [thinkingText, setThinkingText] = useState("");
   const [toolCalls, setToolCalls] = useState<Map<string, ToolCallState>>(new Map());
   const toolCallsRef = useRef(toolCalls);
   toolCallsRef.current = toolCalls;
@@ -188,6 +189,7 @@ export default function REPL({
       abortControllerRef.current = abortController;
       setLoading(true);
       setStreamingText("");
+      setThinkingText("");
       setError(null);
       setToolCalls(new Map());
 
@@ -233,6 +235,10 @@ export default function REPL({
           switch (event.type) {
             case "rate_limited":
               setStreamingText(`⏳ Rate limited — retrying in ${event.retryIn}s… (attempt ${event.attempt}/3)`);
+              break;
+
+            case "thinking_delta":
+              setThinkingText((prev) => prev + event.content);
               break;
 
             case "text_delta":
@@ -337,6 +343,7 @@ export default function REPL({
               break;
 
             case "turn_complete":
+              setThinkingText("");
               if (accumulated) {
                 setMessages((prev) => [...prev, createAssistantMessage(accumulated)]);
               }
@@ -458,6 +465,13 @@ export default function REPL({
     <Box flexDirection="row">
       {/* Main chat column */}
       <Box flexDirection="column" flexGrow={1}>
+
+        {/* Thinking */}
+        {thinkingText && (
+          <Box marginY={0}>
+            <Text dimColor>{"💭 "}{thinkingText.length > 200 ? thinkingText.slice(-200) + "…" : thinkingText}</Text>
+          </Box>
+        )}
 
         {/* Streaming response */}
         {loading && streamingText && (

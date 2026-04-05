@@ -25,6 +25,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PermissionMode } from "./types/permissions.js";
+import type { Message } from "./types/message.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
 
 const VERSION = "0.5.0";
@@ -169,6 +170,8 @@ program
   .option("--trust", "Auto-approve all tool calls")
   .option("--deny", "Block all non-read tool calls")
   .option("--resume <id>", "Resume a saved session")
+  .option("--continue", "Resume the most recent session")
+  .option("--fork <id>", "Fork (branch) from an existing session")
   .action(async (opts) => {
     // Load saved config as defaults (env vars + CLI flags override)
     const savedConfig = readOhConfig();
@@ -227,13 +230,39 @@ program
     process.on("exit", emitEnd);
     process.on("SIGINT", () => { emitEnd(); process.exit(0); });
 
+    // Session handling
+    let resumeSessionId: string | undefined = opts.resume as string | undefined;
+    let initialMessages: Message[] | undefined;
+
+    if (opts.continue) {
+      const { getLastSessionId } = await import("./harness/session.js");
+      const lastId = getLastSessionId();
+      if (lastId) {
+        resumeSessionId = lastId;
+      } else {
+        console.log("  No previous sessions found.");
+      }
+    }
+
+    if (opts.fork) {
+      const { loadSession } = await import("./harness/session.js");
+      try {
+        const source = loadSession(opts.fork as string);
+        initialMessages = source.messages;
+        console.log(`  Forked from session ${opts.fork} (${source.messages.length} messages)`);
+      } catch {
+        console.log(`  Session ${opts.fork} not found.`);
+      }
+    }
+
     render(
       <App
         provider={provider}
         tools={tools}
         permissionMode={effectivePermMode}
         model={resolvedModel}
-        resumeSessionId={opts.resume as string | undefined}
+        resumeSessionId={resumeSessionId}
+        initialMessages={initialMessages}
       />,
     );
   });
