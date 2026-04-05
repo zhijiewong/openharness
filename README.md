@@ -17,11 +17,8 @@
 
 AI coding agent in your terminal. Works with any LLM -- free local models or cloud APIs.
 
-![npm](https://img.shields.io/npm/v/@zhijiewang/openharness)
 ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green)
 ![TypeScript](https://img.shields.io/badge/typescript-strict-blue)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Status: Alpha](https://img.shields.io/badge/status-alpha-orange)
 
 ---
 
