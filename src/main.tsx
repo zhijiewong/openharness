@@ -20,6 +20,7 @@ import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { MODEL_PRICING } from "./harness/cost.js";
 import { listSessions } from "./harness/session.js";
 import { readOhConfig } from "./harness/config.js";
+import { emitHook } from "./harness/hooks.js";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -230,6 +231,8 @@ program
         resumeSessionId={opts.resume as string | undefined}
       />,
     );
+    emitHook("sessionStart");
+    process.on("exit", () => emitHook("sessionEnd"));
   });
 
 // ── models ──

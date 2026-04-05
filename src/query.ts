@@ -23,6 +23,7 @@ import { checkPermission } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
 import { StreamingToolExecutor } from "./services/StreamingToolExecutor.js";
 import { getContextWindow } from "./harness/cost.js";
+import { emitHook } from "./harness/hooks.js";
 
 // ── Configuration ──
 
@@ -365,9 +366,24 @@ async function executeSingleTool(
     }
   }
 
+  // Hook: preToolUse — can block execution
+  const hookAllowed = emitHook("preToolUse", {
+    toolName: tool.name,
+    toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+  });
+  if (!hookAllowed) {
+    return { output: "Blocked by preToolUse hook.", isError: true };
+  }
+
   // Execute with result budgeting
   try {
     const result = await tool.call(parsed.data, context);
+    // Hook: postToolUse
+    emitHook("postToolUse", {
+      toolName: tool.name,
+      toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+      toolOutput: result.output.slice(0, 1000),
+    });
     // Cap large outputs
     if (result.output.length > MAX_TOOL_RESULT_CHARS) {
       return {
