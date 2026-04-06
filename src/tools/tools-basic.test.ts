@@ -239,7 +239,7 @@ describe("tools-basic", () => {
     const tmp = makeTmpDir();
     const mock = createMockTool("MockAlpha");
     const result = await ToolSearchTool.call(
-      { query: "Mock" },
+      { query: "Mock", maxResults: 5 },
       ctx(tmp, { tools: [mock] }),
     );
     assert.equal(result.isError, false);
