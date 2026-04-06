@@ -236,6 +236,19 @@ export default function REPL({
 
             case "text_delta":
               accumulated += event.content;
+              // Move completed lines to Static (messages array) — keep only the current partial line in live area
+              const deltaLines = accumulated.split('\n');
+              if (deltaLines.length > 1) {
+                const completedText = deltaLines.slice(0, -1).join('\n');
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.meta?.isStreaming) {
+                    return [...prev.slice(0, -1), { ...last, content: last.content + completedText + '\n' }];
+                  }
+                  return [...prev, createMessage('assistant', completedText + '\n', { meta: { isStreaming: true } })];
+                });
+                accumulated = deltaLines[deltaLines.length - 1]!;
+              }
               setStreamingText(accumulated);
               break;
 
@@ -337,8 +350,26 @@ export default function REPL({
 
             case "turn_complete":
               setThinkingText("");
+              // Finalize: merge any remaining streaming text into the message
               if (accumulated) {
-                setMessages((prev) => [...prev, createAssistantMessage(accumulated)]);
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.meta?.isStreaming) {
+                    // Append remaining text and clear streaming flag
+                    return [...prev.slice(0, -1), { ...last, content: last.content + accumulated, meta: {} }];
+                  }
+                  return [...prev, createAssistantMessage(accumulated)];
+                });
+                accumulated = "";
+              } else {
+                // Clear isStreaming flag on the last message
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.meta?.isStreaming) {
+                    return [...prev.slice(0, -1), { ...last, meta: {} }];
+                  }
+                  return prev;
+                });
               }
               // Auto-save session
               sessionRef.current.messages = messagesRef.current;
@@ -522,7 +553,7 @@ export default function REPL({
         {/* Thinking */}
         {thinkingText && (
           <Box marginY={0}>
-            <Text dimColor>{"💭 "}{thinkingText.length > 200 ? thinkingText.slice(-200) + "…" : thinkingText}</Text>
+            <Text dimColor>{"💭 "}{thinkingText.split('\n').slice(-3).join('\n')}</Text>
           </Box>
         )}
 
@@ -585,7 +616,7 @@ export default function REPL({
           {/* Companion next to input — hidden on narrow terminals */}
           {getTerminalWidth() >= MIN_WIDTH_FOR_COMPANION && (
             <Box flexShrink={0} width={16}>
-              <CybergotchiPanelConnected />
+              <CybergotchiPanelConnected paused={loading} />
             </Box>
           )}
         </Box>
