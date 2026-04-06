@@ -119,6 +119,7 @@ const CONTEXT_WINDOW_PREFIXES: Array<[string, number]> = [
   // Phi
   ["phi", 128_000],
   // Gemma
+  ["gemma3", 128_000],
   ["gemma2", 8_192],
   ["gemma", 8_192],
 ];

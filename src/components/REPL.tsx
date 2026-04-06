@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import chalk from "chalk";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -11,10 +10,11 @@ import { query, type QueryConfig } from "../query.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
-import { CostTracker, estimateCost, contextUsage } from "../harness/cost.js";
+import { CostTracker, estimateCost, getContextWindow } from "../harness/cost.js";
 import { processSlashCommand, type CommandContext } from "../commands/index.js";
 import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
 import Spinner from "./Spinner.js";
+import Messages from "./Messages.js";
 import TextInput from "./TextInput.js";
 import TextInputComponent from "ink-text-input";
 import PermissionPrompt from "./PermissionPrompt.js";
@@ -30,65 +30,6 @@ function getTerminalWidth(): number {
   return process.stdout.columns ?? 80;
 }
 
-/** Chat gets full terminal width now (no sidebar) */
-function getChatWidth(): number {
-  return getTerminalWidth();
-}
-
-/** Truncate a string to fit within maxWidth columns */
-function truncateLine(line: string, maxWidth: number): string {
-  // Strip ANSI codes for length measurement, but keep them in output
-  const stripped = line.replace(/\x1b\[[0-9;]*m/g, '');
-  if (stripped.length <= maxWidth) return line;
-  // Rough truncation — cut at maxWidth chars of visible content
-  let visible = 0;
-  let i = 0;
-  while (i < line.length && visible < maxWidth - 1) {
-    if (line[i] === '\x1b') {
-      const end = line.indexOf('m', i);
-      if (end !== -1) { i = end + 1; continue; }
-    }
-    visible++;
-    i++;
-  }
-  return line.slice(0, i) + '…';
-}
-
-/** Print a finalized message directly to stdout (outside Ink's managed live area). */
-function printMessageToStdout(msg: Message, showDivider: boolean): void {
-  if (msg.role === 'tool') return;
-
-  const maxWidth = getChatWidth();
-  let out = '';
-  if (showDivider) {
-    out += chalk.gray('─'.repeat(Math.min(60, maxWidth))) + '\n';
-  }
-
-  if (msg.role === 'user') {
-    out += truncateLine(chalk.cyan.bold('❯ ') + chalk.bold(msg.content), maxWidth) + '\n';
-  } else if (msg.role === 'assistant') {
-    if (msg.content) {
-      // Truncate each line of assistant content
-      const lines = msg.content.split('\n');
-      const prefix = chalk.magenta.bold('◆ ');
-      out += lines.map((line, i) =>
-        truncateLine(i === 0 ? prefix + line : '  ' + line, maxWidth)
-      ).join('\n') + '\n';
-    }
-  } else if (msg.role === 'system') {
-    if (msg.meta?.isInfo) {
-      out += truncateLine(chalk.gray('  ' + msg.content), maxWidth) + '\n';
-    } else {
-      const inner = '✗ ' + msg.content;
-      const boxWidth = Math.min(inner.length + 2, maxWidth - 2);
-      out += chalk.red('╭' + '─'.repeat(boxWidth) + '╮') + '\n';
-      out += chalk.red('│ ' + inner.slice(0, boxWidth - 1) + ' │') + '\n';
-      out += chalk.red('╰' + '─'.repeat(boxWidth) + '╯') + '\n';
-    }
-  }
-
-  if (out) process.stdout.write(out);
-}
 import { loadCompanionConfig, saveCompanionConfig } from "../cybergotchi/config.js";
 import { detectMemories, saveMemory } from "../harness/memory.js";
 import { resolveMcpMention } from "../mcp/loader.js";
@@ -153,22 +94,6 @@ export default function REPL({
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
   const [vimMode, setVimMode] = useState(false);
   const cybergotchiConfigRef = useRef(loadCompanionConfig());
-
-  // Print new finalized messages to stdout (outside Ink's live area) to prevent
-  // Ink height miscounting from causing the cybergotchi panel to expand on each tick.
-  const printedRef = useRef(new Set<string>());
-  useEffect(() => {
-    const printed = printedRef.current;
-    let userCount = 0;
-    messages.forEach((msg) => {
-      if (msg.role === 'user') userCount++;
-      if (!printed.has(msg.uuid)) {
-        const showDivider = msg.role === 'user' && userCount > 1;
-        printMessageToStdout(msg, showDivider);
-        printed.add(msg.uuid);
-      }
-    });
-  }, [messages]);
 
   // Increment session count on mount
   useEffect(() => {
@@ -560,8 +485,11 @@ export default function REPL({
 
   return (
     <Box flexDirection="column">
-      {/* Main chat column — full terminal width (no sidebar) */}
-      <Box flexDirection="column" flexGrow={1}>
+      {/* Message history — rendered through Ink (not stdout) */}
+      <Messages messages={messages} toolCalls={toolCalls} />
+
+      {/* Live area: streaming, spinner, prompts, input, companion */}
+      <Box flexDirection="column">
 
         {/* Thinking */}
         {thinkingText && (
@@ -623,11 +551,15 @@ export default function REPL({
 
         {/* Input + Companion footer */}
         <Box flexDirection="row" marginTop={1}>
-          <Box flexDirection="column" flexGrow={1}>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1}>
             <TextInput onSubmit={handleSubmit} disabled={loading || !!pendingQuestion} vimMode={vimMode} />
           </Box>
           {/* Companion next to input — hidden on narrow terminals */}
-          {getTerminalWidth() >= MIN_WIDTH_FOR_COMPANION && <CybergotchiPanelConnected />}
+          {getTerminalWidth() >= MIN_WIDTH_FOR_COMPANION && (
+            <Box flexShrink={0} width={16}>
+              <CybergotchiPanelConnected />
+            </Box>
+          )}
         </Box>
 
         {/* Keybinding hints */}
@@ -636,9 +568,16 @@ export default function REPL({
           {cybergotchiConfigRef.current?.soul?.name ? ` | @${cybergotchiConfigRef.current!.soul.name} to chat` : ""}
         </Text>
 
-        {/* Token context warning */}
+        {/* Token context warning — estimate from actual message content */}
         {(() => {
-          const usage = contextUsage(currentModel, costRef.current.totalInputTokens);
+          const estimatedTokens = messages.reduce((sum, m) => {
+            let t = Math.ceil(m.content.length / 3.5);
+            if (m.toolCalls) for (const tc of m.toolCalls) t += Math.ceil(JSON.stringify(tc.arguments).length / 3.5);
+            if (m.toolResults) for (const tr of m.toolResults) t += Math.ceil(tr.output.length / 3.5);
+            return sum + t;
+          }, 0);
+          const window = getContextWindow(currentModel);
+          const usage = window > 0 ? estimatedTokens / window : 0;
           if (usage < 0.75) return null;
           const critical = usage >= 0.9;
           return (
