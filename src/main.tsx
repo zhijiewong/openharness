@@ -257,16 +257,17 @@ program
       }
     }
 
-    render(
-      <App
-        provider={provider}
-        tools={tools}
-        permissionMode={effectivePermMode}
-        model={resolvedModel}
-        resumeSessionId={resumeSessionId}
-        initialMessages={initialMessages}
-      />,
-    );
+    // Use custom cell-level diffing renderer (no Ink for REPL)
+    const { startREPL } = await import("./repl.js");
+    await startREPL({
+      provider,
+      tools,
+      permissionMode: effectivePermMode,
+      systemPrompt: buildSystemPrompt(),
+      model: resolvedModel,
+      resumeSessionId,
+      initialMessages,
+    });
   });
 
 // ── models ──
