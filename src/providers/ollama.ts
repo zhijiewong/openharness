@@ -100,8 +100,28 @@ export class OllamaProvider implements Provider {
     }
 
     if (!res.ok) {
-      yield { type: "error", message: `Ollama HTTP ${res.status}: ${await res.text()}` };
-      return;
+      const errText = await res.text();
+      // Retry without tools if model doesn't support them
+      if (res.status === 400 && errText.includes("does not support tools") && body.tools) {
+        delete body.tools;
+        try {
+          res = await fetch(`${this.baseUrl}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } catch (err) {
+          yield { type: "error", message: `Ollama retry failed: ${err}` };
+          return;
+        }
+        if (!res.ok) {
+          yield { type: "error", message: `Ollama HTTP ${res.status}: ${await res.text()}` };
+          return;
+        }
+      } else {
+        yield { type: "error", message: `Ollama HTTP ${res.status}: ${errText}` };
+        return;
+      }
     }
 
     const reader = res.body?.getReader();
@@ -225,14 +245,25 @@ export class OllamaProvider implements Provider {
     const ollamaTools = this.convertTools(tools);
     if (ollamaTools) body.tools = ollamaTools;
 
-    const res = await fetch(`${this.baseUrl}/api/chat`, {
+    let res = await fetch(`${this.baseUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
-      throw new Error(`Ollama HTTP ${res.status}: ${await res.text()}`);
+      const errText = await res.text();
+      if (res.status === 400 && errText.includes("does not support tools") && body.tools) {
+        delete body.tools;
+        res = await fetch(`${this.baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(`Ollama HTTP ${res.status}: ${await res.text()}`);
+      } else {
+        throw new Error(`Ollama HTTP ${res.status}: ${errText}`);
+      }
     }
 
     const data: any = await res.json();
