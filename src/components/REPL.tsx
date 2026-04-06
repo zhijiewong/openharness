@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, Static, useApp, useInput } from "ink";
 import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
 import type { Provider } from "../providers/base.js";
@@ -14,7 +14,6 @@ import { CostTracker, estimateCost, getContextWindow } from "../harness/cost.js"
 import { processSlashCommand, type CommandContext } from "../commands/index.js";
 import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
 import Spinner from "./Spinner.js";
-import Messages from "./Messages.js";
 import TextInput from "./TextInput.js";
 import TextInputComponent from "ink-text-input";
 import PermissionPrompt from "./PermissionPrompt.js";
@@ -485,10 +484,39 @@ export default function REPL({
 
   return (
     <Box flexDirection="column">
-      {/* Message history — rendered through Ink (not stdout) */}
-      <Messages messages={messages} toolCalls={toolCalls} />
+      {/* Message history — rendered via Static (locked, never re-renders) */}
+      <Static items={messages}>
+        {(msg: Message, i: number) => {
+          const showDivider = msg.role === "user" && i > 0;
+          if (msg.role === "user") {
+            return (
+              <Box key={msg.uuid} flexDirection="column">
+                {showDivider && <Text dimColor>{"─".repeat(60)}</Text>}
+                <Box><Text color="cyan" bold>{"❯ "}</Text><Text bold>{msg.content}</Text></Box>
+              </Box>
+            );
+          }
+          if (msg.role === "assistant") {
+            return (
+              <Box key={msg.uuid} flexDirection="column">
+                {msg.content ? (
+                  <Box><Text color="magenta" bold>{"◆ "}</Text><Text>{msg.content}</Text></Box>
+                ) : null}
+              </Box>
+            );
+          }
+          if (msg.role === "system") {
+            return (
+              <Box key={msg.uuid}>
+                <Text dimColor>{"  "}{msg.content}</Text>
+              </Box>
+            );
+          }
+          return <Box key={msg.uuid} />;
+        }}
+      </Static>
 
-      {/* Live area: streaming, spinner, prompts, input, companion */}
+      {/* Live area: streaming, spinner, prompts, input, companion (re-renders freely) */}
       <Box flexDirection="column">
 
         {/* Thinking */}
