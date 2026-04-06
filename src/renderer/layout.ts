@@ -177,8 +177,8 @@ export function rasterize(
     }
   }
 
-  // ── Footer ──
-  const footerStart = msgAreaHeight;
+  // ── Footer — place right after content, or at bottom if content fills the screen ──
+  const footerStart = Math.min(r + 1, msgAreaHeight);
 
   // Border line
   const borderLen = Math.min(60, w);
