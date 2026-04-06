@@ -14,7 +14,7 @@ export default function Spinner({ model, tokens }: Props) {
     const timer = setInterval(() => {
       setElapsed(Math.floor((Date.now() - start) / 1000));
       setFrame((f) => f + 1);
-    }, 50);
+    }, 200);
     return () => clearInterval(timer);
   }, []);
 

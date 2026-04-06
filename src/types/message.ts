@@ -24,7 +24,7 @@ export type Message = {
   readonly uuid: string;
   readonly timestamp: number;
   /** Optional display hints — not sent to LLM */
-  readonly meta?: { isInfo?: boolean; pinned?: boolean };
+  readonly meta?: { isInfo?: boolean; pinned?: boolean; isStreaming?: boolean };
 };
 
 export function createMessage(

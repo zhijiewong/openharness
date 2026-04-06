@@ -30,7 +30,7 @@ function emotionFromNeeds(config: CompanionConfig): Emotion {
   return 'idle';
 }
 
-export function useCybergotchi(): UseCompanionResult {
+export function useCybergotchi(paused?: boolean): UseCompanionResult {
   const configRef = useRef<CompanionConfig | null>(loadCompanionConfig());
   const [config, setConfigState] = useState<CompanionConfig | null>(configRef.current);
   const isSetupNeeded = config === null;
@@ -74,6 +74,7 @@ export function useCybergotchi(): UseCompanionResult {
     const species = getSpecies(bonesRef.current.species);
 
     const tick = setInterval(() => {
+      if (paused) return; // Skip animation tick during streaming
       const cfg = configRef.current;
       if (!cfg) return;
 
