@@ -103,25 +103,24 @@ export function rasterize(
     allContent.push({ role: 'error', content: state.errorText, style: S_ERROR, prefixStyle: S_ERROR, prefix: '✗ ' });
   }
 
-  // Render messages bottom-aligned: compute total rows, then offset
+  // Render messages top-down (scroll up when content exceeds area)
   const prefixLen = 2;
   const textWidth = w - prefixLen;
+
+  // Pre-compute total height to handle scrolling
   let totalRows = 0;
-  const rowCounts: number[] = [];
   for (const item of allContent) {
-    // Add divider row for user messages (except first)
     if (item.role === 'user' && totalRows > 0) totalRows++;
     const lines = item.content.split('\n');
-    let rows = 0;
     for (const line of lines) {
-      rows += Math.max(1, Math.ceil((line.length || 1) / textWidth));
+      totalRows += Math.max(1, Math.ceil((line.length || 1) / textWidth));
     }
-    rowCounts.push(rows);
-    totalRows += rows;
   }
 
-  // Start row: bottom-align within msgAreaHeight
-  let r = Math.max(0, msgAreaHeight - totalRows);
+  // If content exceeds area, scroll: offset so latest content is visible at bottom
+  const scrollOffset = totalRows > msgAreaHeight ? totalRows - msgAreaHeight : 0;
+  let r = 0;
+  let virtualR = 0; // tracks position before scroll clipping
   let contentIdx = 0;
 
   for (const item of allContent) {
@@ -129,11 +128,28 @@ export function rasterize(
 
     // Divider before user messages (except first)
     if (item.role === 'user' && contentIdx > 0) {
-      const divLen = Math.min(60, w);
-      for (let c = 0; c < divLen; c++) {
-        grid.setCell(r, c, '─', S_DIM);
+      if (virtualR >= scrollOffset) {
+        const divLen = Math.min(60, w);
+        for (let c = 0; c < divLen; c++) {
+          grid.setCell(r, c, '─', S_DIM);
+        }
+        r++;
       }
-      r++;
+      virtualR++;
+    }
+
+    // Compute how many rows this content will take
+    const lines = item.content.split('\n');
+    let itemRows = 0;
+    for (const line of lines) {
+      itemRows += Math.max(1, Math.ceil((line.length || 1) / textWidth));
+    }
+
+    if (virtualR + itemRows <= scrollOffset) {
+      // Entirely above viewport — skip
+      virtualR += itemRows;
+      contentIdx++;
+      continue;
     }
 
     // Write prefix
@@ -142,6 +158,7 @@ export function rasterize(
     // Write content word-wrapped
     const rows = grid.writeWrapped(r, prefixLen, item.content, item.style, w);
     r += rows;
+    virtualR += itemRows;
     contentIdx++;
   }
 

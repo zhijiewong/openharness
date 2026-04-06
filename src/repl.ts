@@ -58,6 +58,13 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let historyIndex = -1;
   let vimMode: 'normal' | 'insert' | null = null;
 
+  // Welcome message
+  const pkg = (await import('node:module')).createRequire(import.meta.url)('../package.json') as { version: string };
+  messages = [
+    createInfoMessage(`OpenHarness v${pkg.version} — ${currentModel || 'no model'} (${config.permissionMode})`),
+    ...messages,
+  ];
+
   // Companion
   const companionConfig = loadCompanionConfig();
   if (companionConfig) {
