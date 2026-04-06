@@ -216,7 +216,8 @@ register("model", "Switch model (e.g., /model llama3.2 or /model ollama/llama3.2
   if (model.includes("/")) {
     newProviderName = model.split("/")[0]!;
   } else {
-    newProviderName = guessProviderFromModel(model);
+    // No prefix — assume current session's provider (don't guess)
+    newProviderName = ctx.providerName;
   }
 
   if (newProviderName !== ctx.providerName) {

@@ -69,6 +69,6 @@ function guessProviderFromModel(model: string): string {
   if (model.includes("gpt") || model.startsWith("o3")) return "openai";
   if (model.includes("claude")) return "anthropic";
   if (model.includes("gguf") || model.startsWith("llamacpp")) return "llamacpp";
-  if (model.includes("llama") || model.includes("mistral") || model.includes("phi") || model.includes("qwen")) return "ollama";
+  if (model.includes("llama") || model.includes("mistral") || model.includes("phi") || model.includes("qwen") || model.includes("gemma") || model.includes("deepseek") || model.includes("codestral") || model.includes("starcoder")) return "ollama";
   return "openai"; // default fallback
 }
