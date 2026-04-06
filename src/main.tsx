@@ -28,7 +28,9 @@ import type { PermissionMode } from "./types/permissions.js";
 import type { Message } from "./types/message.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
 
-const VERSION = "0.5.1";
+import { createRequire } from 'node:module';
+const _require = createRequire(import.meta.url);
+const VERSION: string = (_require('../package.json') as { version: string }).version;
 
 const BANNER = `        ___
        /   \\

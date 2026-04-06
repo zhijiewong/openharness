@@ -61,7 +61,7 @@ export class McpServer {
           id,
           result: {
             protocolVersion: '2024-11-05',
-            serverInfo: { name: 'openharness', version: '0.5.1' },
+            serverInfo: { name: 'openharness', version: '0.6.0' },
             capabilities: { tools: { listChanged: false } },
           },
         };
