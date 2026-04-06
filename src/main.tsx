@@ -223,7 +223,9 @@ program
     process.on('exit', () => disconnectMcpClients());
     process.on('SIGINT', () => { disconnectMcpClients(); process.exit(0); });
 
-    // Banner is rendered by the cell renderer as a system message
+    process.stdout.write(BANNER + "\n");
+    process.stdout.write(`\x1b[35mOpenHarness\x1b[0m \x1b[2mv${VERSION}\x1b[0m \x1b[36m${resolvedModel}\x1b[0m \x1b[2m(${effectivePermMode})\x1b[0m\n`);
+    process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
 
     emitHook("sessionStart");
     const emitEnd = () => { emitHook("sessionEnd"); };

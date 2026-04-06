@@ -57,7 +57,6 @@ export class TerminalRenderer {
 
   start(): void {
     this.started = true;
-    clearScreen();
     hideCursor();
 
     // Raw input
