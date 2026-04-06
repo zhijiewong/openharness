@@ -28,7 +28,7 @@ import type { PermissionMode } from "./types/permissions.js";
 import type { Message } from "./types/message.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 const BANNER = `        ___
        /   \\
