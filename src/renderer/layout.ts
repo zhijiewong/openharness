@@ -149,8 +149,15 @@ export function rasterize(
   for (const [, tc] of state.toolCalls) {
     if (r >= msgAreaHeight) break;
     const icon = tc.status === 'running' ? '⏳' : tc.status === 'done' ? '✓' : '✗';
-    grid.writeText(r, 2, `${icon} [${tc.toolName}]`, S_YELLOW);
+    const errorStyle = tc.status === 'error' ? S_ERROR : S_YELLOW;
+    grid.writeText(r, 2, `${icon} ${tc.toolName}`, errorStyle);
     r++;
+    // Show truncated output for completed tools
+    if (tc.output && r < msgAreaHeight) {
+      const outLine = tc.output.split('\n')[0]?.slice(0, w - 6) ?? '';
+      grid.writeText(r, 4, outLine, S_DIM);
+      r++;
+    }
   }
 
   // ── Footer ──

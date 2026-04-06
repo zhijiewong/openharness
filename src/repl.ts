@@ -66,12 +66,21 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     const bones = roll(companionConfig.seed);
     const species = getSpecies(bones.species);
     const eyes = EYE_STYLES[bones.eyeStyle % EYE_STYLES.length] ?? 'o o';
-    const frames = species.frames.idle;
-    const frame = frames[0] ?? [];
-    const lines = frame.map((l: string) => l.replace('{E}', eyes));
+    const idleFrames = species.frames.idle;
     const color = RARITY_COLORS[bones.rarity];
-    const name = `${companionConfig.soul.name} ${RARITY_STARS[bones.rarity]}`;
-    renderer.setCompanion([...lines, name], color);
+    const nameLine = `${companionConfig.soul.name} ${RARITY_STARS[bones.rarity]}`;
+
+    // Render initial frame
+    const frame0 = (idleFrames[0] ?? []).map((l: string) => l.replace('{E}', eyes));
+    renderer.setCompanion([...frame0, nameLine], color);
+
+    // Animate on timer
+    renderer.onAnimation((frameIdx) => {
+      if (loading) return; // pause during streaming
+      const f = idleFrames[frameIdx % idleFrames.length] ?? idleFrames[0] ?? [];
+      const lines = f.map((l: string) => l.replace('{E}', eyes));
+      renderer.setCompanion([...lines, nameLine], color);
+    });
   }
 
   // Update renderer state
@@ -243,10 +252,10 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
     abortController = new AbortController();
     let accumulated = '';
+    const callIdToToolName = new Map<string, string>();
 
     const askUser = (toolName: string, description: string, riskLevel?: string): Promise<boolean> => {
-      // For now, auto-approve in the renderer (permission prompt TODO)
-      return Promise.resolve(true);
+      return renderer.askPermission(toolName, description, riskLevel ?? 'medium');
     };
 
     const queryConfig = {
@@ -285,28 +294,28 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             break;
 
           case 'tool_call_start':
+            callIdToToolName.set(event.callId, event.toolName);
             renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running' });
-            cybergotchiEvents.emit('cybergotchi', { type: 'toolSuccess', toolName: event.toolName });
             break;
 
-          case 'tool_call_end':
+          case 'tool_call_end': {
+            const toolName = callIdToToolName.get(event.callId) ?? event.callId;
             renderer.setToolCall(event.callId, {
-              toolName: event.callId,
+              toolName,
               status: event.isError ? 'error' : 'done',
               output: event.output?.slice(0, 200),
             });
-            if (event.isError) {
-              cybergotchiEvents.emit('cybergotchi', { type: 'toolError' });
-            }
+            cybergotchiEvents.emit('cybergotchi', { type: event.isError ? 'toolError' : 'toolSuccess', toolName });
             // Auto-commit
             if (!event.isError && isGitRepo()) {
-              const hash = autoCommitAIEdits(event.callId, [], process.cwd());
+              const hash = autoCommitAIEdits(toolName, [], process.cwd());
               if (hash) {
                 messages = [...messages, createInfoMessage(`git: committed ${hash}`)];
                 cybergotchiEvents.emit('cybergotchi', { type: 'commit' });
               }
             }
             break;
+          }
 
           case 'cost_update':
             currentModel = event.model;

@@ -24,6 +24,13 @@ export class TerminalRenderer {
   // Callbacks
   private keypressHandler: ((key: KeyEvent) => void) | null = null;
 
+  // Permission prompt state
+  private permissionResolve: ((allowed: boolean) => void) | null = null;
+  permissionPrompt: { toolName: string; description: string; riskLevel: string } | null = null;
+
+  // Animation callback (called every 500ms for companion, etc.)
+  private animationCallback: ((frame: number) => void) | null = null;
+
   constructor() {
     const w = process.stdout.columns ?? 80;
     const h = process.stdout.rows ?? 24;
@@ -55,15 +62,34 @@ export class TerminalRenderer {
 
     // Raw input
     this.stopInput = startRawInput((key) => {
+      // Permission prompt intercepts Y/N
+      if (this.permissionResolve) {
+        const k = key.char.toLowerCase();
+        if (k === 'y') {
+          const resolve = this.permissionResolve;
+          this.permissionResolve = null;
+          this.permissionPrompt = null;
+          this.state.errorText = null;
+          this.scheduleRender();
+          resolve(true);
+        } else if (k === 'n') {
+          const resolve = this.permissionResolve;
+          this.permissionResolve = null;
+          this.permissionPrompt = null;
+          this.state.errorText = null;
+          this.scheduleRender();
+          resolve(false);
+        }
+        return; // Swallow all other keys during permission prompt
+      }
       if (this.keypressHandler) this.keypressHandler(key);
     });
 
     // Animation timer (spinner + companion frames)
     this.animationTimer = setInterval(() => {
-      if (this.state.loading) {
-        this.state.spinnerFrame++;
-        this.scheduleRender();
-      }
+      this.state.spinnerFrame++;
+      if (this.animationCallback) this.animationCallback(this.state.spinnerFrame);
+      if (this.state.loading || this.animationCallback) this.scheduleRender();
     }, 500);
 
     // Terminal resize
@@ -104,10 +130,24 @@ export class TerminalRenderer {
   }
   clearToolCalls(): void { this.state.toolCalls.clear(); this.scheduleRender(); }
 
+  /** Show permission prompt and wait for Y/N response */
+  askPermission(toolName: string, description: string, riskLevel: string): Promise<boolean> {
+    this.permissionPrompt = { toolName, description, riskLevel };
+    this.state.errorText = `⚠ ${toolName} (${riskLevel} risk) — ${description.slice(0, 60)}  [Y/N]`;
+    this.scheduleRender();
+    return new Promise((resolve) => {
+      this.permissionResolve = resolve;
+    });
+  }
+
   // ── Input ──
 
   onKeypress(handler: (key: KeyEvent) => void): void {
     this.keypressHandler = handler;
+  }
+
+  onAnimation(handler: (frame: number) => void): void {
+    this.animationCallback = handler;
   }
 
   // ── Rendering ──
