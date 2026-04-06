@@ -300,7 +300,7 @@ export class AnthropicProvider implements Provider {
     return createAssistantMessage(content, toolCalls.length ? toolCalls : undefined);
   }
 
-  private getModelInfo(id: string): ModelInfo | undefined {
+  getModelInfo(id: string): ModelInfo | undefined {
     return this.listModels().find((m) => m.id === id);
   }
 

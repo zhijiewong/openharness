@@ -21,7 +21,7 @@ export default function Messages({ messages, toolCalls }: MessagesProps) {
         return (
           <React.Fragment key={msg.uuid}>
             {showDivider && (
-              <Text color={theme.dim}>{"─".repeat(60)}</Text>
+              <Text color={theme.dim}>{"─".repeat(Math.min(60, process.stdout.columns ?? 80))}</Text>
             )}
             <MessageRow message={msg} toolCalls={toolCalls} theme={theme} />
           </React.Fragment>

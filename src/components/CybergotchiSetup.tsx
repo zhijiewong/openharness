@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInputLib from 'ink-text-input';
-import type { CybergotchiConfig, HatKey } from '../cybergotchi/types.js';
-import { EYE_STYLES, HAT_ART } from '../cybergotchi/types.js';
+import type { CompanionConfig, HatKey, CompanionBones } from '../cybergotchi/types.js';
+import { EYE_STYLES, HAT_ART, RARITY_COLORS, RARITY_STARS, RARITY_HATS } from '../cybergotchi/types.js';
 import { SPECIES } from '../cybergotchi/species.js';
-import { defaultConfig, saveCybergotchiConfig } from '../cybergotchi/config.js';
+import { createCompanionConfig, saveCompanionConfig } from '../cybergotchi/config.js';
+import { roll, getDefaultSeed } from '../cybergotchi/bones.js';
 import CybergotchiSprite from './CybergotchiSprite.js';
 
 interface Props {
@@ -12,57 +13,46 @@ interface Props {
   onSkip: () => void;
 }
 
-type Step = 'species' | 'name' | 'stats' | 'appearance';
-
-const HAT_KEYS = Object.keys(HAT_ART) as HatKey[];
-const STAT_KEYS = ['DEBUGGING', 'PATIENCE', 'CHAOS', 'WISDOM', 'SNARK'] as const;
+type Step = 'seed' | 'reveal' | 'name' | 'hat';
 
 export default function CybergotchiSetup({ onComplete, onSkip }: Props) {
-  const [step, setStep] = useState<Step>('species');
-  const [speciesIdx, setSpeciesIdx] = useState(0);
+  const [step, setStep] = useState<Step>('seed');
+  const [seed, setSeed] = useState(getDefaultSeed());
   const [name, setName] = useState('');
-  const [statIdx, setStatIdx] = useState(0);
-  const [stats, setStats] = useState({ DEBUGGING: 50, PATIENCE: 50, CHAOS: 50, WISDOM: 50, SNARK: 50 });
   const [hatIdx, setHatIdx] = useState(0);
-  const [eyeIdx, setEyeIdx] = useState(0);
 
-  const selectedSpecies = SPECIES[speciesIdx]!;
-  const previewConfig: CybergotchiConfig = defaultConfig(selectedSpecies.name, name || selectedSpecies.label);
-  previewConfig.stats = stats;
-  previewConfig.hat = HAT_KEYS[hatIdx]!;
-  previewConfig.eyeStyle = eyeIdx;
+  // Compute bones from current seed
+  const bones: CompanionBones = useMemo(() => roll(seed), [seed]);
+  const species = SPECIES.find(s => s.name === bones.species)!;
+  const availableHats = RARITY_HATS[bones.rarity];
+
+  // Build a preview config for the sprite
+  const previewConfig: CompanionConfig = useMemo(() =>
+    createCompanionConfig(seed, name || species.label, '', availableHats[hatIdx] ?? 'none'),
+  [seed, name, species.label, hatIdx, availableHats]);
+
   const previewState = { emotion: 'idle' as const, frame: 0, speech: null, speechTtl: 0 };
 
   useInput((input, key) => {
     if (key.escape) { onSkip(); return; }
 
-    if (step === 'species') {
-      if (key.upArrow) setSpeciesIdx(i => (i - 1 + SPECIES.length) % SPECIES.length);
-      if (key.downArrow) setSpeciesIdx(i => (i + 1) % SPECIES.length);
+    if (step === 'seed') {
+      // Seed is edited via TextInput; Enter advances
+    } else if (step === 'reveal') {
       if (key.return) setStep('name');
-    } else if (step === 'stats') {
-      if (key.upArrow) setStatIdx(i => (i - 1 + STAT_KEYS.length) % STAT_KEYS.length);
-      if (key.downArrow) setStatIdx(i => (i + 1) % STAT_KEYS.length);
-      if (key.leftArrow) {
-        const k = STAT_KEYS[statIdx]!;
-        setStats(s => ({ ...s, [k]: Math.max(0, s[k] - 10) }));
-      }
-      if (key.rightArrow) {
-        const k = STAT_KEYS[statIdx]!;
-        setStats(s => ({ ...s, [k]: Math.min(100, s[k] + 10) }));
-      }
-      if (key.return) setStep('appearance');
-    } else if (step === 'appearance') {
-      if (key.upArrow) setHatIdx(i => (i - 1 + HAT_KEYS.length) % HAT_KEYS.length);
-      if (key.downArrow) setHatIdx(i => (i + 1) % HAT_KEYS.length);
-      if (key.leftArrow) setEyeIdx(i => (i - 1 + EYE_STYLES.length) % EYE_STYLES.length);
-      if (key.rightArrow) setEyeIdx(i => (i + 1) % EYE_STYLES.length);
+    } else if (step === 'name') {
+      // Name is edited via TextInput; Enter advances
+    } else if (step === 'hat') {
+      if (key.upArrow) setHatIdx(i => (i - 1 + availableHats.length) % availableHats.length);
+      if (key.downArrow) setHatIdx(i => (i + 1) % availableHats.length);
       if (key.return) {
-        const cfg = defaultConfig(selectedSpecies.name, name || selectedSpecies.label);
-        cfg.stats = stats;
-        cfg.hat = HAT_KEYS[hatIdx]!;
-        cfg.eyeStyle = eyeIdx;
-        saveCybergotchiConfig(cfg);
+        const cfg = createCompanionConfig(
+          seed,
+          name || species.label,
+          '', // personality — filled by LLM later
+          availableHats[hatIdx] ?? 'none',
+        );
+        saveCompanionConfig(cfg);
         onComplete();
       }
     }
@@ -72,39 +62,52 @@ export default function CybergotchiSetup({ onComplete, onSkip }: Props) {
     <Box flexDirection="row" gap={2}>
       {/* Left: wizard */}
       <Box flexDirection="column" flexGrow={1}>
-        <Text bold color="magenta">◆ Cybergotchi Setup</Text>
+        <Text bold color="magenta">◆ Companion Setup</Text>
         <Text dimColor>Esc to skip</Text>
         <Text>{' '}</Text>
 
-        {step === 'species' && (() => {
-          const WINDOW = 8;
-          const start = Math.max(0, Math.min(speciesIdx - Math.floor(WINDOW / 2), SPECIES.length - WINDOW));
-          const visible = SPECIES.slice(start, start + WINDOW);
-          return (
-            <Box flexDirection="column">
-              <Text bold>Choose your cybergotchi species:</Text>
-              <Text dimColor>↑↓ to browse · Enter to select</Text>
-              <Text>{' '}</Text>
-              {start > 0 && <Text dimColor>  ↑ {start} more</Text>}
-              {visible.map((s, vi) => {
-                const gi = start + vi;
-                return (
-                  <Text key={s.name} color={gi === speciesIdx ? 'cyan' : undefined}>
-                    {gi === speciesIdx ? '▶ ' : '  '}
-                    {s.label.padEnd(12)} <Text dimColor>{s.traitHint}</Text>
-                  </Text>
-                );
-              })}
-              {start + WINDOW < SPECIES.length && (
-                <Text dimColor>  ↓ {SPECIES.length - start - WINDOW} more</Text>
-              )}
+        {step === 'seed' && (
+          <Box flexDirection="column">
+            <Text bold>Enter a seed phrase:</Text>
+            <Text dimColor>This determines your species, rarity, and stats.</Text>
+            <Text dimColor>Same seed = same companion. Press Enter to continue.</Text>
+            <Text>{' '}</Text>
+            <Box>
+              <Text color="cyan">{'❯ '}</Text>
+              <TextInputLib
+                value={seed}
+                onChange={setSeed}
+                onSubmit={() => setStep('reveal')}
+                placeholder={getDefaultSeed()}
+              />
             </Box>
-          );
-        })()}
+          </Box>
+        )}
+
+        {step === 'reveal' && (
+          <Box flexDirection="column">
+            <Text bold>Your companion has been determined!</Text>
+            <Text>{' '}</Text>
+            <Text>Species: <Text color={RARITY_COLORS[bones.rarity]} bold>{species.label}</Text></Text>
+            <Text>Rarity:  <Text color={RARITY_COLORS[bones.rarity]}>{bones.rarity} {RARITY_STARS[bones.rarity]}</Text></Text>
+            {bones.isShiny && <Text color="yellow" bold>✨ SHINY! ✨</Text>}
+            <Text>{' '}</Text>
+            <Text dimColor>Stats:</Text>
+            <Text>  DEBUGGING: {bones.baseStats.DEBUGGING}</Text>
+            <Text>  PATIENCE:  {bones.baseStats.PATIENCE}</Text>
+            <Text>  CHAOS:     {bones.baseStats.CHAOS}</Text>
+            <Text>  WISDOM:    {bones.baseStats.WISDOM}</Text>
+            <Text>  SNARK:     {bones.baseStats.SNARK}</Text>
+            <Text>{' '}</Text>
+            <Text dimColor>{species.traitHint}</Text>
+            <Text>{' '}</Text>
+            <Text dimColor>Press Enter to continue</Text>
+          </Box>
+        )}
 
         {step === 'name' && (
           <Box flexDirection="column">
-            <Text bold>Name your cybergotchi:</Text>
+            <Text bold>Name your companion:</Text>
             <Text dimColor>Enter to continue</Text>
             <Text>{' '}</Text>
             <Box>
@@ -112,46 +115,37 @@ export default function CybergotchiSetup({ onComplete, onSkip }: Props) {
               <TextInputLib
                 value={name}
                 onChange={setName}
-                onSubmit={() => { if (name.trim()) setStep('stats'); }}
-                placeholder={selectedSpecies.label}
+                onSubmit={() => { setStep('hat'); }}
+                placeholder={species.label}
               />
             </Box>
           </Box>
         )}
 
-        {step === 'stats' && (
+        {step === 'hat' && (
           <Box flexDirection="column">
-            <Text bold>Assign personality stats:</Text>
-            <Text dimColor>↑↓ select stat · ←→ adjust · Enter to continue</Text>
+            <Text bold>Choose a hat:</Text>
+            <Text dimColor>↑↓ to browse · Enter to finish</Text>
+            {bones.rarity === 'common' && (
+              <Text dimColor>More hats unlock at higher rarities!</Text>
+            )}
             <Text>{' '}</Text>
-            {STAT_KEYS.map((k, i) => {
-              const val = stats[k];
-              const bar = '█'.repeat(Math.round(val / 10)) + '░'.repeat(10 - Math.round(val / 10));
-              return (
-                <Text key={k} color={i === statIdx ? 'cyan' : undefined}>
-                  {i === statIdx ? '▶ ' : '  '}
-                  {k.padEnd(12)} {bar} {val}
-                </Text>
-              );
-            })}
-          </Box>
-        )}
-
-        {step === 'appearance' && (
-          <Box flexDirection="column">
-            <Text bold>Customize appearance:</Text>
-            <Text dimColor>↑↓ hat · ←→ eyes · Enter to finish</Text>
-            <Text>{' '}</Text>
-            <Text>Hat:  <Text color="cyan">{HAT_KEYS[hatIdx]}</Text></Text>
-            <Text>Eyes: <Text color="cyan">{EYE_STYLES[eyeIdx]}</Text></Text>
+            {availableHats.map((h, i) => (
+              <Text key={h} color={i === hatIdx ? 'cyan' : undefined}>
+                {i === hatIdx ? '▶ ' : '  '}{h}{h !== 'none' && HAT_ART[h] ? ` ${HAT_ART[h]}` : ''}
+              </Text>
+            ))}
           </Box>
         )}
       </Box>
 
       {/* Right: live preview */}
-      <Box flexDirection="column" width={22} borderStyle="single" borderColor="cyan" paddingX={1}>
+      <Box flexDirection="column" width={16} borderStyle="single" borderColor="cyan" paddingX={1}>
         <Text color="cyan" dimColor>Preview</Text>
-        <CybergotchiSprite config={previewConfig} state={previewState} />
+        <CybergotchiSprite bones={bones} config={previewConfig} state={previewState} />
+        <Text color={RARITY_COLORS[bones.rarity]} dimColor>
+          {name || species.label} {RARITY_STARS[bones.rarity]}
+        </Text>
       </Box>
     </Box>
   );

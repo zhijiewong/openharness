@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { CybergotchiConfig, CybergotchiState, Emotion } from './types.js';
-import { loadCybergotchiConfig, saveCybergotchiConfig } from './config.js';
+import type { CompanionConfig, CompanionRuntime, CompanionState, CompanionBones, Emotion } from './types.js';
+import { loadCompanionConfig, saveCompanionConfig } from './config.js';
+import { roll } from './bones.js';
 import { cybergotchiEvents } from './events.js';
 import type { CybergotchiEvent } from './events.js';
 import { getSpeech } from './speech.js';
@@ -12,30 +13,34 @@ const SPEECH_TTL_TICKS = 10;   // 5 seconds
 const IDLE_INTERVAL_TICKS = 120; // 60 seconds
 const SAVE_INTERVAL_TICKS = 60;  // 30 seconds — persist needs decay periodically
 
-interface UseCybergotchiResult {
-  config: CybergotchiConfig | null;
-  state: CybergotchiState;
+interface UseCompanionResult {
+  config: CompanionConfig | null;
+  bones: CompanionBones | null;
+  runtime: CompanionRuntime | null;
+  state: CompanionState;
   isSetupNeeded: boolean;
   reload: () => void;
 }
 
 /** Derive emotion from current needs */
-function emotionFromNeeds(config: CybergotchiConfig): Emotion {
+function emotionFromNeeds(config: CompanionConfig): Emotion {
   const { hunger, energy, happiness } = config.needs;
   if (hunger < 20 || happiness < 20) return 'alarm';
-  if (energy < 20) return 'thinking';
-  if (happiness > 80 && hunger > 60 && energy > 60) return 'cheer';
   if (happiness > 60 && hunger > 50 && energy > 50) return 'happy';
-  if (happiness < 40) return 'snark';
   return 'idle';
 }
 
-export function useCybergotchi(): UseCybergotchiResult {
-  const configRef = useRef<CybergotchiConfig | null>(loadCybergotchiConfig());
-  const [config, setConfigState] = useState<CybergotchiConfig | null>(configRef.current);
+export function useCybergotchi(): UseCompanionResult {
+  const configRef = useRef<CompanionConfig | null>(loadCompanionConfig());
+  const [config, setConfigState] = useState<CompanionConfig | null>(configRef.current);
   const isSetupNeeded = config === null;
 
-  const [state, setState] = useState<CybergotchiState>({
+  // Compute bones from seed (deterministic, recomputed each session)
+  const bonesRef = useRef<CompanionBones | null>(
+    config ? roll(config.seed) : null,
+  );
+
+  const [state, setState] = useState<CompanionState>({
     emotion: 'idle',
     frame: 0,
     speech: null,
@@ -47,8 +52,9 @@ export function useCybergotchi(): UseCybergotchiResult {
   const saveTicksRef = useRef(0);
 
   const reload = useCallback(() => {
-    const cfg = loadCybergotchiConfig();
+    const cfg = loadCompanionConfig();
     configRef.current = cfg;
+    bonesRef.current = cfg ? roll(cfg.seed) : null;
     setConfigState(cfg);
   }, []);
 
@@ -63,9 +69,9 @@ export function useCybergotchi(): UseCybergotchiResult {
 
   // Animation + needs tick
   useEffect(() => {
-    if (!config) return;
+    if (!config || !bonesRef.current) return;
 
-    const species = getSpecies(config.species);
+    const species = getSpecies(bonesRef.current.species);
 
     const tick = setInterval(() => {
       const cfg = configRef.current;
@@ -78,8 +84,12 @@ export function useCybergotchi(): UseCybergotchiResult {
       saveTicksRef.current += 1;
       if (saveTicksRef.current >= SAVE_INTERVAL_TICKS) {
         saveTicksRef.current = 0;
-        saveCybergotchiConfig(cfg);
+        saveCompanionConfig(cfg);
       }
+
+      // Get stats from bones (recomputed deterministically)
+      const bones = bonesRef.current;
+      if (!bones) return;
 
       setState(prev => {
         let { frame, speech, speechTtl } = prev;
@@ -95,9 +105,9 @@ export function useCybergotchi(): UseCybergotchiResult {
         if (speechTtl === 0 && eventQueue.current.length > 0) {
           const event = eventQueue.current.shift()!;
           const milestone = applyEvent(cfg, event.type);
-          saveCybergotchiConfig(cfg);
+          saveCompanionConfig(cfg);
           emotion = emotionFromNeeds(cfg);
-          speech = milestone ?? getSpeech(event.type, cfg.stats, event.toolName);
+          speech = milestone ?? getSpeech(event.type, bones.baseStats, event.toolName);
           speechTtl = SPEECH_TTL_TICKS;
           idleTicksRef.current = 0;
         }
@@ -107,7 +117,7 @@ export function useCybergotchi(): UseCybergotchiResult {
           idleTicksRef.current += 1;
           if (idleTicksRef.current >= IDLE_INTERVAL_TICKS) {
             idleTicksRef.current = 0;
-            speech = getSpeech('idle', cfg.stats);
+            speech = getSpeech('idle', bones.baseStats);
             speechTtl = SPEECH_TTL_TICKS;
           }
         }
@@ -123,5 +133,15 @@ export function useCybergotchi(): UseCybergotchiResult {
     return () => clearInterval(tick);
   }, [config]);
 
-  return { config, state, isSetupNeeded, reload };
+  const runtime: CompanionRuntime | null = config && bonesRef.current ? {
+    bones: bonesRef.current,
+    soul: config.soul,
+    needs: config.needs,
+    needsUpdatedAt: config.needsUpdatedAt,
+    currentStreak: config.currentStreak,
+    lifetime: config.lifetime,
+    evolutionStage: config.evolutionStage,
+  } : null;
+
+  return { config, bones: bonesRef.current, runtime, state, isSetupNeeded, reload };
 }

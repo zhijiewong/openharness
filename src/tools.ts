@@ -26,6 +26,9 @@ import { EnterPlanModeTool } from "./tools/EnterPlanModeTool/index.js";
 import { ExitPlanModeTool } from "./tools/ExitPlanModeTool/index.js";
 import { NotebookEditTool } from "./tools/NotebookEditTool/index.js";
 import { ImageReadTool } from "./tools/ImageReadTool/index.js";
+import { DiagnosticsTool } from "./tools/DiagnosticsTool/index.js";
+import { ParallelAgentTool } from "./tools/ParallelAgentTool/index.js";
+import { ToolSearchTool } from "./tools/ToolSearchTool/index.js";
 
 /**
  * Returns all registered tools.
@@ -56,5 +59,11 @@ export function getAllTools(): Tools {
     ExitPlanModeTool,
     // Notebooks
     NotebookEditTool,
+    // Code Intelligence
+    DiagnosticsTool,
+    // Parallel Agents
+    ParallelAgentTool,
+    // Tool Discovery
+    ToolSearchTool,
   ];
 }

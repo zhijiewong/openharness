@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCybergotchi } from '../cybergotchi/useCybergotchi.js';
-import CybergotchiPanel from './CybergotchiPanel.js';
+import CompanionFooter from './CompanionFooter.js';
 
 /**
  * Self-contained wrapper that owns the useCybergotchi hook.
@@ -8,7 +8,7 @@ import CybergotchiPanel from './CybergotchiPanel.js';
  * preventing the parent REPL from re-rendering on every tick.
  */
 export default function CybergotchiPanelConnected() {
-  const cybergotchi = useCybergotchi();
-  if (!cybergotchi.config) return null;
-  return <CybergotchiPanel config={cybergotchi.config} state={cybergotchi.state} />;
+  const { config, bones, state } = useCybergotchi();
+  if (!config || !bones) return null;
+  return <CompanionFooter bones={bones} config={config} state={state} />;
 }

@@ -23,18 +23,16 @@ import CybergotchiSetup from "./CybergotchiSetup.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
 import { cybergotchiEvents } from "../cybergotchi/events.js";
 
-/** Width of the cybergotchi panel (22 content + 2 border + 2 padding + 1 margin) */
-const PANEL_TOTAL_WIDTH = 27;
-/** Minimum terminal width to show the cybergotchi panel */
-const MIN_WIDTH_FOR_PANEL = 60;
+/** Minimum terminal width to show the companion */
+const MIN_WIDTH_FOR_COMPANION = 40;
 
 function getTerminalWidth(): number {
   return process.stdout.columns ?? 80;
 }
 
+/** Chat gets full terminal width now (no sidebar) */
 function getChatWidth(): number {
-  const tw = getTerminalWidth();
-  return tw >= MIN_WIDTH_FOR_PANEL ? tw - PANEL_TOTAL_WIDTH : tw;
+  return getTerminalWidth();
 }
 
 /** Truncate a string to fit within maxWidth columns */
@@ -91,7 +89,10 @@ function printMessageToStdout(msg: Message, showDivider: boolean): void {
 
   if (out) process.stdout.write(out);
 }
-import { loadCybergotchiConfig, saveCybergotchiConfig } from "../cybergotchi/config.js";
+import { loadCompanionConfig, saveCompanionConfig } from "../cybergotchi/config.js";
+import { detectMemories, saveMemory } from "../harness/memory.js";
+import { resolveMcpMention } from "../mcp/loader.js";
+import { createKeybindingMatcher } from "../harness/keybindings.js";
 
 type REPLProps = {
   provider: Provider;
@@ -150,7 +151,8 @@ export default function REPL({
   const [error, setError] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(model ?? "");
   const [showCybergotchiSetup, setShowCybergotchiSetup] = useState(false);
-  const cybergotchiConfigRef = useRef(loadCybergotchiConfig());
+  const [vimMode, setVimMode] = useState(false);
+  const cybergotchiConfigRef = useRef(loadCompanionConfig());
 
   // Print new finalized messages to stdout (outside Ink's live area) to prevent
   // Ink height miscounting from causing the cybergotchi panel to expand on each tick.
@@ -173,7 +175,7 @@ export default function REPL({
     const cfg = cybergotchiConfigRef.current;
     if (cfg) {
       cfg.lifetime.totalSessions += 1;
-      saveCybergotchiConfig(cfg);
+      saveCompanionConfig(cfg);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -205,10 +207,23 @@ export default function REPL({
     };
   }, [loading]);
 
-  // Ctrl+C during loading aborts the current query
+  // Keybinding matcher + pending action ref
+  const keybindingMatcher = useRef(createKeybindingMatcher()).current;
+  const pendingKeybindAction = useRef<string | null>(null);
+
+  // Ctrl+C during loading aborts; custom keybindings queue actions
   useInput((_input, key) => {
     if (key.ctrl && _input === "c" && loading && abortControllerRef.current) {
       abortControllerRef.current.abort();
+      return;
+    }
+
+    // Custom keybinding check (only when not loading and not in a prompt)
+    if (!loading && !pendingPermission && !pendingQuestion) {
+      const action = keybindingMatcher.match(_input, { ctrl: key.ctrl, meta: key.meta, shift: key.shift });
+      if (action) {
+        pendingKeybindAction.current = action;
+      }
     }
   });
 
@@ -267,10 +282,25 @@ export default function REPL({
         abortSignal: abortController.signal,
       };
 
+      // Resolve @mentions to MCP resource content
+      let resolvedPrompt = prompt;
+      const mentionPattern = /@(\w[\w.-]*)/g;
+      const mentions = [...prompt.matchAll(mentionPattern)].map(m => m[1]!);
+      const companionName = cybergotchiConfigRef.current?.soul?.name?.toLowerCase();
+      for (const mention of mentions) {
+        if (companionName && mention.toLowerCase() === companionName) continue;
+        try {
+          const content = await resolveMcpMention(mention);
+          if (content) {
+            resolvedPrompt += `\n\n[Resource @${mention}]:\n${content.slice(0, 5000)}`;
+          }
+        } catch { /* ignore */ }
+      }
+
       let accumulated = "";
 
       try {
-        for await (const event of query(prompt, config, messagesRef.current)) {
+        for await (const event of query(resolvedPrompt, config, messagesRef.current)) {
           switch (event.type) {
             case "rate_limited":
               setStreamingText(`⏳ Rate limited — retrying in ${event.retryIn}s… (attempt ${event.attempt}/3)`);
@@ -403,6 +433,18 @@ export default function REPL({
         abortControllerRef.current = null;
         setLoading(false);
         setStreamingText("");
+
+        // Auto-memory: detect learnable patterns every 5 turns (async, non-blocking)
+        const msgCount = messagesRef.current.length;
+        if (msgCount > 0 && msgCount % 10 === 0) {
+          detectMemories(provider, messagesRef.current.slice(-10), model)
+            .then(memories => {
+              for (const m of memories) {
+                saveMemory(m.name, m.type, m.description, m.content);
+              }
+            })
+            .catch(() => {/* ignore memory detection errors */});
+        }
       }
     };
 
@@ -421,13 +463,20 @@ export default function REPL({
       {
         const gotchiCfg = cybergotchiConfigRef.current;
         if (gotchiCfg) {
-          const name = gotchiCfg.name.toLowerCase();
+          const name = gotchiCfg.soul.name.toLowerCase();
           const lower = trimmed.toLowerCase();
           if (lower.startsWith(`@${name}`) || lower.startsWith(`${name},`) || lower.startsWith(`${name} `)) {
             cybergotchiEvents.emit('cybergotchi', { type: 'userAddressed', text: trimmed });
             return;
           }
         }
+      }
+
+      // Handle /vim toggle directly
+      if (trimmed === "/vim") {
+        setVimMode(v => !v);
+        setMessages((prev) => [...prev, createInfoMessage(vimMode ? "Vim mode OFF" : "Vim mode ON")]);
+        return;
       }
 
       // Process slash commands
@@ -490,20 +539,29 @@ export default function REPL({
     [exit, currentModel, permissionMode, sessionId],
   );
 
+  // Process pending keybinding actions
+  useEffect(() => {
+    const action = pendingKeybindAction.current;
+    if (action && !loading) {
+      pendingKeybindAction.current = null;
+      handleSubmit(action);
+    }
+  });
+
   // Show cybergotchi setup if needed (first run or /cybergotchi reset)
   if (cybergotchiConfigRef.current === null || showCybergotchiSetup) {
     return (
       <CybergotchiSetup
-        onComplete={() => { cybergotchiConfigRef.current = loadCybergotchiConfig(); setShowCybergotchiSetup(false); }}
-        onSkip={() => { cybergotchiConfigRef.current = loadCybergotchiConfig(); setShowCybergotchiSetup(false); }}
+        onComplete={() => { cybergotchiConfigRef.current = loadCompanionConfig(); setShowCybergotchiSetup(false); }}
+        onSkip={() => { cybergotchiConfigRef.current = loadCompanionConfig(); setShowCybergotchiSetup(false); }}
       />
     );
   }
 
   return (
-    <Box flexDirection="row">
-      {/* Main chat column — capped to prevent overlap with cybergotchi panel */}
-      <Box flexDirection="column" flexGrow={1} width={getChatWidth()}>
+    <Box flexDirection="column">
+      {/* Main chat column — full terminal width (no sidebar) */}
+      <Box flexDirection="column" flexGrow={1}>
 
         {/* Thinking */}
         {thinkingText && (
@@ -563,15 +621,19 @@ export default function REPL({
           </Box>
         )}
 
-        {/* Input */}
-        <Box marginTop={1}>
-          <TextInput onSubmit={handleSubmit} disabled={loading || !!pendingQuestion} />
+        {/* Input + Companion footer */}
+        <Box flexDirection="row" marginTop={1}>
+          <Box flexDirection="column" flexGrow={1}>
+            <TextInput onSubmit={handleSubmit} disabled={loading || !!pendingQuestion} vimMode={vimMode} />
+          </Box>
+          {/* Companion next to input — hidden on narrow terminals */}
+          {getTerminalWidth() >= MIN_WIDTH_FOR_COMPANION && <CybergotchiPanelConnected />}
         </Box>
 
         {/* Keybinding hints */}
         <Text dimColor>
           {"exit to quit"}{loading ? " | Ctrl+C to interrupt" : ""}
-          {cybergotchiConfigRef.current?.name ? ` | @${cybergotchiConfigRef.current!.name} to chat` : ""}
+          {cybergotchiConfigRef.current?.soul?.name ? ` | @${cybergotchiConfigRef.current!.soul.name} to chat` : ""}
         </Text>
 
         {/* Token context warning */}
@@ -586,9 +648,6 @@ export default function REPL({
           );
         })()}
       </Box>
-
-      {/* Cybergotchi side panel — hidden when terminal is too narrow */}
-      {getTerminalWidth() >= MIN_WIDTH_FOR_PANEL && <CybergotchiPanelConnected />}
     </Box>
   );
 }

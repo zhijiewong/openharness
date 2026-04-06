@@ -244,7 +244,7 @@ export class OpenAIProvider implements Provider {
     return createAssistantMessage(content, toolCalls);
   }
 
-  private getModelInfo(id: string): ModelInfo | undefined {
+  getModelInfo(id: string): ModelInfo | undefined {
     return this.listModels().find((m) => m.id === id);
   }
 

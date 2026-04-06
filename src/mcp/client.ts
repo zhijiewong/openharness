@@ -72,6 +72,25 @@ export class McpClient {
     return ((res.result as any)?.tools ?? []) as McpToolDef[];
   }
 
+  async listResources(): Promise<Array<{ uri: string; name: string; description?: string }>> {
+    try {
+      const res = await this.callWithTimeout('resources/list', {});
+      return ((res.result as any)?.resources ?? []) as Array<{ uri: string; name: string; description?: string }>;
+    } catch {
+      return []; // Server may not support resources
+    }
+  }
+
+  async readResource(uri: string): Promise<string> {
+    const res = await this.callWithTimeout('resources/read', { uri });
+    if (res.error) throw new Error(res.error.message);
+    const contents = (res.result as any)?.contents ?? [];
+    return contents
+      .filter((c: any) => c.text)
+      .map((c: any) => c.text as string)
+      .join('\n');
+  }
+
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
     if (this.dead) {
       try {
@@ -81,13 +100,44 @@ export class McpClient {
         throw new Error(`MCP server '${this.name}' died and restart failed`);
       }
     }
-    const res = await this.call('tools/call', { name, arguments: args });
-    if (res.error) throw new Error(res.error.message);
-    const content = (res.result as any)?.content ?? [];
-    return content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text as string)
-      .join('\n');
+
+    // Retry up to 2 times for transient failures
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await this.callWithTimeout('tools/call', { name, arguments: args });
+        if (res.error) throw new Error(res.error.message);
+        const content = (res.result as any)?.content ?? [];
+        return content
+          .filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text as string)
+          .join('\n');
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        // Only retry on timeout or server death — not on application errors
+        if (!lastError.message.includes('timeout') && !lastError.message.includes('exited')) {
+          throw lastError;
+        }
+        if (this.dead && attempt < 2) {
+          try {
+            const fresh = await McpClient.connect(this.cfg, this.timeoutMs);
+            Object.assign(this, { proc: fresh.proc, dead: false, ready: true, nextId: 1, pending: new Map() });
+          } catch {
+            throw new Error(`MCP server '${this.name}' died and restart failed`);
+          }
+        }
+      }
+    }
+    throw lastError ?? new Error(`MCP '${this.name}' call failed after retries`);
+  }
+
+  private callWithTimeout(method: string, params: unknown): Promise<JsonRpcResponse> {
+    return Promise.race([
+      this.call(method, params),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`MCP '${this.name}' call timeout (${this.timeoutMs}ms)`)), this.timeoutMs),
+      ),
+    ]);
   }
 
   private call(method: string, params: unknown): Promise<JsonRpcResponse> {

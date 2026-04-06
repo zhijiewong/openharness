@@ -463,6 +463,168 @@ program
     console.log();
   });
 
+// ── remote ──
+program
+  .command("remote")
+  .description("Start a remote agent server (HTTP + WebSocket for dispatch and channels)")
+  .option("-p, --port <port>", "Port to listen on", "3141")
+  .option("-m, --model <model>", "Model to use")
+  .action(async (opts: Record<string, unknown>) => {
+    const port = parseInt(opts.port as string);
+    const savedConfig = readOhConfig();
+    const { createProvider } = await import("./providers/index.js");
+    const effectiveModel = (opts.model as string | undefined) ?? savedConfig?.model;
+    const overrides: Partial<ProviderConfig> = {};
+    if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
+    if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
+    const { provider, model } = await createProvider(
+      effectiveModel,
+      Object.keys(overrides).length ? overrides : undefined,
+    );
+    const tools = getAllTools();
+    const systemPrompt = buildSystemPrompt();
+
+    const { RemoteServer } = await import("./remote/server.js");
+    const server = new RemoteServer({
+      port,
+      provider,
+      tools,
+      systemPrompt,
+      permissionMode: "trust",
+      model,
+    });
+    await server.start();
+    // Keep alive
+    process.on('SIGINT', () => { server.stop(); process.exit(0); });
+  });
+
+// ── auth ──
+program
+  .command("auth")
+  .description("Manage API key credentials")
+  .argument("<action>", "login | logout | status")
+  .argument("[provider]", "Provider name (anthropic, openai, openrouter)")
+  .action(async (action: string, providerName?: string) => {
+    const { setCredential, deleteCredential, listCredentials, getCredential } = await import("./harness/credentials.js");
+
+    if (action === "status") {
+      const keys = listCredentials();
+      if (keys.length === 0) {
+        console.log("  No stored credentials. API keys come from environment variables or config.yaml.");
+        return;
+      }
+      console.log("\n  Stored credentials:");
+      for (const k of keys) {
+        const val = getCredential(k);
+        console.log(`  ${k}: ${val ? '****' + val.slice(-4) : '(empty)'}`);
+      }
+      console.log();
+      return;
+    }
+
+    if (action === "login") {
+      if (!providerName) { console.error("  Usage: oh auth login <provider>"); process.exit(1); }
+      // Read key from stdin
+      process.stdout.write(`  Enter API key for ${providerName}: `);
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) { chunks.push(chunk as Buffer); break; }
+      const key = Buffer.concat(chunks).toString("utf-8").trim();
+      if (!key) { console.error("  No key provided."); process.exit(1); }
+      setCredential(`${providerName}-api-key`, key);
+      console.log(`  ✓ API key saved securely for ${providerName}`);
+      return;
+    }
+
+    if (action === "logout") {
+      if (!providerName) { console.error("  Usage: oh auth logout <provider>"); process.exit(1); }
+      deleteCredential(`${providerName}-api-key`);
+      console.log(`  ✓ API key removed for ${providerName}`);
+      return;
+    }
+
+    console.error(`  Unknown action: ${action}. Use: login, logout, status`);
+  });
+
+// ── serve (MCP server) ──
+program
+  .command("serve")
+  .description("Run as an MCP server over stdio (other tools can connect to use openHarness tools)")
+  .action(async () => {
+    const { McpServer } = await import("./mcp/server.js");
+    const tools = getAllTools();
+    const context = { workingDir: process.cwd() };
+    const server = new McpServer(tools, context);
+    server.start();
+  });
+
+// ── schedule ──
+program
+  .command("schedule")
+  .description("Run a prompt on a recurring interval (e.g., every 5 minutes)")
+  .argument("<prompt>", "The prompt to execute each interval")
+  .option("-m, --model <model>", "Model to use")
+  .option("--interval <minutes>", "Interval in minutes", "10")
+  .option("--max-runs <n>", "Maximum number of runs (0 = unlimited)", "0")
+  .option("--json", "Output as JSON")
+  .action(async (prompt: string, opts: Record<string, unknown>) => {
+    const intervalMs = parseInt(opts.interval as string) * 60_000;
+    const maxRuns = parseInt(opts.maxRuns as string);
+    let runCount = 0;
+
+    const savedConfig = readOhConfig();
+    const { createProvider } = await import("./providers/index.js");
+    const effectiveModel = (opts.model as string | undefined) ?? savedConfig?.model;
+    const overrides: Partial<ProviderConfig> = {};
+    if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
+    if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
+    const { provider, model } = await createProvider(
+      effectiveModel,
+      Object.keys(overrides).length ? overrides : undefined,
+    );
+    const { query: runQuery } = await import("./query.js");
+    const tools = getAllTools();
+    const systemPrompt = buildSystemPrompt();
+
+    const runOnce = async () => {
+      runCount++;
+      const timestamp = new Date().toISOString();
+      process.stderr.write(`\n[schedule] Run #${runCount} at ${timestamp}\n`);
+
+      const config = {
+        provider,
+        tools,
+        systemPrompt,
+        permissionMode: "trust" as PermissionMode,
+        maxTurns: 20,
+        model,
+      };
+
+      let output = "";
+      for await (const event of runQuery(prompt, config)) {
+        if (event.type === "text_delta") {
+          output += event.content;
+          if (!opts.json) process.stdout.write(event.content);
+        } else if (event.type === "error") {
+          process.stderr.write(`[error] ${event.message}\n`);
+        }
+      }
+      if (!opts.json) process.stdout.write("\n");
+      if (opts.json) {
+        console.log(JSON.stringify({ run: runCount, timestamp, output }));
+      }
+
+      if (maxRuns > 0 && runCount >= maxRuns) {
+        process.stderr.write(`[schedule] Completed ${maxRuns} runs. Exiting.\n`);
+        process.exit(0);
+      }
+    };
+
+    // Run immediately, then on interval
+    await runOnce();
+    setInterval(() => { runOnce().catch(e => process.stderr.write(`[schedule] Error: ${e}\n`)); }, intervalMs);
+    process.stderr.write(`[schedule] Running every ${opts.interval} minutes. Ctrl+C to stop.\n`);
+  });
+
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exitCode = 1;

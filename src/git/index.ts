@@ -4,6 +4,7 @@
  */
 
 import { execSync, spawnSync } from "node:child_process";
+import { join } from "node:path";
 
 /**
  * Check if we're in a git repository.
@@ -149,6 +150,35 @@ export function gitLog(count: number = 5, cwd?: string): string {
     return execSync(`git log --oneline -${count}`, { cwd, stdio: "pipe" }).toString().trim();
   } catch {
     return "";
+  }
+}
+
+/**
+ * Create an isolated git worktree for a sub-agent.
+ * Returns the worktree path, or null if not in a git repo.
+ */
+export function createWorktree(cwd?: string): string | null {
+  if (!isGitRepo(cwd)) return null;
+  try {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const worktreePath = join(cwd ?? process.cwd(), '..', `.oh-worktree-${id}`);
+    const branch = `oh-agent-${id}`;
+    // Create a detached worktree from HEAD
+    execSync(`git worktree add --detach "${worktreePath}"`, { cwd, stdio: 'pipe' });
+    return worktreePath;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove a git worktree and clean up.
+ */
+export function removeWorktree(worktreePath: string, cwd?: string): void {
+  try {
+    execSync(`git worktree remove --force "${worktreePath}"`, { cwd, stdio: 'pipe' });
+  } catch {
+    // Best effort cleanup
   }
 }
 

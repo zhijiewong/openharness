@@ -21,6 +21,7 @@ import {
 import type { AskUserFn, PermissionMode } from "./types/permissions.js";
 import { checkPermission } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
+import { defaultEstimateTokens } from "./providers/base.js";
 import { StreamingToolExecutor } from "./services/StreamingToolExecutor.js";
 import { getContextWindow } from "./harness/cost.js";
 import { emitHook } from "./harness/hooks.js";
@@ -61,7 +62,6 @@ type QueryLoopState = {
 const DEFAULT_MAX_TURNS = 50;
 const MAX_CONSECUTIVE_ERRORS = 3;
 const MAX_TOOL_RESULT_CHARS = 100_000; // 100KB cap per tool result
-const CHARS_PER_TOKEN = 4; // rough estimation
 const MAX_RATE_LIMIT_RETRIES = 3;
 
 function isRateLimitError(err: Error): boolean {
@@ -87,9 +87,19 @@ export async function* query(
     permissionMode: config.permissionMode,
     askUserQuestion: config.askUserQuestion,
   };
-  const toolPrompts = config.tools.map((t) => t.prompt()).join("\n\n");
-  const fullSystemPrompt = config.systemPrompt + "\n\n# Available Tools\n\n" + toolPrompts;
-  const apiTools = config.tools.map(toolToAPIFormat);
+  const estimateTokens = makeTokenEstimator(config.provider);
+
+  // Check provider capabilities — skip tools if model doesn't support them
+  const modelInfo = config.provider.getModelInfo?.(config.model ?? '');
+  const toolsSupported = !modelInfo || modelInfo.supportsTools;
+  const apiTools = toolsSupported ? config.tools.map(toolToAPIFormat) : undefined;
+
+  const toolPrompts = toolsSupported
+    ? config.tools.map((t) => t.prompt()).join("\n\n")
+    : "";
+  const fullSystemPrompt = toolPrompts
+    ? config.systemPrompt + "\n\n# Available Tools\n\n" + toolPrompts
+    : config.systemPrompt;
 
   const state: QueryLoopState = {
     messages: [...existingMessages, createUserMessage(userMessage)],
@@ -118,10 +128,24 @@ export async function* query(
     }
 
     // Context window management — compress if needed
-    const estimatedTokens = estimateMessagesTokens(state.messages);
+    const estimatedTokens = estimateMessagesTokens(state.messages, estimateTokens);
     const contextWindow = getContextWindow(config.model);
     if (estimatedTokens > contextWindow * 0.8) {
+      // Phase 1: Basic compression (truncate old tool results, drop oldest messages)
       state.messages = compressMessages(state.messages, Math.floor(contextWindow * 0.6));
+
+      // Phase 2: If still over 70%, try LLM-assisted summarization
+      const afterBasic = estimateMessagesTokens(state.messages, estimateTokens);
+      if (afterBasic > contextWindow * 0.7 && state.messages.length > 4) {
+        try {
+          state.messages = await summarizeConversation(
+            config.provider, state.messages, config.model, Math.floor(contextWindow * 0.5),
+          );
+          yield { type: "error", message: "Context compressed with LLM summarization." };
+        } catch {
+          // Summarization failed — continue with basic compression
+        }
+      }
     }
 
     // ── LLM Call with error recovery ──
@@ -131,7 +155,7 @@ export async function* query(
 
     // Streaming tool executor — tools start during LLM streaming
     const streamingExecutor = new StreamingToolExecutor(
-      config.tools, toolContext, config.permissionMode, config.askUser,
+      config.tools, toolContext, config.permissionMode, config.askUser, config.abortSignal,
     );
 
     try {
@@ -424,11 +448,16 @@ function partitionToolCalls(toolCalls: ToolCall[], tools: Tools): Batch[] {
   return batches;
 }
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+function makeTokenEstimator(provider: Provider): (text: string) => number {
+  if (provider.estimateTokens) return provider.estimateTokens.bind(provider);
+  return (text: string) => defaultEstimateTokens(text, provider.name);
 }
 
-function estimateMessagesTokens(messages: Message[]): number {
+function defaultTokenEstimate(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+function estimateMessagesTokens(messages: Message[], estimateTokens: (text: string) => number = defaultTokenEstimate): number {
   return messages.reduce((sum, m) => {
     let tokens = estimateTokens(m.content) + 10;
     // Include tool call arguments and results in estimate
@@ -453,20 +482,37 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
   const result = [...messages];
   const keepLast = 10;
 
-  // Phase 1: Truncate old tool results (keep last N)
+  // MicroCompact: Aggressively truncate long tool results in-place (>500 chars → first 200 + ... + last 100)
+  for (let i = 0; i < result.length - keepLast; i++) {
+    if (result[i]!.meta?.pinned) continue;
+    if (result[i]!.role === "tool" && result[i]!.content.length > 500) {
+      const c = result[i]!.content;
+      result[i] = { ...result[i]!, content: c.slice(0, 200) + "\n...[truncated]...\n" + c.slice(-100) };
+    }
+    // Also truncate long assistant messages
+    if (result[i]!.role === "assistant" && result[i]!.content.length > 2000) {
+      const c = result[i]!.content;
+      result[i] = { ...result[i]!, content: c.slice(0, 500) + "\n...[truncated]...\n" + c.slice(-200) };
+    }
+  }
+
+  // AutoCompact Phase 1: Replace old tool results with stub (keep last N, skip pinned)
   let toolResultCount = 0;
   for (let i = result.length - 1; i >= 0; i--) {
+    if (result[i]!.meta?.pinned) continue;
     if (result[i]!.role === "tool") toolResultCount++;
     if (result[i]!.role === "tool" && toolResultCount > keepLast) {
       result[i] = { ...result[i]!, content: "[previous tool result truncated]" };
     }
   }
 
-  // Phase 2: If still over, drop oldest non-system messages
+  // AutoCompact Phase 2: Drop oldest non-system, non-pinned messages
   while (estimateMessagesTokens(result) > targetTokens && result.length > keepLast + 1) {
-    const firstNonSystem = result.findIndex((m) => m.role !== "system");
-    if (firstNonSystem === -1 || firstNonSystem >= result.length - keepLast) break;
-    result.splice(firstNonSystem, 1);
+    const firstDroppable = result.findIndex((m) =>
+      m.role !== "system" && !m.meta?.pinned
+    );
+    if (firstDroppable === -1 || firstDroppable >= result.length - keepLast) break;
+    result.splice(firstDroppable, 1);
   }
 
   // Phase 3: Remove orphaned tool results — tool msgs with no preceding
@@ -483,6 +529,59 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
     return (msg.toolResults?.length ?? 0) > 0 &&
            msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
   });
+}
+
+/**
+ * Use the active LLM to summarize older conversation messages,
+ * preserving the most recent messages verbatim and replacing older
+ * ones with a summary.
+ */
+async function summarizeConversation(
+  provider: Provider,
+  messages: Message[],
+  model: string | undefined,
+  targetTokens: number,
+): Promise<Message[]> {
+  const keepRecent = Math.min(6, messages.length - 1);
+  const older = messages.slice(0, messages.length - keepRecent);
+  const recent = messages.slice(messages.length - keepRecent);
+
+  if (older.length < 2) return messages;
+
+  // Extract pinned messages — these survive summarization
+  const pinned = older.filter(m => m.meta?.pinned);
+  const summarizable = older.filter(m => !m.meta?.pinned);
+
+  if (summarizable.length < 2) return messages;
+
+  // Build a text representation of older messages for summarization
+  const olderText = summarizable.map(m => {
+    const prefix = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System';
+    let text = `${prefix}: ${m.content.slice(0, 500)}`;
+    if (m.toolCalls?.length) {
+      text += `\n  [Used tools: ${m.toolCalls.map(tc => tc.toolName).join(', ')}]`;
+    }
+    return text;
+  }).join('\n\n');
+
+  const summaryPrompt = `Summarize this conversation history in 2-4 sentences, preserving key decisions, file paths mentioned, and what was accomplished:\n\n${olderText.slice(0, 3000)}`;
+
+  const summaryResponse = await provider.complete(
+    [createUserMessage(summaryPrompt)],
+    'You are a conversation summarizer. Be concise and factual. Preserve important details like file paths and decisions.',
+    undefined,
+    model,
+  );
+
+  const summaryMessage: Message = {
+    role: 'system',
+    content: `[Conversation summary: ${summaryResponse.content}]`,
+    uuid: `summary-${Date.now()}`,
+    timestamp: Date.now(),
+    meta: { isInfo: true },
+  };
+
+  return [...pinned, summaryMessage, ...recent];
 }
 
 export type { QueryLoopState };

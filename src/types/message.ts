@@ -24,7 +24,7 @@ export type Message = {
   readonly uuid: string;
   readonly timestamp: number;
   /** Optional display hints — not sent to LLM */
-  readonly meta?: { isInfo?: boolean };
+  readonly meta?: { isInfo?: boolean; pinned?: boolean };
 };
 
 export function createMessage(
@@ -43,6 +43,10 @@ export function createMessage(
 
 export function createInfoMessage(content: string): Message {
   return createMessage("system", content, { meta: { isInfo: true } });
+}
+
+export function createPinnedMessage(content: string): Message {
+  return createMessage("system", content, { meta: { isInfo: true, pinned: true } });
 }
 
 export function createUserMessage(content: string): Message {

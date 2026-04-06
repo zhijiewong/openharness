@@ -1,6 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../utils/theme.js";
+import DiffView from "./DiffView.js";
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 type Props = {
   toolName: string;
@@ -9,6 +14,37 @@ type Props = {
   onResolve: (allowed: boolean) => void;
 };
 
+/** Try to parse file path and content from tool args for diff display */
+function extractFileInfo(toolName: string, description: string): {
+  filePath?: string;
+  oldContent?: string;
+  newContent?: string;
+  oldString?: string;
+  newString?: string;
+} | null {
+  try {
+    const args = JSON.parse(description);
+    const name = toolName.toLowerCase();
+
+    if (name.includes('write') && args.file_path && args.content) {
+      const old = existsSync(args.file_path) ? readFileSync(args.file_path, 'utf-8') : '';
+      return { filePath: args.file_path, oldContent: old, newContent: args.content };
+    }
+
+    if (name.includes('edit') && args.file_path && args.old_string && args.new_string) {
+      if (existsSync(args.file_path)) {
+        const old = readFileSync(args.file_path, 'utf-8');
+        const newContent = old.replace(args.old_string, args.new_string);
+        return { filePath: args.file_path, oldContent: old, newContent, oldString: args.old_string, newString: args.new_string };
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PermissionPrompt({
   toolName,
   description,
@@ -16,11 +52,28 @@ export default function PermissionPrompt({
   onResolve,
 }: Props) {
   const theme = useTheme();
+  const [showDiff, setShowDiff] = useState(false);
+
+  const fileInfo = extractFileInfo(toolName, description);
+  const hasDiff = fileInfo !== null && fileInfo.oldContent !== undefined && fileInfo.newContent !== undefined;
 
   useInput((input) => {
     const key = input.toLowerCase();
     if (key === "y") onResolve(true);
     if (key === "n") onResolve(false);
+    if (key === "d" && hasDiff) setShowDiff(prev => !prev);
+    if (key === "e" && hasDiff && fileInfo?.newContent) {
+      // Open new content in $EDITOR
+      const editor = process.env.EDITOR || process.env.VISUAL || 'vi';
+      const tmpFile = join(tmpdir(), `oh-edit-${Date.now()}.tmp`);
+      try {
+        writeFileSync(tmpFile, fileInfo.newContent);
+        execSync(`${editor} "${tmpFile}"`, { stdio: 'inherit' });
+        // User may have modified — we can't easily integrate the edit back into the tool call
+        // Just show a message
+        unlinkSync(tmpFile);
+      } catch { /* ignore */ }
+    }
   });
 
   const borderColor =
@@ -30,7 +83,6 @@ export default function PermissionPrompt({
         ? theme.warning
         : theme.success;
 
-  // Extract contextual info from description
   const suggestion = extractSuggestion(toolName, description);
 
   return (
@@ -56,14 +108,32 @@ export default function PermissionPrompt({
         </Box>
       )}
 
-      <Box marginLeft={2} marginY={0}>
-        <Text>{description.slice(0, 300)}</Text>
-      </Box>
+      {!showDiff && (
+        <Box marginLeft={2} marginY={0}>
+          <Text>{description.slice(0, 300)}</Text>
+        </Box>
+      )}
+
+      {showDiff && hasDiff && (
+        <Box marginLeft={2} marginY={0}>
+          <DiffView
+            oldContent={fileInfo!.oldContent!}
+            newContent={fileInfo!.newContent!}
+            filePath={fileInfo!.filePath ?? ''}
+          />
+        </Box>
+      )}
 
       <Box marginTop={0}>
         <Text>
-          Allow? [<Text color={theme.success} bold>Y</Text>/
-          <Text color={theme.error} bold>N</Text>]{" "}
+          [<Text color={theme.success} bold>Y</Text>]es{" "}
+          [<Text color={theme.error} bold>N</Text>]o
+          {hasDiff && (
+            <>
+              {" "}[<Text color="cyan" bold>D</Text>]iff
+              {" "}[<Text color="yellow" bold>E</Text>]dit
+            </>
+          )}
         </Text>
       </Box>
     </Box>
@@ -74,14 +144,21 @@ function extractSuggestion(toolName: string, description: string): string | null
   const lower = toolName.toLowerCase();
 
   if (lower === "bash" || lower === "shell" || lower === "execute") {
-    // Try to extract the command
     const cmdMatch = description.match(/command[:\s]+["`]?(.+?)["`]?(?:\n|$)/i);
     if (cmdMatch) return `$ ${cmdMatch[1]}`;
   }
 
-  if (lower === "read" || lower === "write" || lower === "edit") {
-    const pathMatch = description.match(/(?:path|file)[:\s]+["`]?([^\s"`]+)/i);
-    if (pathMatch) return `${lower === "read" ? "reading" : lower === "write" ? "writing" : "editing"} ${pathMatch[1]}`;
+  if (lower.includes("read") || lower.includes("write") || lower.includes("edit")) {
+    try {
+      const args = JSON.parse(description);
+      if (args.file_path) {
+        const action = lower.includes("read") ? "reading" : lower.includes("write") ? "writing" : "editing";
+        return `${action} ${args.file_path}`;
+      }
+    } catch {
+      const pathMatch = description.match(/(?:path|file)[:\s]+["`]?([^\s"`]+)/i);
+      if (pathMatch) return `${lower.includes("read") ? "reading" : lower.includes("write") ? "writing" : "editing"} ${pathMatch[1]}`;
+    }
   }
 
   return null;

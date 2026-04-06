@@ -1,12 +1,14 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { CybergotchiConfig, CybergotchiState } from '../cybergotchi/types.js';
+import type { CompanionBones, CompanionConfig, CompanionState } from '../cybergotchi/types.js';
+import { RARITY_COLORS, RARITY_STARS } from '../cybergotchi/types.js';
 import CybergotchiSprite from './CybergotchiSprite.js';
 import CybergotchiBubble from './CybergotchiBubble.js';
 
 interface Props {
-  config: CybergotchiConfig;
-  state: CybergotchiState;
+  bones: CompanionBones;
+  config: CompanionConfig;
+  state: CompanionState;
 }
 
 function NeedsBar({ icon, value }: { icon: string; value: number }) {
@@ -22,24 +24,26 @@ function NeedsBar({ icon, value }: { icon: string; value: number }) {
   );
 }
 
-export default function CybergotchiPanel({ config, state }: Props) {
+export default function CybergotchiPanel({ bones, config, state }: Props) {
   const streak = config.currentStreak;
+  const rarityColor = RARITY_COLORS[bones.rarity];
   return (
     <Box
       flexDirection="column"
       width={22}
       marginLeft={1}
       borderStyle="single"
-      borderColor="cyan"
+      borderColor={rarityColor}
       paddingX={1}
     >
-      <Text color={config.evolutionStage === 2 ? 'yellow' : config.evolutionStage === 1 ? 'magenta' : 'cyan'} dimColor>
-        {config.evolutionStage === 2 ? '★ ' : config.evolutionStage === 1 ? '✦ ' : ''}{config.name}
+      <Text color={rarityColor} dimColor>
+        {config.evolutionStage === 2 ? '★ ' : config.evolutionStage === 1 ? '✦ ' : ''}
+        {config.soul.name} {RARITY_STARS[bones.rarity]}
       </Text>
       {state.speech && (
-        <CybergotchiBubble speech={state.speech} name={config.name} />
+        <CybergotchiBubble speech={state.speech} name={config.soul.name} />
       )}
-      <CybergotchiSprite config={config} state={state} />
+      <CybergotchiSprite bones={bones} config={config} state={state} />
       <Box flexDirection="column" marginTop={1}>
         <NeedsBar icon="🍖" value={config.needs.hunger} />
         <NeedsBar icon="⚡" value={config.needs.energy} />

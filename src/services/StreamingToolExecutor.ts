@@ -31,6 +31,7 @@ export class StreamingToolExecutor {
     private context: ToolContext,
     private permissionMode: PermissionMode,
     private askUser?: AskUserFn,
+    private abortSignal?: AbortSignal,
   ) {}
 
   addTool(toolCall: ToolCall): void {
@@ -100,11 +101,19 @@ export class StreamingToolExecutor {
       return;
     }
 
-    // Execute with per-call context (streaming output chunks)
+    // Check abort before executing
+    if (this.abortSignal?.aborted) {
+      tracked.result = { output: "Aborted.", isError: true };
+      tracked.status = "completed";
+      return;
+    }
+
+    // Execute with per-call context (streaming output chunks + abort signal)
     const callId = tracked.toolCall.id;
     const callContext: ToolContext = {
       ...this.context,
       callId,
+      abortSignal: this.abortSignal,
       onOutputChunk: (id, chunk) => { this.outputChunks.push({ callId: id, chunk }); },
     };
     try {

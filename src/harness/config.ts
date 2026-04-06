@@ -28,6 +28,11 @@ export type HooksConfig = {
   postToolUse?: HookDef[];
 };
 
+export type ToolPermissionRule = {
+  tool: string;       // tool name or glob pattern (e.g. "Bash", "File*")
+  action: "allow" | "deny" | "ask";
+};
+
 export type OhConfig = {
   provider: string;
   model: string;
@@ -36,6 +41,7 @@ export type OhConfig = {
   baseUrl?: string;
   mcpServers?: McpServerConfig[];
   hooks?: HooksConfig;
+  toolPermissions?: ToolPermissionRule[];
 };
 
 function yamlScalar(value: string): string {

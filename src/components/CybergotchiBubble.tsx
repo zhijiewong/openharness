@@ -4,9 +4,8 @@ import { Box, Text } from 'ink';
 interface Props {
   speech: string;
   name: string;
+  maxWidth?: number;
 }
-
-const MAX_WIDTH = 18;
 
 function wrapText(text: string, width: number): string[] {
   const words = text.split(' ');
@@ -24,9 +23,9 @@ function wrapText(text: string, width: number): string[] {
   return lines;
 }
 
-export default function CybergotchiBubble({ speech, name }: Props) {
-  const lines = wrapText(speech, MAX_WIDTH);
-  const boxWidth = Math.min(MAX_WIDTH, Math.max(...lines.map(l => l.length)));
+export default function CybergotchiBubble({ speech, name, maxWidth = 18 }: Props) {
+  const lines = wrapText(speech, maxWidth);
+  const boxWidth = Math.min(maxWidth, Math.max(...lines.map(l => l.length)));
 
   return (
     <Box flexDirection="column">
@@ -36,7 +35,6 @@ export default function CybergotchiBubble({ speech, name }: Props) {
         <Text key={i} color="white">{'│ '}{line.padEnd(boxWidth)}{' │'}</Text>
       ))}
       <Text color="white">{'╰' + '─'.repeat(boxWidth + 2) + '╯'}</Text>
-      <Text color="white" dimColor>{'    │'}</Text>
     </Box>
   );
 }

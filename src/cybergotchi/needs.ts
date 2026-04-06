@@ -1,4 +1,4 @@
-import type { CybergotchiConfig, Needs } from './types.js';
+import type { CompanionConfig, Needs } from './types.js';
 import type { CybergotchiEventType } from './events.js';
 
 // Decay rates per hour
@@ -23,7 +23,7 @@ function clamp(val: number): number {
 }
 
 /** Apply time-based decay since needsUpdatedAt. Mutates config.needs in place. */
-export function decayNeeds(config: CybergotchiConfig): void {
+export function decayNeeds(config: CompanionConfig): void {
   const now = Date.now();
   const elapsedHours = (now - config.needsUpdatedAt) / 3_600_000;
   if (elapsedHours < 0.001) return; // skip tiny ticks
@@ -35,7 +35,7 @@ export function decayNeeds(config: CybergotchiConfig): void {
 }
 
 /** Apply an instant delta to a specific need. */
-export function adjustNeed(config: CybergotchiConfig, need: keyof Needs, delta: number): void {
+export function adjustNeed(config: CompanionConfig, need: keyof Needs, delta: number): void {
   config.needs[need] = clamp(config.needs[need] + delta);
   config.needsUpdatedAt = Date.now();
 }
@@ -44,7 +44,7 @@ const STREAK_MILESTONES = [5, 10, 25, 50];
 
 /** Apply the effect of a session event on needs + lifetime stats.
  *  Returns a milestone speech string if a streak milestone was hit, else null. */
-export function applyEvent(config: CybergotchiConfig, type: CybergotchiEventType): string | null {
+export function applyEvent(config: CompanionConfig, type: CybergotchiEventType): string | null {
   const effects = EVENT_EFFECTS[type];
   if (effects) {
     for (const [key, delta] of Object.entries(effects) as [keyof Needs, number][]) {
