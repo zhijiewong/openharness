@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 (2026-04-06)
+
+### Fixed
+- Cybergotchi panel overlapping chat text — stdout messages and Ink left column capped to `terminalWidth - panelWidth`; panel auto-hides on narrow terminals (#20)
+- Duplicate thinking block in REPL JSX
+
 ## 0.5.0 (2026-04-06)
 
 ### Added
