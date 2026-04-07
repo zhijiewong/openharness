@@ -108,7 +108,7 @@ export function rasterize(
   const contextWarningHeight = state.contextWarning ? 1 : 0;
   const autocompleteHeight = state.autocomplete.length;
   const footerHeight = Math.max(3 + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
-  const msgAreaHeight = h - footerHeight;
+  const msgAreaHeight = Math.max(1, h - footerHeight);
 
   // ── Session browser overlay ──
   if (state.sessionBrowser) {
