@@ -421,7 +421,7 @@ function parseTableRow(line: string): string[] {
 // ── Syntax highlighting ──
 
 // Languages that should get keyword/string/comment coloring
-const HIGHLIGHT_LANGS = new Set([
+export const HIGHLIGHT_LANGS = new Set([
   'js', 'javascript', 'ts', 'typescript', 'jsx', 'tsx',
   'py', 'python', 'rb', 'ruby', 'rs', 'rust', 'go', 'golang',
   'java', 'c', 'cpp', 'c++', 'cs', 'csharp', 'swift', 'kotlin',
@@ -453,7 +453,7 @@ const TYPE_KEYWORDS = new Set([
 ]);
 
 /** Render a line of code with basic syntax highlighting */
-function renderHighlightedCode(
+export function renderHighlightedCode(
   grid: CellGrid,
   row: number,
   col: number,

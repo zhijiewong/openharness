@@ -8,6 +8,7 @@ import type { CellGrid } from './cells.js';
 import { computeDiff, filterWithContext } from '../utils/diff-algorithm.js';
 import { getTheme } from '../utils/theme-data.js';
 import { existsSync, readFileSync } from 'node:fs';
+import { HIGHLIGHT_LANGS, renderHighlightedCode } from './markdown.js';
 
 const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
@@ -128,8 +129,15 @@ export function renderDiff(
 
     const prefix = d.type === 'add' ? '+ ' : d.type === 'remove' ? '- ' : '  ';
     const style = d.type === 'add' ? S_ADD : d.type === 'remove' ? S_REMOVE : S_CONTEXT;
-    const lineText = (prefix + d.line).slice(0, maxCol);
-    grid.writeText(r, col, lineText, style);
+    grid.writeText(r, col, prefix, style);
+    // Apply syntax highlighting to the code content
+    const ext = diffInfo.filePath.split('.').pop()?.toLowerCase() ?? '';
+    const lang = ext === 'tsx' ? 'tsx' : ext === 'ts' ? 'ts' : ext === 'js' ? 'js' : ext === 'py' ? 'py' : ext;
+    if (HIGHLIGHT_LANGS.has(lang)) {
+      renderHighlightedCode(grid, r, col + 2, d.line.slice(0, maxCol - 2), lang);
+    } else {
+      grid.writeText(r, col + 2, d.line.slice(0, maxCol - 2), style);
+    }
     r++;
   }
 
