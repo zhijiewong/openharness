@@ -45,7 +45,8 @@ export type LayoutState = {
   permissionDiffInfo: import('./diff.js').DiffInfo | null;
   expandedToolCalls: Set<string>;
   questionPrompt: { question: string; options: string[] | null; input: string; cursor: number } | null;
-  autocomplete: string[]; // slash command suggestions
+  autocomplete: string[]; // slash command name suggestions
+  autocompleteDescriptions: string[]; // matching descriptions
   autocompleteIndex: number; // -1 = none selected
   manualScroll: number; // 0 = auto-scroll to bottom, >0 = scrolled up by N rows
   codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
@@ -557,11 +558,13 @@ export function rasterize(
   if (state.autocomplete.length > 0) {
     for (let ai = 0; ai < state.autocomplete.length; ai++) {
       const cmd = state.autocomplete[ai]!;
+      const desc = state.autocompleteDescriptions[ai] ?? '';
       const selected = ai === state.autocompleteIndex;
       const acStyle = selected
         ? s(getTheme().user, true)
         : s(null, false, true);
-      grid.writeText(nextRow, 2, `/${cmd}`, acStyle);
+      grid.writeText(nextRow, 2, `/${cmd.padEnd(12)}`, acStyle);
+      if (desc) grid.writeText(nextRow, 15, desc.slice(0, w - 17), S_DIM);
       nextRow++;
     }
   }

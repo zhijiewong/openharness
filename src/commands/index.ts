@@ -64,7 +64,7 @@ register("help", "Show available commands", () => {
     'Session': ['clear', 'compact', 'export', 'history', 'browse', 'resume', 'fork'],
     'Git': ['diff', 'undo', 'commit', 'log'],
     'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory'],
-    'Settings': ['theme', 'vim'],
+    'Settings': ['theme', 'vim', 'companion'],
     'AI': ['plan', 'review'],
     'Pet': ['cybergotchi'],
   };
@@ -364,6 +364,13 @@ register("memory", "View and search memories in .oh/memory/", (args) => {
   return { output: lines.join("\n"), handled: true };
 });
 
+register("companion", "Toggle companion visibility (off/on)", (args) => {
+  const arg = args.trim().toLowerCase();
+  if (arg === 'off') return { output: '__COMPANION_OFF__', handled: true };
+  if (arg === 'on') return { output: '__COMPANION_ON__', handled: true };
+  return { output: 'Usage: /companion off or /companion on', handled: true };
+});
+
 register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · status · rename · reset", (args) => {
   return handleCybergotchiCommand(args);
 });
@@ -407,7 +414,12 @@ export function processSlashCommand(input: string, context: CommandContext): Com
   const name = (spaceIdx === -1 ? trimmed.slice(1) : trimmed.slice(1, spaceIdx)).toLowerCase();
   const args = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1);
 
-  const cmd = commands.get(name);
+  // Resolve aliases
+  const aliases: Record<string, string> = {
+    h: 'help', c: 'commit', m: 'model', s: 'status',
+  };
+  const resolved = aliases[name] ?? name;
+  const cmd = commands.get(resolved);
   if (!cmd) {
     return {
       output: `Unknown command: /${name}. Type /help for available commands.`,
@@ -423,4 +435,8 @@ export function processSlashCommand(input: string, context: CommandContext): Com
  */
 export function getCommandNames(): string[] {
   return [...commands.keys()];
+}
+
+export function getCommandEntries(): Array<{ name: string; description: string }> {
+  return [...commands.entries()].map(([name, { description }]) => ({ name, description }));
 }

@@ -22,7 +22,7 @@ import { EYE_STYLES, RARITY_COLORS, RARITY_STARS } from './cybergotchi/types.js'
 import { TerminalRenderer, type KeyEvent } from './renderer/index.js';
 import { formatTokenCount } from './utils/format.js';
 import { formatToolArgs, summarizeToolOutput } from './utils/tool-summary.js';
-import { getCommandNames } from './commands/index.js';
+import { getCommandNames, getCommandEntries } from './commands/index.js';
 import { handleUserInput } from './harness/submit-handler.js';
 import { estimateMessageTokens, getContextWarning } from './harness/context-warning.js';
 import { setActiveTheme } from './utils/theme-data.js';
@@ -72,21 +72,26 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let historyIndex = -1;
   let vimMode: 'normal' | 'insert' | null = null;
   let acSuggestions: string[] = [];
+  let acDescriptions: string[] = [];
   let acIndex = -1;
 
   function updateAutocomplete() {
     if (inputText.startsWith('/') && inputText.length > 1 && !inputText.includes(' ')) {
       const prefix = inputText.slice(1).toLowerCase();
-      acSuggestions = getCommandNames().filter(n => n.startsWith(prefix)).slice(0, 5);
+      const entries = getCommandEntries().filter(e => e.name.startsWith(prefix)).slice(0, 5);
+      acSuggestions = entries.map(e => e.name);
+      acDescriptions = entries.map(e => e.description);
       acIndex = -1;
     } else {
       acSuggestions = [];
+      acDescriptions = [];
       acIndex = -1;
     }
-    renderer.setAutocomplete(acSuggestions, acIndex);
+    renderer.setAutocomplete(acSuggestions, acIndex, acDescriptions);
   }
 
   // Companion
+  let companionVisible = true;
   const companionConfig = loadCompanionConfig();
   if (companionConfig) {
     companionConfig.lifetime.totalSessions++;
@@ -104,7 +109,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
     // Animate on timer
     renderer.onAnimation((frameIdx) => {
-      if (loading) return; // pause during streaming
+      if (loading || !companionVisible) return;
       const f = idleFrames[frameIdx % idleFrames.length] ?? idleFrames[0] ?? [];
       const lines = f.map((l: string) => l.replace('{E}', eyes));
       renderer.setCompanion([...lines, nameLine], color);
@@ -220,7 +225,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         inputCursor = inputText.length;
         renderer.setInputText(inputText);
         renderer.setInputCursor(inputCursor);
-        renderer.setAutocomplete(acSuggestions, acIndex);
+        renderer.setAutocomplete(acSuggestions, acIndex, acDescriptions);
         return;
       }
       renderer.cycleToolCallExpansion();
@@ -288,11 +293,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   }
 
   async function handleSubmit(input: string) {
-    // Clear welcome banner on first interaction
+    // Clear welcome banner and any previous errors on new input
     renderer.setBanner(null);
+    renderer.setError(null);
 
     // Exit
-    if (input === 'exit' || input === 'quit' || input === '/exit' || input === '/quit') {
+    if (input === 'exit' || input === 'quit' || input === '/exit' || input === '/quit' || input === '/q') {
       cleanup();
       process.exit(0);
     }
@@ -330,6 +336,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         writeOhConfig(cfg);
       } catch { /* ignore */ }
       messages = [...messages, createInfoMessage(`Theme switched to ${themeName}`)];
+      syncRenderer();
+      return;
+    }
+    if (lastMsg?.content === '__COMPANION_OFF__' || lastMsg?.content === '__COMPANION_ON__') {
+      companionVisible = lastMsg.content === '__COMPANION_ON__';
+      messages = messages.slice(0, -1);
+      if (!companionVisible) renderer.setCompanion(null, 'cyan');
+      messages = [...messages, createInfoMessage(`Companion ${companionVisible ? 'shown' : 'hidden'}`)];
       syncRenderer();
       return;
     }

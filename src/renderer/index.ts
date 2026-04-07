@@ -67,6 +67,7 @@ export class TerminalRenderer {
       expandedToolCalls: new Set(),
       questionPrompt: null,
       autocomplete: [],
+      autocompleteDescriptions: [],
       autocompleteIndex: -1,
       manualScroll: 0,
       codeBlocksExpanded: false,
@@ -185,8 +186,9 @@ export class TerminalRenderer {
   }
   setBanner(lines: string[] | null): void { this.state.bannerLines = lines; this.scheduleRender(); }
   setStatusHints(text: string): void { this.state.statusHints = text; this.scheduleRender(); }
-  setAutocomplete(suggestions: string[], index: number): void {
+  setAutocomplete(suggestions: string[], index: number, descriptions?: string[]): void {
     this.state.autocomplete = suggestions;
+    this.state.autocompleteDescriptions = descriptions ?? [];
     this.state.autocompleteIndex = index;
     this.scheduleRender();
   }
