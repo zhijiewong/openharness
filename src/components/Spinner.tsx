@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { useTheme } from "../utils/theme.js";
+import { formatTokenCount } from "../utils/format.js";
 
 type Props = { model?: string; tokens?: number };
 
@@ -39,15 +40,11 @@ export default function Spinner({ model, tokens }: Props) {
       })}
       <Text color={theme.dim}>
         {elapsed > 0 ? ` ${elapsed}s` : ""}
-        {tokens && tokens > 0 ? ` | ${formatTokens(tokens)}` : ""}
+        {tokens && tokens > 0 ? ` | ${`${formatTokenCount(tokens)} tokens`}` : ""}
         ...
       </Text>
     </Box>
   );
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tokens`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tokens`;
-  return `${n} tokens`;
-}
+// Uses shared formatTokenCount from utils/format.ts

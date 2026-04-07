@@ -6,15 +6,19 @@
 import type { Style } from './cells.js';
 import type { CellGrid } from './cells.js';
 import { computeDiff, filterWithContext } from '../utils/diff-algorithm.js';
+import { getTheme } from '../utils/theme-data.js';
 import { existsSync, readFileSync } from 'node:fs';
 
-const S_ADD: Style = { fg: 'green', bg: null, bold: false, dim: false, underline: false };
-const S_REMOVE: Style = { fg: 'red', bg: null, bold: false, dim: false, underline: false };
-const S_CONTEXT: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_SEPARATOR: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_HEADER: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_STAT_ADD: Style = { fg: 'green', bg: null, bold: true, dim: false, underline: false };
-const S_STAT_REMOVE: Style = { fg: 'red', bg: null, bold: true, dim: false, underline: false };
+const t = getTheme();
+const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
+
+const S_ADD = s(t.diffAdded);
+const S_REMOVE = s(t.diffRemoved);
+const S_CONTEXT = s(null, false, true);
+const S_SEPARATOR = s(null, false, true);
+const S_HEADER = s(null, false, true);
+const S_STAT_ADD = s(t.diffAdded, true);
+const S_STAT_REMOVE = s(t.diffRemoved, true);
 
 export type DiffLine = { type: 'add' | 'remove' | 'context' | 'separator'; line: string };
 

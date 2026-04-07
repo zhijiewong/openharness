@@ -7,17 +7,21 @@
 
 import type { Style } from './cells.js';
 import type { CellGrid } from './cells.js';
+import { getTheme } from '../utils/theme-data.js';
 
-const S_TEXT: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
-const S_BOLD: Style = { fg: null, bg: null, bold: true, dim: false, underline: false };
-const S_HEADING: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
-const S_CODE: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_CODE_FENCE: Style = { fg: 'gray', bg: null, bold: false, dim: true, underline: false };
-const S_BULLET: Style = { fg: 'cyan', bg: null, bold: false, dim: false, underline: false };
-const S_BLOCKQUOTE: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_HR: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_TABLE_HEADER: Style = { fg: null, bg: null, bold: true, dim: false, underline: false };
-const S_TABLE_BORDER: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
+const t = getTheme();
+const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
+
+const S_TEXT = s(null);
+const S_BOLD = s(null, true);
+const S_HEADING = s(t.heading, true);
+const S_CODE = s(t.codeBlock, false, true);
+const S_CODE_FENCE = s(t.codeFence, false, true);
+const S_BULLET = s(t.bullet);
+const S_BLOCKQUOTE = s(null, false, true);
+const S_HR = s(null, false, true);
+const S_TABLE_HEADER = s(null, true);
+const S_TABLE_BORDER = s(null, false, true);
 
 type Segment = { text: string; style: Style };
 
@@ -98,7 +102,7 @@ export function renderMarkdown(
       r++;
       i++;
 
-      // Render code lines until closing fence
+      // Render code lines until closing fence (with syntax highlighting)
       while (i < lines.length) {
         if (r >= grid.height) break;
         const codeLine = lines[i]!;
@@ -108,8 +112,7 @@ export function renderMarkdown(
           i++;
           break;
         }
-        // Indent code 2 spaces, dim style
-        grid.writeText(r, col + 2, codeLine.slice(0, wrapWidth - col - 4), S_CODE);
+        renderHighlightedCode(grid, r, col + 2, codeLine.slice(0, wrapWidth - col - 4), lang);
         r++;
         i++;
       }
@@ -372,4 +375,102 @@ function parseTableRow(line: string): string[] {
     .replace(/\|$/, '')
     .split('|')
     .map(c => c.trim());
+}
+
+// ── Syntax highlighting ──
+
+const S_KW: Style = s(t.assistant, true);       // keywords: magenta bold
+const S_STRING: Style = s(t.success);            // strings: green
+const S_COMMENT: Style = s(null, false, true);   // comments: dim
+const S_NUMBER: Style = s(t.tool);               // numbers: yellow
+const S_TYPE: Style = s(t.user);                 // types: cyan
+
+// Keywords for common languages
+const KEYWORDS = new Set([
+  // JS/TS
+  'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do',
+  'switch', 'case', 'break', 'continue', 'new', 'this', 'class', 'extends', 'import',
+  'export', 'from', 'default', 'async', 'await', 'try', 'catch', 'finally', 'throw',
+  'typeof', 'instanceof', 'in', 'of', 'yield', 'delete', 'void', 'super',
+  // Python
+  'def', 'class', 'import', 'from', 'return', 'if', 'elif', 'else', 'for', 'while',
+  'try', 'except', 'finally', 'with', 'as', 'raise', 'pass', 'lambda', 'yield',
+  'True', 'False', 'None', 'and', 'or', 'not', 'is', 'in', 'self',
+  // Rust/Go/general
+  'fn', 'let', 'mut', 'pub', 'impl', 'struct', 'enum', 'match', 'use', 'mod',
+  'func', 'type', 'interface', 'package', 'defer', 'go', 'select', 'chan',
+]);
+
+const TYPE_KEYWORDS = new Set([
+  'string', 'number', 'boolean', 'void', 'null', 'undefined', 'any', 'never',
+  'object', 'symbol', 'bigint', 'int', 'float', 'bool', 'str', 'i32', 'i64',
+  'u32', 'u64', 'f32', 'f64', 'usize', 'isize', 'String', 'Vec', 'Option',
+  'Result', 'Array', 'Map', 'Set', 'Promise', 'Record',
+]);
+
+/** Render a line of code with basic syntax highlighting */
+function renderHighlightedCode(
+  grid: CellGrid,
+  row: number,
+  col: number,
+  line: string,
+  lang: string,
+): void {
+  let c = col;
+  let i = 0;
+
+  while (i < line.length && c < grid.width) {
+    // Line comments: // or #
+    if ((line[i] === '/' && line[i + 1] === '/') || (line[i] === '#' && i === line.trimStart().length - line.length + line.indexOf('#'))) {
+      // Check if # is a comment (not inside a string, at start after whitespace)
+      const isComment = line[i] === '/' || (line[i] === '#' && line.slice(0, i).trim() === '' || line.slice(0, i).endsWith(' '));
+      if (line[i] === '/' || isComment) {
+        const rest = line.slice(i);
+        for (let j = 0; j < rest.length && c < grid.width; j++) {
+          grid.setCell(row, c, rest[j]!, S_COMMENT);
+          c++;
+        }
+        return;
+      }
+    }
+
+    // Strings: "..." or '...' or `...`
+    if (line[i] === '"' || line[i] === "'" || line[i] === '`') {
+      const quote = line[i]!;
+      grid.setCell(row, c, quote, S_STRING);
+      c++; i++;
+      while (i < line.length && c < grid.width) {
+        grid.setCell(row, c, line[i]!, S_STRING);
+        if (line[i] === quote && line[i - 1] !== '\\') { c++; i++; break; }
+        c++; i++;
+      }
+      continue;
+    }
+
+    // Numbers
+    if (/[0-9]/.test(line[i]!) && (i === 0 || /[\s(,=+\-*/<>[\]{}:;!&|^~%]/.test(line[i - 1]!))) {
+      while (i < line.length && c < grid.width && /[0-9._xXa-fA-F]/.test(line[i]!)) {
+        grid.setCell(row, c, line[i]!, S_NUMBER);
+        c++; i++;
+      }
+      continue;
+    }
+
+    // Words (identifiers/keywords)
+    if (/[a-zA-Z_$]/.test(line[i]!)) {
+      const start = i;
+      while (i < line.length && /[a-zA-Z0-9_$]/.test(line[i]!)) i++;
+      const word = line.slice(start, i);
+      const style = KEYWORDS.has(word) ? S_KW : TYPE_KEYWORDS.has(word) ? S_TYPE : S_CODE;
+      for (let j = 0; j < word.length && c < grid.width; j++) {
+        grid.setCell(row, c, word[j]!, style);
+        c++;
+      }
+      continue;
+    }
+
+    // Everything else
+    grid.setCell(row, c, line[i]!, S_CODE);
+    c++; i++;
+  }
 }

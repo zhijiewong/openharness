@@ -5,7 +5,8 @@
 
 import { CellGrid } from './cells.js';
 import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
-import { rasterize, extractSuggestionFromArgs, type LayoutState, type ToolCallInfo } from './layout.js';
+import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
+import { summarizeToolArgs } from '../utils/tool-summary.js';
 import { extractDiffInfo } from './diff.js';
 import { startRawInput, type KeyEvent } from './input.js';
 import type { Message } from '../types/message.js';
@@ -227,7 +228,7 @@ export class TerminalRenderer {
   /** Show permission prompt and wait for Y/N response */
   askPermission(toolName: string, description: string, riskLevel: string): Promise<boolean> {
     this.permissionPrompt = { toolName, description, riskLevel };
-    this.state.permissionBox = { toolName, description, riskLevel, suggestion: extractSuggestionFromArgs(toolName, description) };
+    this.state.permissionBox = { toolName, description, riskLevel, suggestion: summarizeToolArgs(toolName, description) };
     this.state.permissionDiffVisible = false;
     this.state.permissionDiffInfo = extractDiffInfo(toolName, description);
     this.scheduleRender();

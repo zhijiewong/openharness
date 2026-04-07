@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../utils/theme.js";
+import { summarizeToolArgs } from "../utils/tool-summary.js";
 import DiffView from "./DiffView.js";
 import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -83,7 +84,7 @@ export default function PermissionPrompt({
         ? theme.warning
         : theme.success;
 
-  const suggestion = extractSuggestion(toolName, description);
+  const suggestion = summarizeToolArgs(toolName, description);
 
   return (
     <Box
@@ -140,26 +141,4 @@ export default function PermissionPrompt({
   );
 }
 
-function extractSuggestion(toolName: string, description: string): string | null {
-  const lower = toolName.toLowerCase();
-
-  if (lower === "bash" || lower === "shell" || lower === "execute") {
-    const cmdMatch = description.match(/command[:\s]+["`]?(.+?)["`]?(?:\n|$)/i);
-    if (cmdMatch) return `$ ${cmdMatch[1]}`;
-  }
-
-  if (lower.includes("read") || lower.includes("write") || lower.includes("edit")) {
-    try {
-      const args = JSON.parse(description);
-      if (args.file_path) {
-        const action = lower.includes("read") ? "reading" : lower.includes("write") ? "writing" : "editing";
-        return `${action} ${args.file_path}`;
-      }
-    } catch {
-      const pathMatch = description.match(/(?:path|file)[:\s]+["`]?([^\s"`]+)/i);
-      if (pathMatch) return `${lower.includes("read") ? "reading" : lower.includes("write") ? "writing" : "editing"} ${pathMatch[1]}`;
-    }
-  }
-
-  return null;
-}
+// extractSuggestion moved to shared utils/tool-summary.ts as summarizeToolArgs

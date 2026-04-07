@@ -8,19 +8,21 @@ import type { StreamEvent } from './types/events.js';
 import type { Provider } from './providers/base.js';
 import type { Tools } from './Tool.js';
 import type { PermissionMode } from './types/permissions.js';
-import { createAssistantMessage, createUserMessage, createMessage, createInfoMessage } from './types/message.js';
+import { createAssistantMessage, createMessage, createInfoMessage } from './types/message.js';
 import { query } from './query.js';
 import { createSession, saveSession, loadSession, type Session } from './harness/session.js';
-import { CostTracker, estimateCost, getContextWindow } from './harness/cost.js';
-import { processSlashCommand, type CommandContext } from './commands/index.js';
+import { CostTracker, estimateCost } from './harness/cost.js';
 import { autoCommitAIEdits, isGitRepo } from './git/index.js';
 import { cybergotchiEvents } from './cybergotchi/events.js';
 import { loadCompanionConfig, saveCompanionConfig } from './cybergotchi/config.js';
 import { roll } from './cybergotchi/bones.js';
 import { getSpecies } from './cybergotchi/species.js';
 import { EYE_STYLES, RARITY_COLORS, RARITY_STARS } from './cybergotchi/types.js';
-import { resolveMcpMention } from './mcp/loader.js';
 import { TerminalRenderer, type KeyEvent } from './renderer/index.js';
+import { formatTokenCount } from './utils/format.js';
+import { formatToolArgs } from './utils/tool-summary.js';
+import { handleUserInput } from './harness/submit-handler.js';
+import { estimateMessageTokens, getContextWarning } from './harness/context-warning.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -95,42 +97,23 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     const totalCostVal = cost.totalCost;
     const parts: string[] = [];
     if (currentModel) parts.push(currentModel);
-    if (inTok > 0 || outTok > 0) parts.push(`${formatTokens(inTok)}↑ ${formatTokens(outTok)}↓`);
+    if (inTok > 0 || outTok > 0) parts.push(`${formatTokenCount(inTok)}↑ ${formatTokenCount(outTok)}↓`);
     if (totalCostVal > 0) parts.push(`$${totalCostVal.toFixed(4)}`);
     renderer.setStatusLine(parts.join(' │ '));
     // Context warning
     updateContextWarning();
   }
 
-  function formatTokens(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-    return `${n}`;
-  }
+  // formatTokenCount imported from utils/format.ts
 
   let estimatedTokenCount = 0;
   let lastMessageCount = 0;
 
   function updateContextWarning() {
     // Incremental: only estimate tokens for new messages since last check
-    for (let i = lastMessageCount; i < messages.length; i++) {
-      const m = messages[i]!;
-      estimatedTokenCount += Math.ceil(m.content.length / 3.5);
-      if (m.toolCalls) for (const tc of m.toolCalls) estimatedTokenCount += Math.ceil(JSON.stringify(tc.arguments).length / 3.5);
-      if (m.toolResults) for (const tr of m.toolResults) estimatedTokenCount += Math.ceil(tr.output.length / 3.5);
-    }
+    estimatedTokenCount += estimateMessageTokens(messages, lastMessageCount);
     lastMessageCount = messages.length;
-
-    const window = getContextWindow(currentModel);
-    const usage = window > 0 ? estimatedTokenCount / window : 0;
-    if (usage >= 0.75) {
-      renderer.setContextWarning({
-        text: `⚠ Context ~${Math.round(usage * 100)}% full — consider /compact`,
-        critical: usage >= 0.9,
-      });
-    } else {
-      renderer.setContextWarning(null);
-    }
+    renderer.setContextWarning(getContextWarning(estimatedTokenCount, currentModel));
   }
 
   // Input handling
@@ -229,67 +212,26 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       process.exit(0);
     }
 
-    // Vim toggle
-    if (input === '/vim') {
+    const result = await handleUserInput(input, {
+      messages,
+      currentModel,
+      providerName: config.provider.name,
+      permissionMode: config.permissionMode,
+      cost,
+      sessionId: session.id,
+      companionConfig,
+    });
+
+    messages = result.messages;
+    if (result.newModel) currentModel = result.newModel;
+    if (result.vimToggled) {
       vimMode = vimMode === null ? 'normal' : null;
       messages = [...messages, createInfoMessage(vimMode ? 'Vim mode ON' : 'Vim mode OFF')];
       renderer.setVimMode(vimMode);
-      syncRenderer();
-      return;
     }
-
-    // Companion address
-    if (companionConfig) {
-      const name = companionConfig.soul.name.toLowerCase();
-      const lower = input.toLowerCase();
-      if (lower.startsWith(`@${name}`) || lower.startsWith(`${name},`) || lower.startsWith(`${name} `)) {
-        cybergotchiEvents.emit('cybergotchi', { type: 'userAddressed', text: input });
-        return;
-      }
-    }
-
-    // Slash commands
-    if (input.startsWith('/')) {
-      const ctx: CommandContext = {
-        messages, model: currentModel, providerName: config.provider.name,
-        permissionMode: config.permissionMode,
-        totalCost: cost.totalCost, totalInputTokens: cost.totalInputTokens,
-        totalOutputTokens: cost.totalOutputTokens, sessionId: session.id,
-      };
-      const result = processSlashCommand(input, ctx);
-      if (result) {
-        if (result.clearMessages) messages = [];
-        if (result.compactedMessages) messages = result.compactedMessages;
-        if (result.newModel) currentModel = result.newModel;
-        if (result.output) messages = [...messages, createInfoMessage(result.output)];
-        syncRenderer();
-        if (result.handled && !result.prependToPrompt) return;
-        if (result.prependToPrompt) {
-          messages = [...messages, createUserMessage(input)];
-          syncRenderer();
-          await runQuery(result.prependToPrompt);
-          return;
-        }
-      }
-    }
-
-    // Normal prompt
-    messages = [...messages, createUserMessage(input)];
     syncRenderer();
-
-    // Resolve @mentions
-    let resolvedInput = input;
-    const mentionPattern = /@(\w[\w.-]*)/g;
-    const mentions = [...input.matchAll(mentionPattern)].map(m => m[1]!);
-    for (const mention of mentions) {
-      if (companionConfig && mention.toLowerCase() === companionConfig.soul.name.toLowerCase()) continue;
-      try {
-        const content = await resolveMcpMention(mention);
-        if (content) resolvedInput += `\n\n[Resource @${mention}]:\n${content.slice(0, 5000)}`;
-      } catch { /* ignore */ }
-    }
-
-    await runQuery(resolvedInput);
+    if (result.handled) return;
+    if (result.prompt) await runQuery(result.prompt);
   }
 
   async function runQuery(prompt: string) {
@@ -354,21 +296,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
           case 'tool_call_complete': {
             const tcToolName = callIdToToolName.get(event.callId) ?? '';
-            // Extract a readable args summary
-            let argsSummary = '';
-            try {
-              const args = event.arguments;
-              if (args.file_path) argsSummary = args.file_path as string;
-              else if (args.command) argsSummary = `$ ${(args.command as string).slice(0, 60)}`;
-              else if (args.pattern) argsSummary = `pattern: ${args.pattern as string}`;
-              else argsSummary = JSON.stringify(args).slice(0, 80);
-            } catch { /* ignore */ }
             const existingTc = renderer.getToolCall(event.callId);
             renderer.setToolCall(event.callId, {
               ...existingTc,
               toolName: tcToolName,
               status: 'running',
-              args: argsSummary,
+              args: formatToolArgs(tcToolName, event.arguments),
             });
             break;
           }

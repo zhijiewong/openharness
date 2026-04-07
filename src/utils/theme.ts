@@ -1,80 +1,12 @@
 /**
- * Semantic theme system for OpenHarness terminal UI.
- * Semantic color tokens with shimmer variants for animations.
+ * Theme system with React context for Ink components.
+ * Re-exports theme data from theme-data.ts (no React dependency).
  */
 
 import React from "react";
-
-export type Theme = {
-  // Brand
-  primary: string;
-  primaryShimmer: string;
-
-  // Semantic roles
-  user: string;
-  assistant: string;
-  tool: string;
-  error: string;
-  success: string;
-  warning: string;
-
-  // UI chrome
-  border: string;
-  dim: string;
-  text: string;
-
-  // Diffs
-  diffAdded: string;
-  diffRemoved: string;
-
-  // Spinner states
-  stall: string;
-  stallShimmer: string;
-};
-
-export const darkTheme: Theme = {
-  primary: "magenta",
-  primaryShimmer: "magentaBright",
-
-  user: "cyan",
-  assistant: "magenta",
-  tool: "yellow",
-  error: "red",
-  success: "green",
-  warning: "yellow",
-
-  border: "gray",
-  dim: "gray",
-  text: "white",
-
-  diffAdded: "green",
-  diffRemoved: "red",
-
-  stall: "yellow",
-  stallShimmer: "redBright",
-};
-
-export const lightTheme: Theme = {
-  primary: "magentaBright",
-  primaryShimmer: "magenta",
-
-  user: "cyanBright",
-  assistant: "magentaBright",
-  tool: "yellowBright",
-  error: "redBright",
-  success: "greenBright",
-  warning: "yellowBright",
-
-  border: "blackBright",
-  dim: "blackBright",
-  text: "black",
-
-  diffAdded: "greenBright",
-  diffRemoved: "redBright",
-
-  stall: "yellowBright",
-  stallShimmer: "red",
-};
+export { type Theme, darkTheme, lightTheme, getTheme } from "./theme-data.js";
+import { darkTheme } from "./theme-data.js";
+import type { Theme } from "./theme-data.js";
 
 const ThemeContext = React.createContext<Theme>(darkTheme);
 

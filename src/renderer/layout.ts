@@ -8,6 +8,7 @@ import type { Style } from './cells.js';
 import { CellGrid, EMPTY_STYLE } from './cells.js';
 import { renderMarkdown, measureMarkdown } from './markdown.js';
 import { renderDiff } from './diff.js';
+import { getTheme, type Theme } from '../utils/theme-data.js';
 
 export type ToolCallInfo = {
   toolName: string;
@@ -43,14 +44,31 @@ export type LayoutState = {
 };
 
 // Styles
-const S_USER: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
-const S_ASSISTANT: Style = { fg: 'magenta', bg: null, bold: true, dim: false, underline: false };
-const S_TEXT: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
-const S_DIM: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
-const S_ERROR: Style = { fg: 'red', bg: null, bold: false, dim: false, underline: false };
-const S_YELLOW: Style = { fg: 'yellow', bg: null, bold: false, dim: false, underline: false };
-const S_GREEN: Style = { fg: 'green', bg: null, bold: false, dim: false, underline: false };
-const S_BORDER: Style = { fg: null, bg: null, bold: false, dim: true, underline: false };
+// Styles derived from theme (supports dark/light switching)
+function buildStyles(t: Theme) {
+  const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
+  return {
+    user: s(t.user, true),
+    assistant: s(t.assistant, true),
+    text: s(null),
+    dim: s(null, false, true),
+    error: s(t.error),
+    tool: s(t.tool),
+    success: s(t.success),
+    border: s(null, false, true),
+  };
+}
+
+const theme = getTheme();
+const ST = buildStyles(theme);
+const S_USER = ST.user;
+const S_ASSISTANT = ST.assistant;
+const S_TEXT = ST.text;
+const S_DIM = ST.dim;
+const S_ERROR = ST.error;
+const S_YELLOW = ST.tool;
+const S_GREEN = ST.success;
+const S_BORDER = ST.border;
 
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -198,8 +216,8 @@ export function rasterize(
     const elapsed = state.thinkingStartedAt ? Math.floor((Date.now() - state.thinkingStartedAt) / 1000) : 0;
 
     // Color transitions: magenta → yellow (30s+) → red (60s+)
-    const baseColor = elapsed > 60 ? 'red' : elapsed > 30 ? 'yellow' : 'magenta';
-    const shimmerColor = elapsed > 60 ? 'brightRed' : elapsed > 30 ? 'brightYellow' : 'brightMagenta';
+    const baseColor = elapsed > 60 ? theme.error : elapsed > 30 ? theme.stall : theme.primary;
+    const shimmerColor = elapsed > 60 ? theme.stallShimmer : elapsed > 30 ? theme.warning : theme.primaryShimmer;
     const baseStyle: Style = { fg: baseColor, bg: null, bold: false, dim: false, underline: false };
 
     // Prefix
@@ -443,26 +461,4 @@ export function rasterize(
   };
 }
 
-/** Extract a human-readable suggestion from tool args */
-export function extractSuggestionFromArgs(toolName: string, description: string): string | null {
-  const lower = toolName.toLowerCase();
-  if (lower === 'bash' || lower === 'shell') {
-    const cmdMatch = description.match(/command[:\s]+["`]?(.+?)["`]?(?:\n|$)/i);
-    if (cmdMatch) return `$ ${cmdMatch[1]}`;
-    try {
-      const args = JSON.parse(description);
-      if (args.command) return `$ ${args.command.slice(0, 60)}`;
-    } catch { /* ignore */ }
-  }
-  if (lower.includes('read') || lower.includes('write') || lower.includes('edit') || lower.includes('glob') || lower.includes('grep')) {
-    try {
-      const args = JSON.parse(description);
-      if (args.file_path) {
-        const action = lower.includes('read') ? 'reading' : lower.includes('write') ? 'writing' : lower.includes('edit') ? 'editing' : lower;
-        return `${action} ${args.file_path}`;
-      }
-      if (args.pattern) return `pattern: ${args.pattern}`;
-    } catch { /* ignore */ }
-  }
-  return null;
-}
+// extractSuggestion moved to shared utils/tool-summary.ts as summarizeToolArgs
