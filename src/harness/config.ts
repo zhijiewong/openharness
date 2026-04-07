@@ -37,6 +37,7 @@ export type OhConfig = {
   provider: string;
   model: string;
   permissionMode: PermissionMode;
+  theme?: 'dark' | 'light';
   apiKey?: string;
   baseUrl?: string;
   mcpServers?: McpServerConfig[];

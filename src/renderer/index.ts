@@ -6,6 +6,7 @@
 import { CellGrid } from './cells.js';
 import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
 import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
+import { createSessionBrowser, browserUp, browserDown, browserSelectedId, browserLoadPreview, type SessionBrowserState } from './session-browser.js';
 import { summarizeToolArgs } from '../utils/tool-summary.js';
 import { extractDiffInfo } from './diff.js';
 import { startRawInput, type KeyEvent } from './input.js';
@@ -66,6 +67,7 @@ export class TerminalRenderer {
       questionPrompt: null,
       manualScroll: 0,
       codeBlocksExpanded: false,
+      sessionBrowser: null,
     };
   }
 
@@ -193,6 +195,38 @@ export class TerminalRenderer {
   toggleCodeBlockExpansion(): void {
     this.state.codeBlocksExpanded = !this.state.codeBlocksExpanded;
     this.scheduleRender();
+  }
+
+  // Session browser
+  openSessionBrowser(): void {
+    this.state.sessionBrowser = createSessionBrowser();
+    this.scheduleRender();
+  }
+  closeSessionBrowser(): void {
+    this.state.sessionBrowser = null;
+    this.scheduleRender();
+  }
+  sessionBrowserUp(): void {
+    if (this.state.sessionBrowser) {
+      this.state.sessionBrowser = browserLoadPreview(browserUp(this.state.sessionBrowser));
+      this.scheduleRender();
+    }
+  }
+  sessionBrowserDown(): void {
+    if (this.state.sessionBrowser) {
+      this.state.sessionBrowser = browserLoadPreview(browserDown(this.state.sessionBrowser));
+      this.scheduleRender();
+    }
+  }
+  sessionBrowserSelect(): string | null {
+    if (!this.state.sessionBrowser) return null;
+    const id = browserSelectedId(this.state.sessionBrowser);
+    this.state.sessionBrowser = null;
+    this.scheduleRender();
+    return id;
+  }
+  isSessionBrowserOpen(): boolean {
+    return this.state.sessionBrowser !== null;
   }
   setToolCall(callId: string, info: ToolCallInfo): void {
     this.state.toolCalls.set(callId, info);

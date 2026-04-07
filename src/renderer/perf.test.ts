@@ -33,6 +33,7 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     questionPrompt: null,
     manualScroll: 0,
     codeBlocksExpanded: false,
+    sessionBrowser: null,
     ...overrides,
   };
 }
