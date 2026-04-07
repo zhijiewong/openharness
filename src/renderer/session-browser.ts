@@ -15,22 +15,38 @@ import { join } from 'node:path';
 const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
 export type SessionBrowserState = {
-  sessions: SessionSummary[];
+  allSessions: SessionSummary[];
+  sessions: SessionSummary[]; // filtered
   selectedIndex: number;
   scrollOffset: number;
   preview: string | null;
+  searchQuery: string;
 };
 
 /** Load sessions and create initial browser state */
 export function createSessionBrowser(): SessionBrowserState {
   const sessionDir = join(homedir(), '.oh', 'sessions');
-  const sessions = listSessions(sessionDir);
+  const allSessions = listSessions(sessionDir);
   return {
-    sessions,
+    allSessions,
+    sessions: allSessions,
     selectedIndex: 0,
     scrollOffset: 0,
     preview: null,
+    searchQuery: '',
   };
+}
+
+/** Update search query and filter sessions */
+export function browserSearch(state: SessionBrowserState, query: string): SessionBrowserState {
+  const q = query.toLowerCase();
+  const filtered = q
+    ? state.allSessions.filter(s =>
+        s.model.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        new Date(s.updatedAt).toLocaleDateString().includes(q))
+    : state.allSessions;
+  return { ...state, searchQuery: query, sessions: filtered, selectedIndex: 0, scrollOffset: 0, preview: null };
 }
 
 /** Move selection up */
@@ -84,9 +100,14 @@ export function renderSessionBrowser(
   const t = getTheme();
   let r = row;
 
-  // Title
+  // Title + search
   grid.writeText(r, col, '─── Session Browser (↑/↓ navigate, Enter resume, Esc cancel) ───', s(null, false, true));
   r++;
+  if (state.searchQuery || state.allSessions.length > 5) {
+    grid.writeText(r, col, '🔍 ', s(null, false, true));
+    grid.writeText(r, col + 3, state.searchQuery || '(type to filter)', state.searchQuery ? s(null) : s(null, false, true));
+    r++;
+  }
 
   if (state.sessions.length === 0) {
     grid.writeText(r, col + 2, 'No saved sessions.', s(null, false, true));

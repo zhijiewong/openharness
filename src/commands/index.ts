@@ -170,6 +170,14 @@ register("history", "List recent sessions or search across them", (args) => {
   return { output: `Recent sessions (use /resume <id> to continue):\n${lines.join("\n")}`, handled: true };
 });
 
+register("theme", "Switch theme (dark/light)", (args) => {
+  const theme = args.trim().toLowerCase();
+  if (theme !== 'dark' && theme !== 'light') {
+    return { output: "Usage: /theme dark or /theme light", handled: true };
+  }
+  return { output: `__SWITCH_THEME__:${theme}`, handled: true };
+});
+
 register("browse", "Open interactive session browser", () => {
   return { output: "__OPEN_SESSION_BROWSER__", handled: true };
 });

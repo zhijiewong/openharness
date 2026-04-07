@@ -31,6 +31,8 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     permissionDiffInfo: null,
     expandedToolCalls: new Set(),
     questionPrompt: null,
+    autocomplete: [],
+    autocompleteIndex: -1,
     manualScroll: 0,
     codeBlocksExpanded: false,
     sessionBrowser: null,

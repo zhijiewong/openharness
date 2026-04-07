@@ -19,6 +19,8 @@ const S_HEADER = s(null, false, true);
 let S_ADD: Style, S_REMOVE: Style, S_STAT_ADD: Style, S_STAT_REMOVE: Style;
 let _diffStylesInit = false;
 
+export function resetDiffStyleCache() { _diffStylesInit = false; }
+
 function ensureDiffStyles() {
   if (_diffStylesInit) return;
   _diffStylesInit = true;

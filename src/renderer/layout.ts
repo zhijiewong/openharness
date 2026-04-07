@@ -18,6 +18,7 @@ export type ToolCallInfo = {
   output?: string;
   args?: string;
   liveOutput?: string[];
+  startedAt?: number; // timestamp for elapsed display
 };
 
 export type LayoutState = {
@@ -43,6 +44,8 @@ export type LayoutState = {
   permissionDiffInfo: import('./diff.js').DiffInfo | null;
   expandedToolCalls: Set<string>;
   questionPrompt: { question: string; options: string[] | null; input: string; cursor: number } | null;
+  autocomplete: string[]; // slash command suggestions
+  autocompleteIndex: number; // -1 = none selected
   manualScroll: number; // 0 = auto-scroll to bottom, >0 = scrolled up by N rows
   codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
   sessionBrowser: import('./session-browser.js').SessionBrowserState | null;
@@ -64,6 +67,11 @@ let S_ERROR: Style;
 let S_YELLOW: Style;
 let S_GREEN: Style;
 let _stylesInit = false;
+
+/** Reset style cache — call after theme change */
+export function resetStyleCache() {
+  _stylesInit = false;
+}
 
 function ensureStyles() {
   if (_stylesInit) return;
@@ -269,7 +277,8 @@ export function rasterize(
   // ── Tool calls (below messages, above footer) ──
   for (const [callId, tc] of state.toolCalls) {
     if (r >= msgAreaHeight) break;
-    const icon = tc.status === 'running' ? '⠋' : tc.status === 'done' ? '✓' : '✗';
+    const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const icon = tc.status === 'running' ? spinnerChars[state.spinnerFrame % spinnerChars.length]! : tc.status === 'done' ? '✓' : '✗';
     const statusStyle = tc.status === 'error' ? S_ERROR : tc.status === 'done' ? S_GREEN : S_YELLOW;
     const isExpanded = state.expandedToolCalls.has(callId);
     const canExpand = tc.status !== 'running' && tc.output;
@@ -280,13 +289,24 @@ export function rasterize(
     }
     grid.writeText(r, 2, `${icon} `, statusStyle);
     grid.writeText(r, 4, tc.toolName, { ...S_YELLOW, bold: true });
-    // Show args preview on the same line
+
+    // Show args + elapsed time on the same line
+    let afterName = 4 + tc.toolName.length + 1;
     if (tc.args) {
-      const argsStart = 4 + tc.toolName.length + 1;
-      const maxArgs = w - argsStart - 2;
+      const maxArgs = w - afterName - 15; // leave room for elapsed
       if (maxArgs > 5) {
         const argsText = tc.args.slice(0, maxArgs) + (tc.args.length > maxArgs ? '…' : '');
-        grid.writeText(r, argsStart, argsText, S_DIM);
+        grid.writeText(r, afterName, argsText, S_DIM);
+        afterName += argsText.length + 1;
+      }
+    }
+    // Elapsed time for running tools
+    if (tc.status === 'running' && tc.startedAt) {
+      const elapsed = Math.floor((Date.now() - tc.startedAt) / 1000);
+      if (elapsed > 0) {
+        const lineCount = tc.liveOutput?.length ?? 0;
+        const elapsedStr = lineCount > 0 ? `${elapsed}s · ${lineCount} lines` : `${elapsed}s`;
+        grid.writeText(r, Math.min(afterName, w - elapsedStr.length - 2), elapsedStr, S_DIM);
       }
     }
     r++;
@@ -452,6 +472,19 @@ export function rasterize(
   if (state.statusLine) {
     grid.writeText(nextRow, 0, state.statusLine, S_DIM);
     nextRow++;
+  }
+
+  // Autocomplete suggestions (above input)
+  if (state.autocomplete.length > 0) {
+    for (let ai = 0; ai < state.autocomplete.length; ai++) {
+      const cmd = state.autocomplete[ai]!;
+      const selected = ai === state.autocompleteIndex;
+      const acStyle = selected
+        ? s(getTheme().user, true)
+        : s(null, false, true);
+      grid.writeText(nextRow, 2, `/${cmd}`, acStyle);
+      nextRow++;
+    }
   }
 
   // Input line

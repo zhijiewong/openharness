@@ -24,6 +24,8 @@ let S_HEADING: Style, S_CODE: Style, S_CODE_FENCE: Style, S_BULLET: Style;
 let S_KW: Style, S_STRING: Style, S_COMMENT: Style, S_NUMBER: Style, S_TYPE: Style;
 let _mdStylesInit = false;
 
+export function resetMdStyleCache() { _mdStylesInit = false; }
+
 function ensureMdStyles() {
   if (_mdStylesInit) return;
   _mdStylesInit = true;

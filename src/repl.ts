@@ -11,7 +11,7 @@ import type { PermissionMode } from './types/permissions.js';
 import { createAssistantMessage, createMessage, createInfoMessage } from './types/message.js';
 import { query } from './query.js';
 import { createSession, saveSession, loadSession, type Session } from './harness/session.js';
-import { CostTracker, estimateCost } from './harness/cost.js';
+import { CostTracker, estimateCost, getContextWindow } from './harness/cost.js';
 import { autoCommitAIEdits, isGitRepo } from './git/index.js';
 import { cybergotchiEvents } from './cybergotchi/events.js';
 import { loadCompanionConfig, saveCompanionConfig } from './cybergotchi/config.js';
@@ -21,9 +21,13 @@ import { EYE_STYLES, RARITY_COLORS, RARITY_STARS } from './cybergotchi/types.js'
 import { TerminalRenderer, type KeyEvent } from './renderer/index.js';
 import { formatTokenCount } from './utils/format.js';
 import { formatToolArgs } from './utils/tool-summary.js';
+import { getCommandNames } from './commands/index.js';
 import { handleUserInput } from './harness/submit-handler.js';
 import { estimateMessageTokens, getContextWarning } from './harness/context-warning.js';
 import { setActiveTheme } from './utils/theme-data.js';
+import { resetStyleCache } from './renderer/layout.js';
+import { resetMdStyleCache } from './renderer/markdown.js';
+import { resetDiffStyleCache } from './renderer/diff.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -62,6 +66,20 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let inputHistory: string[] = [];
   let historyIndex = -1;
   let vimMode: 'normal' | 'insert' | null = null;
+  let acSuggestions: string[] = [];
+  let acIndex = -1;
+
+  function updateAutocomplete() {
+    if (inputText.startsWith('/') && inputText.length > 1 && !inputText.includes(' ')) {
+      const prefix = inputText.slice(1).toLowerCase();
+      acSuggestions = getCommandNames().filter(n => n.startsWith(prefix)).slice(0, 5);
+      acIndex = -1;
+    } else {
+      acSuggestions = [];
+      acIndex = -1;
+    }
+    renderer.setAutocomplete(acSuggestions, acIndex);
+  }
 
   // Companion
   const companionConfig = loadCompanionConfig();
@@ -102,6 +120,16 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     if (currentModel) parts.push(currentModel);
     if (inTok > 0 || outTok > 0) parts.push(`${formatTokenCount(inTok)}↑ ${formatTokenCount(outTok)}↓`);
     if (totalCostVal > 0) parts.push(`$${totalCostVal.toFixed(4)}`);
+    // Context usage bar
+    const ctxWindow = getContextWindow(currentModel);
+    if (ctxWindow > 0 && estimatedTokenCount > 0) {
+      const usage = Math.min(1, estimatedTokenCount / ctxWindow);
+      const barWidth = 10;
+      const filled = Math.round(usage * barWidth);
+      const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
+      const pct = Math.round(usage * 100);
+      parts.push(`ctx [${bar}] ${pct}%`);
+    }
     renderer.setStatusLine(parts.join(' │ '));
     // Context warning
     updateContextWarning();
@@ -153,6 +181,11 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         return;
       }
       if (key.name === 'escape') { renderer.closeSessionBrowser(); return; }
+      if (key.name === 'backspace') { renderer.sessionBrowserBackspace(); return; }
+      if (key.char && key.char.length === 1 && !key.ctrl && !key.meta) {
+        renderer.sessionBrowserType(key.char);
+        return;
+      }
       return; // swallow other keys during browser
     }
 
@@ -168,8 +201,17 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     if (key.shift && key.name === 'up') { renderer.scrollUp(3); return; }
     if (key.shift && key.name === 'down') { renderer.scrollDown(3); return; }
 
-    // Tab: cycle tool call expansion (when not loading)
+    // Tab: autocomplete slash commands, or cycle tool call expansion
     if (key.name === 'tab' && !loading) {
+      if (acSuggestions.length > 0) {
+        acIndex = (acIndex + 1) % acSuggestions.length;
+        inputText = `/${acSuggestions[acIndex]!}`;
+        inputCursor = inputText.length;
+        renderer.setInputText(inputText);
+        renderer.setInputCursor(inputCursor);
+        renderer.setAutocomplete(acSuggestions, acIndex);
+        return;
+      }
       renderer.cycleToolCallExpansion();
       return;
     }
@@ -182,6 +224,9 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         historyIndex = -1;
         inputText = '';
         inputCursor = 0;
+        acSuggestions = [];
+        acIndex = -1;
+        renderer.setAutocomplete([], -1);
         renderer.setInputText(inputText);
         renderer.setInputCursor(inputCursor);
       }
@@ -215,6 +260,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
     renderer.setInputText(inputText);
     renderer.setInputCursor(inputCursor);
+    updateAutocomplete();
   });
 
   function navigateHistory(dir: number) {
@@ -254,8 +300,19 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     // Check for special commands
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.content === '__OPEN_SESSION_BROWSER__') {
-      messages = messages.slice(0, -1); // remove sentinel message
+      messages = messages.slice(0, -1);
       renderer.openSessionBrowser();
+      syncRenderer();
+      return;
+    }
+    if (lastMsg?.content?.startsWith('__SWITCH_THEME__:')) {
+      const themeName = lastMsg.content.split(':')[1] as 'dark' | 'light';
+      messages = messages.slice(0, -1);
+      setActiveTheme(themeName);
+      resetStyleCache();
+      resetMdStyleCache();
+      resetDiffStyleCache();
+      messages = [...messages, createInfoMessage(`Theme switched to ${themeName}`)];
       syncRenderer();
       return;
     }
@@ -328,7 +385,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
           case 'tool_call_start':
             callIdToToolName.set(event.callId, event.toolName);
-            renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running' });
+            renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running', startedAt: Date.now() });
             break;
 
           case 'tool_call_complete': {
@@ -372,11 +429,20 @@ export async function startREPL(config: REPLConfig): Promise<void> {
               args: prevTc?.args,
             });
             cybergotchiEvents.emit('cybergotchi', { type: event.isError ? 'toolError' : 'toolSuccess', toolName });
-            // Auto-commit
+            // Auto-commit with file list
             if (!event.isError && isGitRepo()) {
-              const hash = autoCommitAIEdits(toolName, [], process.cwd());
+              const rawArgs = prevTc?.args ?? '';
+              const filePath = rawArgs.startsWith('$') ? null : rawArgs;
+              const hash = autoCommitAIEdits(toolName, filePath ? [filePath] : [], process.cwd());
               if (hash) {
-                messages = [...messages, createInfoMessage(`git: committed ${hash}`)];
+                // Show changed files in commit message
+                let commitMsg = `git: committed ${hash}`;
+                try {
+                  const { execSync } = await import('node:child_process');
+                  const files = execSync(`git diff-tree --no-commit-id --name-only -r ${hash}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+                  if (files) commitMsg += `\n${files.split('\n').map(f => `  ${f}`).join('\n')}`;
+                } catch { /* ignore */ }
+                messages = [...messages, createInfoMessage(commitMsg)];
                 cybergotchiEvents.emit('cybergotchi', { type: 'commit' });
               }
             }

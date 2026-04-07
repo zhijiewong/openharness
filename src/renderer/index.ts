@@ -6,7 +6,7 @@
 import { CellGrid } from './cells.js';
 import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
 import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
-import { createSessionBrowser, browserUp, browserDown, browserSelectedId, browserLoadPreview, type SessionBrowserState } from './session-browser.js';
+import { createSessionBrowser, browserUp, browserDown, browserSelectedId, browserLoadPreview, browserSearch, type SessionBrowserState } from './session-browser.js';
 import { summarizeToolArgs } from '../utils/tool-summary.js';
 import { extractDiffInfo } from './diff.js';
 import { startRawInput, type KeyEvent } from './input.js';
@@ -65,6 +65,8 @@ export class TerminalRenderer {
       permissionDiffInfo: null,
       expandedToolCalls: new Set(),
       questionPrompt: null,
+      autocomplete: [],
+      autocompleteIndex: -1,
       manualScroll: 0,
       codeBlocksExpanded: false,
       sessionBrowser: null,
@@ -174,6 +176,11 @@ export class TerminalRenderer {
     this.scheduleRender();
   }
   setStatusHints(text: string): void { this.state.statusHints = text; this.scheduleRender(); }
+  setAutocomplete(suggestions: string[], index: number): void {
+    this.state.autocomplete = suggestions;
+    this.state.autocompleteIndex = index;
+    this.scheduleRender();
+  }
   setStatusLine(text: string): void { this.state.statusLine = text; this.scheduleRender(); }
   setContextWarning(warning: { text: string; critical: boolean } | null): void { this.state.contextWarning = warning; this.scheduleRender(); }
   setVimMode(mode: 'normal' | 'insert' | null): void { this.state.vimMode = mode; this.scheduleRender(); }
@@ -224,6 +231,18 @@ export class TerminalRenderer {
     this.state.sessionBrowser = null;
     this.scheduleRender();
     return id;
+  }
+  sessionBrowserType(char: string): void {
+    if (this.state.sessionBrowser) {
+      this.state.sessionBrowser = browserSearch(this.state.sessionBrowser, this.state.sessionBrowser.searchQuery + char);
+      this.scheduleRender();
+    }
+  }
+  sessionBrowserBackspace(): void {
+    if (this.state.sessionBrowser && this.state.sessionBrowser.searchQuery.length > 0) {
+      this.state.sessionBrowser = browserSearch(this.state.sessionBrowser, this.state.sessionBrowser.searchQuery.slice(0, -1));
+      this.scheduleRender();
+    }
   }
   isSessionBrowserOpen(): boolean {
     return this.state.sessionBrowser !== null;
