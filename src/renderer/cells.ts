@@ -88,11 +88,12 @@ export class CellGrid {
    * Write word-wrapped text. Splits on spaces, wraps at wrapWidth.
    * Returns the number of rows consumed.
    */
-  writeWrapped(row: number, col: number, text: string, style: Style, wrapWidth: number): number {
+  writeWrapped(row: number, col: number, text: string, style: Style, wrapWidth: number, maxRow?: number): number {
+    const limit = maxRow ?? this.height;
     const lines = text.split('\n');
     let r = row;
     for (const line of lines) {
-      if (r >= this.height) break;
+      if (r >= limit) break;
       const words = line.split(' ');
       let c = col;
       for (const word of words) {
@@ -101,7 +102,7 @@ export class CellGrid {
         if (c > col && c + word.length + 1 > wrapWidth) {
           r++;
           c = col;
-          if (r >= this.height) break;
+          if (r >= limit) break;
         }
         // Add space before word (unless at start of line)
         if (c > col) {
@@ -113,7 +114,7 @@ export class CellGrid {
           if (c >= wrapWidth) {
             r++;
             c = col;
-            if (r >= this.height) break;
+            if (r >= limit) break;
           }
           this.setCell(r, c, word[i]!, style);
           c++;

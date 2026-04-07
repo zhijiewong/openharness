@@ -241,9 +241,9 @@ export function rasterize(
     // Write content — use markdown renderer for assistant messages
     let rows: number;
     if (item.role === 'assistant' || item.role === 'streaming') {
-      rows = renderMarkdown(grid, r, prefixLen, item.content, w, state.codeBlocksExpanded);
+      rows = renderMarkdown(grid, r, prefixLen, item.content, w, state.codeBlocksExpanded, msgAreaHeight);
     } else {
-      rows = grid.writeWrapped(r, prefixLen, item.content, item.style, w);
+      rows = grid.writeWrapped(r, prefixLen, item.content, item.style, w, msgAreaHeight);
     }
     r += rows;
     virtualR += itemRows;

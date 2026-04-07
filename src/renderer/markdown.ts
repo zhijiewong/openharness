@@ -103,15 +103,17 @@ export function renderMarkdown(
   text: string,
   width: number,
   codeBlocksExpanded = false,
+  maxRow?: number,
 ): number {
   ensureMdStyles();
   const wrapWidth = width;
   const lines = text.split('\n');
   let r = row;
   let i = 0;
+  const rowLimit = maxRow ?? grid.height;
 
   while (i < lines.length) {
-    if (r >= grid.height) break;
+    if (r >= rowLimit) break;
     const line = lines[i]!;
 
     // Code block (fenced)
@@ -127,7 +129,7 @@ export function renderMarkdown(
       let codeLineCount = 0;
       let skippedLines = 0;
       while (i < lines.length) {
-        if (r >= grid.height) break;
+        if (r >= rowLimit) break;
         const codeLine = lines[i]!;
         if (codeLine.trimStart().startsWith('```')) {
           if (skippedLines > 0) {
