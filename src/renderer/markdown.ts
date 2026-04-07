@@ -146,7 +146,12 @@ export function renderMarkdown(
           continue;
         }
         const codeWidth = Math.max(0, wrapWidth - col - 4);
-        renderHighlightedCode(grid, r, col + 2, codeLine.slice(0, codeWidth), lang);
+        const clipped = codeLine.slice(0, codeWidth);
+        if (HIGHLIGHT_LANGS.has(lang.toLowerCase())) {
+          renderHighlightedCode(grid, r, col + 2, clipped, lang);
+        } else {
+          grid.writeText(r, col + 2, clipped, S_CODE);
+        }
         r++;
         i++;
       }
@@ -413,20 +418,29 @@ function parseTableRow(line: string): string[] {
 
 // ── Syntax highlighting ──
 
-// Keywords for common languages
+// Languages that should get keyword/string/comment coloring
+const HIGHLIGHT_LANGS = new Set([
+  'js', 'javascript', 'ts', 'typescript', 'jsx', 'tsx',
+  'py', 'python', 'rb', 'ruby', 'rs', 'rust', 'go', 'golang',
+  'java', 'c', 'cpp', 'c++', 'cs', 'csharp', 'swift', 'kotlin',
+  'sh', 'bash', 'shell', 'zsh', 'fish',
+  'sql', 'yaml', 'yml', 'json', 'toml', 'xml', 'html', 'css',
+  'php', 'lua', 'r', 'scala', 'dart', 'zig', 'nim', 'elixir',
+]);
+
+// Keywords — only unambiguous programming keywords (no common English words)
 const KEYWORDS = new Set([
   // JS/TS
   'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do',
   'switch', 'case', 'break', 'continue', 'new', 'this', 'class', 'extends', 'import',
   'export', 'from', 'default', 'async', 'await', 'try', 'catch', 'finally', 'throw',
-  'typeof', 'instanceof', 'in', 'of', 'yield', 'delete', 'void', 'super',
+  'typeof', 'instanceof', 'of', 'yield', 'delete', 'void', 'super',
   // Python
-  'def', 'class', 'import', 'from', 'return', 'if', 'elif', 'else', 'for', 'while',
-  'try', 'except', 'finally', 'with', 'as', 'raise', 'pass', 'lambda', 'yield',
-  'True', 'False', 'None', 'and', 'or', 'not', 'is', 'in', 'self',
+  'def', 'elif', 'except', 'raise', 'pass', 'lambda',
+  'True', 'False', 'None', 'self',
   // Rust/Go/general
-  'fn', 'let', 'mut', 'pub', 'impl', 'struct', 'enum', 'match', 'use', 'mod',
-  'func', 'type', 'interface', 'package', 'defer', 'go', 'select', 'chan',
+  'fn', 'mut', 'pub', 'impl', 'struct', 'enum', 'match', 'use', 'mod',
+  'func', 'interface', 'package', 'defer', 'select', 'chan',
 ]);
 
 const TYPE_KEYWORDS = new Set([

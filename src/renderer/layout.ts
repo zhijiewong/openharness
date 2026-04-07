@@ -106,7 +106,8 @@ export function rasterize(
   const questionHeight = state.questionPrompt ? 4 + (state.questionPrompt.options?.length ?? 0) : 0;
   const statusLineHeight = state.statusLine ? 1 : 0;
   const contextWarningHeight = state.contextWarning ? 1 : 0;
-  const footerHeight = Math.max(3 + statusLineHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
+  const autocompleteHeight = state.autocomplete.length;
+  const footerHeight = Math.max(3 + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
   const msgAreaHeight = h - footerHeight;
 
   // ── Session browser overlay ──
@@ -392,7 +393,8 @@ export function rasterize(
     nextRow++;
 
     // Description (truncated)
-    const descText = state.permissionBox.suggestion || description.slice(0, boxWidth - 6);
+    const rawDesc = state.permissionBox.suggestion || description.slice(0, boxWidth - 6);
+    const descText = rawDesc.replace(/\|/g, ' ').replace(/\\/g, '/'); // sanitize pipe/backslash for display
     grid.writeText(nextRow, 1, '│ ', riskDim);
     grid.writeText(nextRow, 3, descText.slice(0, boxWidth - 4), S_DIM);
     grid.writeText(nextRow, boxWidth, '│', riskDim);

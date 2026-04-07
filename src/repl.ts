@@ -125,9 +125,9 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     if (ctxWindow > 0 && estimatedTokenCount > 0) {
       const usage = Math.min(1, estimatedTokenCount / ctxWindow);
       const barWidth = 10;
-      const filled = Math.round(usage * barWidth);
+      const filled = Math.max(1, Math.round(usage * barWidth));
       const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
-      const pct = Math.round(usage * 100);
+      const pct = Math.max(1, Math.ceil(usage * 100));
       parts.push(`ctx [${bar}] ${pct}%`);
     }
     renderer.setStatusLine(parts.join(' │ '));
