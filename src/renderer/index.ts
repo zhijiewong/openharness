@@ -5,7 +5,8 @@
 
 import { CellGrid } from './cells.js';
 import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
-import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
+import { rasterize, extractSuggestionFromArgs, type LayoutState, type ToolCallInfo } from './layout.js';
+import { extractDiffInfo } from './diff.js';
 import { startRawInput, type KeyEvent } from './input.js';
 import type { Message } from '../types/message.js';
 
@@ -28,6 +29,9 @@ export class TerminalRenderer {
   private permissionResolve: ((allowed: boolean) => void) | null = null;
   permissionPrompt: { toolName: string; description: string; riskLevel: string } | null = null;
 
+  // Question prompt state
+  private questionResolve: ((answer: string) => void) | null = null;
+
   // Animation callback (called every 500ms for companion, etc.)
   private animationCallback: ((frame: number) => void) | null = null;
 
@@ -46,10 +50,19 @@ export class TerminalRenderer {
       companionLines: null,
       companionColor: 'cyan',
       statusHints: 'exit to quit',
+      statusLine: '',
+      contextWarning: null,
       errorText: null,
       loading: false,
       spinnerFrame: 0,
+      thinkingStartedAt: null,
+      tokenCount: 0,
       vimMode: null,
+      permissionBox: null,
+      permissionDiffVisible: false,
+      permissionDiffInfo: null,
+      expandedToolCalls: new Set(),
+      questionPrompt: null,
     };
   }
 
@@ -68,19 +81,53 @@ export class TerminalRenderer {
           const resolve = this.permissionResolve;
           this.permissionResolve = null;
           this.permissionPrompt = null;
-          this.state.errorText = null;
+          this.state.permissionBox = null;
+          this.state.permissionDiffVisible = false;
+          this.state.permissionDiffInfo = null;
           this.scheduleRender();
           resolve(true);
         } else if (k === 'n') {
           const resolve = this.permissionResolve;
           this.permissionResolve = null;
           this.permissionPrompt = null;
-          this.state.errorText = null;
+          this.state.permissionBox = null;
+          this.state.permissionDiffVisible = false;
+          this.state.permissionDiffInfo = null;
           this.scheduleRender();
           resolve(false);
+        } else if (k === 'd' && this.state.permissionDiffInfo) {
+          this.state.permissionDiffVisible = !this.state.permissionDiffVisible;
+          this.scheduleRender();
         }
         return; // Swallow all other keys during permission prompt
       }
+
+      // Question prompt intercepts text input
+      if (this.questionResolve && this.state.questionPrompt) {
+        const qp = this.state.questionPrompt;
+        if (key.name === 'return' && qp.input.trim()) {
+          const resolve = this.questionResolve;
+          const answer = qp.input.trim();
+          this.questionResolve = null;
+          this.state.questionPrompt = null;
+          this.scheduleRender();
+          resolve(answer);
+        } else if (key.name === 'backspace') {
+          if (qp.cursor > 0) {
+            this.state.questionPrompt = { ...qp, input: qp.input.slice(0, qp.cursor - 1) + qp.input.slice(qp.cursor), cursor: qp.cursor - 1 };
+            this.scheduleRender();
+          }
+        } else if (key.name === 'left') {
+          if (qp.cursor > 0) { this.state.questionPrompt = { ...qp, cursor: qp.cursor - 1 }; this.scheduleRender(); }
+        } else if (key.name === 'right') {
+          if (qp.cursor < qp.input.length) { this.state.questionPrompt = { ...qp, cursor: qp.cursor + 1 }; this.scheduleRender(); }
+        } else if (key.char && key.char.length === 1 && !key.ctrl && !key.meta) {
+          this.state.questionPrompt = { ...qp, input: qp.input.slice(0, qp.cursor) + key.char + qp.input.slice(qp.cursor), cursor: qp.cursor + 1 };
+          this.scheduleRender();
+        }
+        return;
+      }
+
       if (this.keypressHandler) this.keypressHandler(key);
     });
 
@@ -122,17 +169,67 @@ export class TerminalRenderer {
     this.scheduleRender();
   }
   setStatusHints(text: string): void { this.state.statusHints = text; this.scheduleRender(); }
+  setStatusLine(text: string): void { this.state.statusLine = text; this.scheduleRender(); }
+  setContextWarning(warning: { text: string; critical: boolean } | null): void { this.state.contextWarning = warning; this.scheduleRender(); }
   setVimMode(mode: 'normal' | 'insert' | null): void { this.state.vimMode = mode; this.scheduleRender(); }
+  setThinkingStartedAt(time: number | null): void { this.state.thinkingStartedAt = time; }
+  setTokenCount(count: number): void { this.state.tokenCount = count; this.scheduleRender(); }
   setToolCall(callId: string, info: ToolCallInfo): void {
     this.state.toolCalls.set(callId, info);
     this.scheduleRender();
   }
+  getToolCall(callId: string): ToolCallInfo | undefined { return this.state.toolCalls.get(callId); }
   clearToolCalls(): void { this.state.toolCalls.clear(); this.scheduleRender(); }
+
+  /** Show a question prompt and wait for text answer */
+  askQuestion(question: string, options?: string[]): Promise<string> {
+    this.state.questionPrompt = { question, options: options ?? null, input: '', cursor: 0 };
+    this.scheduleRender();
+    return new Promise((resolve) => {
+      this.questionResolve = resolve;
+    });
+  }
+
+  // Expanded tool call tracking
+
+  toggleToolCallExpanded(callId: string): void {
+    const expanded = this.state.expandedToolCalls;
+    if (expanded.has(callId)) {
+      expanded.delete(callId);
+    } else {
+      expanded.add(callId);
+    }
+    this.scheduleRender();
+  }
+
+  /** Cycle to next tool call and toggle its expansion */
+  cycleToolCallExpansion(): void {
+    const ids = [...this.state.toolCalls.keys()].filter(id => {
+      const tc = this.state.toolCalls.get(id);
+      return tc && tc.status !== 'running' && tc.output;
+    });
+    if (ids.length === 0) return;
+
+    const expanded = this.state.expandedToolCalls;
+    const currentIdx = ids.findIndex(id => expanded.has(id));
+    if (currentIdx >= 0) {
+      expanded.delete(ids[currentIdx]!);
+      const nextIdx = currentIdx + 1;
+      if (nextIdx < ids.length) {
+        expanded.add(ids[nextIdx]!);
+      }
+    } else {
+      expanded.add(ids[0]!);
+    }
+    this.scheduleRender();
+  }
 
   /** Show permission prompt and wait for Y/N response */
   askPermission(toolName: string, description: string, riskLevel: string): Promise<boolean> {
     this.permissionPrompt = { toolName, description, riskLevel };
-    this.state.errorText = `⚠ ${toolName} (${riskLevel} risk) — ${description.slice(0, 60)}  [Y/N]`;
+    this.state.permissionBox = { toolName, description, riskLevel, suggestion: extractSuggestionFromArgs(toolName, description) };
+    this.state.permissionDiffVisible = false;
+    this.state.permissionDiffInfo = extractDiffInfo(toolName, description);
     this.scheduleRender();
     return new Promise((resolve) => {
       this.permissionResolve = resolve;

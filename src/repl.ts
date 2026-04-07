@@ -89,6 +89,48 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     renderer.setLoading(loading);
     const hints = `exit to quit${loading ? ' | Ctrl+C to interrupt' : ''}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name} to chat` : ''}`;
     renderer.setStatusHints(hints);
+    // Status line: model | tokens | cost
+    const inTok = cost.totalInputTokens;
+    const outTok = cost.totalOutputTokens;
+    const totalCostVal = cost.totalCost;
+    const parts: string[] = [];
+    if (currentModel) parts.push(currentModel);
+    if (inTok > 0 || outTok > 0) parts.push(`${formatTokens(inTok)}↑ ${formatTokens(outTok)}↓`);
+    if (totalCostVal > 0) parts.push(`$${totalCostVal.toFixed(4)}`);
+    renderer.setStatusLine(parts.join(' │ '));
+    // Context warning
+    updateContextWarning();
+  }
+
+  function formatTokens(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return `${n}`;
+  }
+
+  let estimatedTokenCount = 0;
+  let lastMessageCount = 0;
+
+  function updateContextWarning() {
+    // Incremental: only estimate tokens for new messages since last check
+    for (let i = lastMessageCount; i < messages.length; i++) {
+      const m = messages[i]!;
+      estimatedTokenCount += Math.ceil(m.content.length / 3.5);
+      if (m.toolCalls) for (const tc of m.toolCalls) estimatedTokenCount += Math.ceil(JSON.stringify(tc.arguments).length / 3.5);
+      if (m.toolResults) for (const tr of m.toolResults) estimatedTokenCount += Math.ceil(tr.output.length / 3.5);
+    }
+    lastMessageCount = messages.length;
+
+    const window = getContextWindow(currentModel);
+    const usage = window > 0 ? estimatedTokenCount / window : 0;
+    if (usage >= 0.75) {
+      renderer.setContextWarning({
+        text: `⚠ Context ~${Math.round(usage * 100)}% full — consider /compact`,
+        critical: usage >= 0.9,
+      });
+    } else {
+      renderer.setContextWarning(null);
+    }
   }
 
   // Input handling
@@ -113,6 +155,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         if (key.char === 'j' || key.name === 'down') { navigateHistory(1); return; }
         return; // swallow other keys in normal mode
       }
+    }
+
+    // Tab: cycle tool call expansion (when not loading)
+    if (key.name === 'tab' && !loading) {
+      renderer.cycleToolCallExpansion();
+      return;
     }
 
     // Enter: submit
@@ -247,6 +295,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   async function runQuery(prompt: string) {
     loading = true;
     renderer.setLoading(true);
+    renderer.setThinkingStartedAt(Date.now());
     renderer.setError(null);
     renderer.clearToolCalls();
 
@@ -258,12 +307,17 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return renderer.askPermission(toolName, description, riskLevel ?? 'medium');
     };
 
+    const askUserQuestion = (question: string, options?: string[]): Promise<string> => {
+      return renderer.askQuestion(question, options);
+    };
+
     const queryConfig = {
       provider: config.provider,
       tools: config.tools,
       systemPrompt: config.systemPrompt,
       permissionMode: config.permissionMode,
       askUser,
+      askUserQuestion,
       model: currentModel || undefined,
       abortSignal: abortController.signal,
     };
@@ -298,12 +352,54 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running' });
             break;
 
+          case 'tool_call_complete': {
+            const tcToolName = callIdToToolName.get(event.callId) ?? '';
+            // Extract a readable args summary
+            let argsSummary = '';
+            try {
+              const args = event.arguments;
+              if (args.file_path) argsSummary = args.file_path as string;
+              else if (args.command) argsSummary = `$ ${(args.command as string).slice(0, 60)}`;
+              else if (args.pattern) argsSummary = `pattern: ${args.pattern as string}`;
+              else argsSummary = JSON.stringify(args).slice(0, 80);
+            } catch { /* ignore */ }
+            const existingTc = renderer.getToolCall(event.callId);
+            renderer.setToolCall(event.callId, {
+              ...existingTc,
+              toolName: tcToolName,
+              status: 'running',
+              args: argsSummary,
+            });
+            break;
+          }
+
+          case 'tool_output_delta': {
+            // Accumulate streaming output lines
+            const existing = renderer.getToolCall(event.callId) ?? {
+              toolName: callIdToToolName.get(event.callId) ?? 'unknown',
+              status: 'running' as const,
+            };
+            const lines = existing.liveOutput ?? [];
+            const chunks = event.chunk.split('\n');
+            const merged = [...lines];
+            if (merged.length > 0 && !event.chunk.startsWith('\n')) {
+              merged[merged.length - 1] = (merged[merged.length - 1] ?? '') + chunks[0];
+              merged.push(...chunks.slice(1).filter((c: string) => c !== ''));
+            } else {
+              merged.push(...chunks.filter((c: string) => c !== ''));
+            }
+            renderer.setToolCall(event.callId, { ...existing, liveOutput: merged });
+            break;
+          }
+
           case 'tool_call_end': {
             const toolName = callIdToToolName.get(event.callId) ?? event.callId;
+            const prevTc = renderer.getToolCall(event.callId);
             renderer.setToolCall(event.callId, {
               toolName,
               status: event.isError ? 'error' : 'done',
-              output: event.output?.slice(0, 200),
+              output: event.output?.slice(0, 500),
+              args: prevTc?.args,
             });
             cybergotchiEvents.emit('cybergotchi', { type: event.isError ? 'toolError' : 'toolSuccess', toolName });
             // Auto-commit
@@ -321,6 +417,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             currentModel = event.model;
             cost.record('provider', event.model, event.inputTokens, event.outputTokens,
               event.cost || estimateCost(event.model, event.inputTokens, event.outputTokens));
+            renderer.setTokenCount(cost.totalOutputTokens);
+            syncRenderer();
+            break;
+
+          case 'rate_limited':
+            renderer.setError(`⏳ Rate limited — retrying in ${event.retryIn}s (attempt ${event.attempt}/3)`);
             break;
 
           case 'error':
@@ -329,6 +431,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
           case 'turn_complete':
             renderer.setThinkingText('');
+            renderer.setThinkingStartedAt(null);
             // Finalize streaming message
             if (accumulated) {
               const last = messages[messages.length - 1];

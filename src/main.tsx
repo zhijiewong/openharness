@@ -225,6 +225,17 @@ program
 
     process.stdout.write("\x1b[36m" + BANNER + "\x1b[0m\n");
     process.stdout.write(`\x1b[35mOpenHarness\x1b[0m \x1b[2mv${VERSION}\x1b[0m \x1b[36m${resolvedModel}\x1b[0m \x1b[2m(${effectivePermMode})\x1b[0m\n`);
+    // Show working directory and git branch
+    {
+      const cwd = process.cwd().replace(homedir(), '~');
+      let branchInfo = '';
+      try {
+        const { execSync } = await import('node:child_process');
+        const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        branchInfo = ` \x1b[2m(\x1b[36m${branch}\x1b[0m\x1b[2m)\x1b[0m`;
+      } catch { /* not a git repo */ }
+      process.stdout.write(`\x1b[2m  ${cwd}${branchInfo}\x1b[0m\n`);
+    }
     process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
 
     emitHook("sessionStart");

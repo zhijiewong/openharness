@@ -22,6 +22,7 @@ export function styleToSGR(style: Style): string {
   const codes: number[] = [0]; // reset first
   if (style.bold) codes.push(1);
   if (style.dim) codes.push(2);
+  if (style.underline) codes.push(4);
   if (style.fg && FG_CODES[style.fg]) codes.push(FG_CODES[style.fg]!);
   if (style.bg && BG_CODES[style.bg]) codes.push(BG_CODES[style.bg]!);
   return `\x1b[${codes.join(';')}m`;

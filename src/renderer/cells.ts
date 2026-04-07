@@ -7,6 +7,7 @@ export type Style = {
   bg: string | null;
   bold: boolean;
   dim: boolean;
+  underline: boolean;
 };
 
 export type Cell = {
@@ -14,7 +15,7 @@ export type Cell = {
   style: Style;
 };
 
-export const EMPTY_STYLE: Style = { fg: null, bg: null, bold: false, dim: false };
+export const EMPTY_STYLE: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
 export const EMPTY_CELL: Cell = { char: ' ', style: { ...EMPTY_STYLE } };
 
 export function cellsEqual(a: Cell, b: Cell): boolean {
@@ -22,7 +23,8 @@ export function cellsEqual(a: Cell, b: Cell): boolean {
     a.style.fg === b.style.fg &&
     a.style.bg === b.style.bg &&
     a.style.bold === b.style.bold &&
-    a.style.dim === b.style.dim;
+    a.style.dim === b.style.dim &&
+    a.style.underline === b.style.underline;
 }
 
 export class CellGrid {
