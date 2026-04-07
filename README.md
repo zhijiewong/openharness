@@ -53,10 +53,54 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 | Git integration | Auto-commit + /undo | Yes | Deep git | Basic |
 | Slash commands | 16 built-in | 80+ | Some | Some |
 | Headless/CI mode | `oh run --json` | Yes | Yes | Yes |
-| Terminal UI | React + Ink | React + Ink | Basic | BubbleTea |
+| Terminal UI | Custom cell-level renderer + React/Ink | React + Ink | Basic | BubbleTea |
 | Language | TypeScript | TypeScript | Python | Go |
 | License | MIT | Proprietary | Apache 2.0 | MIT |
 | Price | Free (BYOK) | $20+/month | Free (BYOK) | Free (BYOK) |
+
+## Terminal UI
+
+OpenHarness features a custom cell-level diffing renderer built for performance and rich display.
+
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit prompt |
+| `↑` / `↓` | Navigate input history |
+| `Ctrl+C` | Cancel current request / exit |
+| `Ctrl+A` / `Ctrl+E` | Jump to start / end of input |
+| `Page Up` / `Page Down` | Scroll message history (10 rows) |
+| `Shift+↑` / `Shift+↓` | Scroll message history (3 rows) |
+| `Tab` | Cycle through tool call outputs (expand/collapse) |
+| `Ctrl+K` | Toggle code block expansion in messages |
+| `/vim` | Toggle Vim mode (normal/insert) |
+
+### Features
+
+- **Markdown rendering** — headings, code blocks, bold, italic, lists, tables, blockquotes, links
+- **Syntax highlighting** — keywords, strings, comments, numbers, types (JS/TS/Python/Rust/Go)
+- **Collapsible code blocks** — blocks over 8 lines auto-collapse; `Ctrl+K` to expand all
+- **Shimmer spinner** — animated "Thinking" indicator with color transitions (magenta → yellow at 30s → red at 60s)
+- **Tool call display** — args preview, live streaming output, expand/collapse with `Tab`
+- **Permission prompts** — bordered box with risk coloring, `[D]iff` toggle for write/edit tools
+- **Inline diff view** — green/red diff in permission prompts for file changes
+- **Status line** — persistent model name, token count, and cost
+- **Context warning** — yellow alert when context window exceeds 75%
+- **Scrollback** — Page Up/Down or Shift+arrows to scroll through history
+- **Session browser** — `/browse` to interactively browse and resume past sessions
+- **Companion mascot** — animated Cybergotchi in the footer
+
+### Themes
+
+```bash
+oh --light                    # light theme for bright terminals
+```
+
+Set permanently in `.oh/config.yaml`:
+```yaml
+theme: 'light'
+```
 
 ## Tools (18)
 
@@ -99,6 +143,7 @@ Type these during a chat session:
 | `/commit [msg]` | Create a git commit |
 | `/log` | Show recent git commits |
 | `/history [n]` | List recent sessions; `/history search <term>` to search |
+| `/browse` | Interactive session browser with preview |
 | `/files` | List files in context |
 | `/model <name>` | Switch model mid-session |
 | `/compact` | Compress conversation to free context (smart: truncates old tool results, drops oldest messages, removes orphaned tool results, targets 60% of model context window) |

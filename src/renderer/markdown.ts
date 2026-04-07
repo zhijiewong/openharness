@@ -143,7 +143,8 @@ export function renderMarkdown(
           i++;
           continue;
         }
-        renderHighlightedCode(grid, r, col + 2, codeLine.slice(0, wrapWidth - col - 4), lang);
+        const codeWidth = Math.max(0, wrapWidth - col - 4);
+        renderHighlightedCode(grid, r, col + 2, codeLine.slice(0, codeWidth), lang);
         r++;
         i++;
       }

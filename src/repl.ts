@@ -143,6 +143,19 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       }
     }
 
+    // Session browser navigation
+    if (renderer.isSessionBrowserOpen()) {
+      if (key.name === 'up') { renderer.sessionBrowserUp(); return; }
+      if (key.name === 'down') { renderer.sessionBrowserDown(); return; }
+      if (key.name === 'return') {
+        const id = renderer.sessionBrowserSelect();
+        if (id) handleSubmit(`/resume ${id}`);
+        return;
+      }
+      if (key.name === 'escape') { renderer.closeSessionBrowser(); return; }
+      return; // swallow other keys during browser
+    }
+
     // Ctrl+K: toggle code block expansion
     if (key.ctrl && key.char === 'k' && !loading) {
       renderer.toggleCodeBlockExpansion();
@@ -238,6 +251,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     });
 
     messages = result.messages;
+    // Check for special commands
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.content === '__OPEN_SESSION_BROWSER__') {
+      messages = messages.slice(0, -1); // remove sentinel message
+      renderer.openSessionBrowser();
+      syncRenderer();
+      return;
+    }
     if (result.newModel) currentModel = result.newModel;
     if (result.vimToggled) {
       vimMode = vimMode === null ? 'normal' : null;

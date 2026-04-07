@@ -170,6 +170,10 @@ register("history", "List recent sessions or search across them", (args) => {
   return { output: `Recent sessions (use /resume <id> to continue):\n${lines.join("\n")}`, handled: true };
 });
 
+register("browse", "Open interactive session browser", () => {
+  return { output: "__OPEN_SESSION_BROWSER__", handled: true };
+});
+
 register("resume", "Resume a saved session by ID", (args) => {
   const id = args.trim();
   if (!id) return { output: "Usage: /resume <session-id>", handled: true };

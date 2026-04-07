@@ -8,6 +8,8 @@ import type { Style } from './cells.js';
 import { CellGrid, EMPTY_STYLE } from './cells.js';
 import { renderMarkdown, measureMarkdown } from './markdown.js';
 import { renderDiff } from './diff.js';
+import { isImageOutput, renderImageInline } from './image.js';
+import { renderSessionBrowser } from './session-browser.js';
 import { getTheme, type Theme } from '../utils/theme-data.js';
 
 export type ToolCallInfo = {
@@ -43,6 +45,7 @@ export type LayoutState = {
   questionPrompt: { question: string; options: string[] | null; input: string; cursor: number } | null;
   manualScroll: number; // 0 = auto-scroll to bottom, >0 = scrolled up by N rows
   codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
+  sessionBrowser: import('./session-browser.js').SessionBrowserState | null;
 };
 
 // Styles
@@ -97,6 +100,19 @@ export function rasterize(
   const contextWarningHeight = state.contextWarning ? 1 : 0;
   const footerHeight = Math.max(3 + statusLineHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
   const msgAreaHeight = h - footerHeight;
+
+  // ── Session browser overlay ──
+  if (state.sessionBrowser) {
+    const browserRows = renderSessionBrowser(grid, 0, 0, state.sessionBrowser, w, msgAreaHeight);
+    // Skip normal message rendering — show browser instead
+    const footerStart = Math.min(browserRows, msgAreaHeight);
+    // Render minimal footer (just input)
+    for (let c = 0; c < w; c++) grid.setCell(footerStart, c, '─', S_BORDER);
+    const inputRow = footerStart + 1;
+    grid.writeText(inputRow, 0, '❯ ', S_USER);
+    grid.writeText(inputRow + 1, 0, '↑/↓ navigate | Enter resume | Esc cancel', S_DIM);
+    return { cursorRow: inputRow, cursorCol: 2 };
+  }
 
   // ── Messages area (top) ──
   // Compute total height of all messages + streaming
@@ -293,6 +309,13 @@ export function rasterize(
 
     // Final output after completion
     if (tc.output && tc.status !== 'running' && r < msgAreaHeight) {
+      // Image results: show inline placeholder
+      if (isImageOutput(tc.output)) {
+        const label = renderImageInline(tc.output);
+        grid.writeText(r, 6, label.slice(0, w - 8), S_DIM);
+        r++;
+        continue;
+      }
       const outLines = tc.output.split('\n');
       const maxOut = isExpanded ? 20 : 3;
       const showLines = outLines.slice(0, maxOut);
@@ -328,15 +351,15 @@ export function rasterize(
 
   let nextRow = footerStart + 1;
 
-  // Permission prompt box (if active)
-  if (state.permissionBox) {
+  // Permission prompt box (if active, skip if terminal too narrow)
+  if (state.permissionBox && w >= 20) {
     const { toolName, description, riskLevel } = state.permissionBox;
     const riskColor = riskLevel === 'high' ? 'red' : riskLevel === 'medium' ? 'yellow' : 'green';
     const riskStyle: Style = { fg: riskColor, bg: null, bold: true, dim: false, underline: false };
     const riskDim: Style = { fg: riskColor, bg: null, bold: false, dim: true, underline: false };
 
     // Top border
-    const boxWidth = Math.min(w - 2, 70);
+    const boxWidth = Math.max(15, Math.min(w - 2, 70));
     grid.writeText(nextRow, 1, '╭' + '─'.repeat(boxWidth - 2) + '╮', riskDim);
     nextRow++;
 
@@ -393,11 +416,11 @@ export function rasterize(
 
   // Question prompt (if active)
   let questionInputRow = -1;
-  if (state.questionPrompt) {
+  if (state.questionPrompt && w >= 20) {
     const { question, options, input, cursor } = state.questionPrompt;
     const qStyle: Style = { fg: 'yellow', bg: null, bold: false, dim: false, underline: false };
     const qBorder: Style = { fg: 'yellow', bg: null, bold: false, dim: true, underline: false };
-    const qBoxWidth = Math.min(w - 2, 70);
+    const qBoxWidth = Math.max(15, Math.min(w - 2, 70));
 
     grid.writeText(nextRow, 1, '╭' + '─'.repeat(qBoxWidth - 2) + '╮', qBorder);
     nextRow++;

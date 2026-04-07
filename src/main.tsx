@@ -279,7 +279,7 @@ program
       model: resolvedModel,
       resumeSessionId,
       initialMessages,
-      theme: opts.light ? 'light' : 'dark',
+      theme: opts.light ? 'light' : (savedConfig?.theme ?? 'dark'),
     });
   });
 
