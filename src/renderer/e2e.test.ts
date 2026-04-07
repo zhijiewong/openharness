@@ -41,6 +41,8 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     codeBlocksExpanded: false,
     sessionBrowser: null,
     bannerLines: null,
+    thinkingExpanded: false,
+    lastThinkingSummary: null,
     ...overrides,
   };
 }
@@ -147,7 +149,7 @@ describe('E2E: REPL state machine', () => {
     for (let r = 0; r < grid.height; r++) {
       const line = gridText(grid, r);
       if (line.includes('Bash') && line.includes('high risk')) foundTool = true;
-      if (line.includes('[Y]es') && line.includes('[N]o')) foundYN = true;
+      if (line.includes('Yes') && line.includes('No')) foundYN = true;
     }
     assert.ok(foundTool, 'Should show tool name and risk');
     assert.ok(foundYN, 'Should show Y/N options');

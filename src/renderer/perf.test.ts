@@ -37,6 +37,8 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     codeBlocksExpanded: false,
     sessionBrowser: null,
     bannerLines: null,
+    thinkingExpanded: false,
+    lastThinkingSummary: null,
     ...overrides,
   };
 }

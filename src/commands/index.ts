@@ -60,9 +60,32 @@ function register(name: string, description: string, handler: CommandHandler) {
 // ── Register all commands ──
 
 register("help", "Show available commands", () => {
-  const lines = ["Available commands:\n"];
-  for (const [name, { description }] of commands) {
-    lines.push(`  /${name.padEnd(12)} ${description}`);
+  const categories: Record<string, string[]> = {
+    'Session': ['clear', 'compact', 'export', 'history', 'browse', 'resume', 'fork'],
+    'Git': ['diff', 'undo', 'commit', 'log'],
+    'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory'],
+    'Settings': ['theme', 'vim'],
+    'AI': ['plan', 'review'],
+    'Pet': ['cybergotchi'],
+  };
+  const lines: string[] = [];
+  for (const [category, names] of Object.entries(categories)) {
+    lines.push(`${category}:`);
+    for (const name of names) {
+      const cmd = commands.get(name);
+      if (cmd) lines.push(`  /${name.padEnd(12)} ${cmd.description}`);
+    }
+    lines.push('');
+  }
+  // Include any uncategorized commands
+  const categorized = new Set(Object.values(categories).flat());
+  const uncategorized = [...commands.keys()].filter(n => !categorized.has(n));
+  if (uncategorized.length > 0) {
+    lines.push('Other:');
+    for (const name of uncategorized) {
+      const cmd = commands.get(name)!;
+      lines.push(`  /${name.padEnd(12)} ${cmd.description}`);
+    }
   }
   return { output: lines.join("\n"), handled: true };
 });

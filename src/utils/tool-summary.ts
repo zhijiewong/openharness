@@ -46,6 +46,21 @@ export function summarizeToolArgs(toolName: string, argsJson: string): string | 
 export function formatToolArgs(toolName: string, args: Record<string, unknown>): string {
   if (args.file_path) return args.file_path as string;
   if (args.command) return `$ ${(args.command as string).slice(0, 60)}`;
-  if (args.pattern) return `pattern: ${args.pattern as string}`;
-  return JSON.stringify(args).slice(0, 80);
+  if (args.pattern) return `pattern: ${(args.pattern as string).slice(0, 40)}`;
+  if (args.query) return `"${(args.query as string).slice(0, 40)}"`;
+  if (args.url) return args.url as string;
+  // Compact JSON for other args
+  const json = JSON.stringify(args);
+  return json.length > 60 ? json.slice(0, 57) + '...' : json;
+}
+
+/**
+ * Summarize tool result output for compact display.
+ * Returns a short string like "42 lines" or "1.2 KB".
+ */
+export function summarizeToolOutput(output: string): string {
+  if (!output) return '';
+  const lines = output.split('\n').length;
+  if (lines === 1 && output.length < 60) return output.trim();
+  return `${lines} lines`;
 }

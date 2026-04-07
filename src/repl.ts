@@ -15,12 +15,13 @@ import { CostTracker, estimateCost, getContextWindow } from './harness/cost.js';
 import { autoCommitAIEdits, isGitRepo } from './git/index.js';
 import { cybergotchiEvents } from './cybergotchi/events.js';
 import { loadCompanionConfig, saveCompanionConfig } from './cybergotchi/config.js';
+import { readOhConfig, writeOhConfig } from './harness/config.js';
 import { roll } from './cybergotchi/bones.js';
 import { getSpecies } from './cybergotchi/species.js';
 import { EYE_STYLES, RARITY_COLORS, RARITY_STARS } from './cybergotchi/types.js';
 import { TerminalRenderer, type KeyEvent } from './renderer/index.js';
 import { formatTokenCount } from './utils/format.js';
-import { formatToolArgs } from './utils/tool-summary.js';
+import { formatToolArgs, summarizeToolOutput } from './utils/tool-summary.js';
 import { getCommandNames } from './commands/index.js';
 import { handleUserInput } from './harness/submit-handler.js';
 import { estimateMessageTokens, getContextWarning } from './harness/context-warning.js';
@@ -199,6 +200,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return;
     }
 
+    // Ctrl+O: toggle thinking expansion
+    if (key.ctrl && key.char === 'o') {
+      renderer.toggleThinkingExpanded();
+      return;
+    }
+
     // Page Up/Down and Shift+Up/Down: scrollback navigation
     if (key.name === 'pageup') { renderer.scrollUp(10); return; }
     if (key.name === 'pagedown') { renderer.scrollDown(10); return; }
@@ -316,6 +323,12 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       resetStyleCache();
       resetMdStyleCache();
       resetDiffStyleCache();
+      // Persist theme to config
+      try {
+        const cfg = readOhConfig() ?? { provider: config.provider.name, model: currentModel, permissionMode: config.permissionMode };
+        cfg.theme = themeName;
+        writeOhConfig(cfg);
+      } catch { /* ignore */ }
       messages = [...messages, createInfoMessage(`Theme switched to ${themeName}`)];
       syncRenderer();
       return;
@@ -426,11 +439,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
           case 'tool_call_end': {
             const toolName = callIdToToolName.get(event.callId) ?? event.callId;
             const prevTc = renderer.getToolCall(event.callId);
+            const elapsed = prevTc?.startedAt ? Math.floor((Date.now() - prevTc.startedAt) / 1000) : 0;
             renderer.setToolCall(event.callId, {
               toolName,
               status: event.isError ? 'error' : 'done',
               output: event.output?.slice(0, 500),
               args: prevTc?.args,
+              resultSummary: event.output ? summarizeToolOutput(event.output) : undefined,
+              startedAt: prevTc?.startedAt,
             });
             cybergotchiEvents.emit('cybergotchi', { type: event.isError ? 'toolError' : 'toolSuccess', toolName });
             // Auto-commit with file list
@@ -469,7 +485,16 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             renderer.setError(event.message);
             break;
 
-          case 'turn_complete':
+          case 'turn_complete': {
+            // Save thinking summary before clearing
+            const thinkElapsed = renderer.getThinkingStartedAt()
+              ? Math.floor((Date.now() - renderer.getThinkingStartedAt()!) / 1000)
+              : 0;
+            if (thinkElapsed > 0) {
+              renderer.setLastThinkingSummary(`∴ Thought for ${thinkElapsed}s [Ctrl+O]`);
+            } else {
+              renderer.setLastThinkingSummary(null);
+            }
             renderer.setThinkingText('');
             renderer.setThinkingStartedAt(null);
             // Finalize streaming message
@@ -493,6 +518,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             session.totalCost = cost.totalCost;
             try { saveSession(session); } catch { /* ignore */ }
             break;
+          }
         }
       }
     } catch (err) {
@@ -504,6 +530,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       abortController = null;
       renderer.setLoading(false);
       renderer.setStreamingText('');
+      renderer.scrollToBottom(); // Reset scroll so user sees latest content
       syncRenderer();
     }
   }

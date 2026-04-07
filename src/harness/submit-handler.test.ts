@@ -29,7 +29,7 @@ describe('handleUserInput', () => {
     // /help produces info message appended to messages
     assert.ok(result.messages.length > 0);
     const lastMsg = result.messages[result.messages.length - 1]!;
-    assert.ok(lastMsg.content.includes('Available commands'));
+    assert.ok(lastMsg.content.includes('/help'));
   });
 
   it('/clear returns handled=true and clears messages', async () => {

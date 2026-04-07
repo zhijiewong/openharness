@@ -72,6 +72,8 @@ export class TerminalRenderer {
       codeBlocksExpanded: false,
       sessionBrowser: null,
       bannerLines: null,
+      thinkingExpanded: false,
+      lastThinkingSummary: null,
     };
   }
 
@@ -192,6 +194,9 @@ export class TerminalRenderer {
   setContextWarning(warning: { text: string; critical: boolean } | null): void { this.state.contextWarning = warning; this.scheduleRender(); }
   setVimMode(mode: 'normal' | 'insert' | null): void { this.state.vimMode = mode; this.scheduleRender(); }
   setThinkingStartedAt(time: number | null): void { this.state.thinkingStartedAt = time; }
+  getThinkingStartedAt(): number | null { return this.state.thinkingStartedAt; }
+  setLastThinkingSummary(summary: string | null): void { this.state.lastThinkingSummary = summary; this.scheduleRender(); }
+  toggleThinkingExpanded(): void { this.state.thinkingExpanded = !this.state.thinkingExpanded; this.scheduleRender(); }
   setTokenCount(count: number): void { this.state.tokenCount = count; this.scheduleRender(); }
 
   scrollUp(rows: number): void {

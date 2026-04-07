@@ -19,6 +19,7 @@ export type ToolCallInfo = {
   args?: string;
   liveOutput?: string[];
   startedAt?: number; // timestamp for elapsed display
+  resultSummary?: string; // e.g., "42 lines" or "exit 0"
 };
 
 export type LayoutState = {
@@ -50,6 +51,8 @@ export type LayoutState = {
   codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
   sessionBrowser: import('./session-browser.js').SessionBrowserState | null;
   bannerLines: string[] | null;
+  thinkingExpanded: boolean;
+  lastThinkingSummary: string | null; // e.g., "∴ Thinking (2.1s, 856 tokens)"
 };
 
 // Styles
@@ -158,9 +161,12 @@ export function rasterize(
 
   // Pre-compute total height to handle scrolling
   let totalRows = 0;
-  // Banner height
-  const bannerHeight = state.bannerLines ? state.bannerLines.length + 1 : 0; // +1 blank line after
-  totalRows += bannerHeight;
+  // Banner height (compact on small terminals, hidden if very small)
+  if (state.bannerLines && msgAreaHeight >= 8) {
+    const compact = msgAreaHeight < 15;
+    const visibleLines = compact ? Math.min(2, state.bannerLines.length) : state.bannerLines.length;
+    totalRows += visibleLines + 1; // +1 blank line after
+  }
   for (const item of allContent) {
     if (item.role === 'user' && totalRows > 0) totalRows++;
     if (item.role === 'assistant' || item.role === 'streaming') {
@@ -182,14 +188,16 @@ export function rasterize(
   let contentIdx = 0;
 
   // ── Banner (ASCII art at top) ──
-  if (state.bannerLines) {
+  if (state.bannerLines && msgAreaHeight >= 8) {
     const S_BANNER = s('cyan');
     const S_BANNER_DIM = s(null, false, true);
-    for (let i = 0; i < state.bannerLines.length; i++) {
+    // On small terminals, show only the last 2 lines (version + cwd info)
+    const compact = msgAreaHeight < 15;
+    const startLine = compact ? Math.max(0, state.bannerLines.length - 2) : 0;
+    for (let i = startLine; i < state.bannerLines.length; i++) {
       if (virtualR >= scrollOffset && r < msgAreaHeight) {
         const line = state.bannerLines[i]!;
-        // Use different style for info lines (after the ASCII art, starting with non-space or specific patterns)
-        const isBannerArt = i < state.bannerLines.length - 2; // last 2 lines are version + cwd info
+        const isBannerArt = i < state.bannerLines.length - 2;
         grid.writeText(r, 0, line, isBannerArt ? S_BANNER : S_BANNER_DIM);
         r++;
       }
@@ -250,18 +258,40 @@ export function rasterize(
     contentIdx++;
   }
 
-  // ── Thinking text with shimmer ──
+  // ── Thinking text with shimmer (live) ──
   if (state.thinkingText && r < msgAreaHeight) {
-    const thinkLines = state.thinkingText.split('\n').slice(-3);
-    const shimmerPos = state.spinnerFrame % 20;
-    const S_BRIGHT: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
-    for (const tLine of thinkLines) {
-      if (r >= msgAreaHeight) break;
-      grid.writeText(r, 0, '💭 ', S_DIM);
-      const chars = [...tLine];
-      for (let ci = 0; ci < chars.length && ci + 3 < w; ci++) {
-        grid.setCell(r, 3 + ci, chars[ci]!, Math.abs(ci - shimmerPos) <= 2 ? S_BRIGHT : S_DIM);
+    if (state.thinkingExpanded) {
+      // Show full thinking text (last 10 lines)
+      const thinkLines = state.thinkingText.split('\n').slice(-10);
+      const shimmerPos = state.spinnerFrame % 20;
+      const S_BRIGHT: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
+      for (const tLine of thinkLines) {
+        if (r >= msgAreaHeight) break;
+        grid.writeText(r, 0, '💭 ', S_DIM);
+        const chars = [...tLine];
+        for (let ci = 0; ci < chars.length && ci + 3 < w; ci++) {
+          grid.setCell(r, 3 + ci, chars[ci]!, Math.abs(ci - shimmerPos) <= 2 ? S_BRIGHT : S_DIM);
+        }
+        r++;
       }
+    } else {
+      // Collapsed: single line with live indicator
+      const lineCount = state.thinkingText.split('\n').length;
+      const elapsed = state.thinkingStartedAt ? Math.floor((Date.now() - state.thinkingStartedAt) / 1000) : 0;
+      const summary = `∴ Thinking${elapsed > 0 ? ` (${elapsed}s)` : ''} — ${lineCount} lines [Ctrl+O expand]`;
+      grid.writeText(r, 0, summary, S_DIM);
+      r++;
+    }
+  }
+
+  // ── Collapsed thinking summary (after completion) ──
+  if (!state.loading && state.lastThinkingSummary && r < msgAreaHeight) {
+    if (state.thinkingExpanded) {
+      // Expanded mode not applicable after completion since text was cleared
+      grid.writeText(r, 0, state.lastThinkingSummary, S_DIM);
+      r++;
+    } else {
+      grid.writeText(r, 0, state.lastThinkingSummary, S_DIM);
       r++;
     }
   }
@@ -335,6 +365,12 @@ export function rasterize(
         grid.writeText(r, Math.min(afterName, w - elapsedStr.length - 2), elapsedStr, S_DIM);
       }
     }
+    // Result summary for completed tools (e.g., "42 lines", "exit 0")
+    if (tc.status !== 'running' && tc.resultSummary) {
+      const elapsed = tc.startedAt ? Math.floor((Date.now() - tc.startedAt) / 1000) : 0;
+      const suffix = elapsed > 0 ? `${tc.resultSummary} · ${elapsed}s` : tc.resultSummary;
+      grid.writeText(r, Math.min(afterName, w - suffix.length - 2), suffix, S_DIM);
+    }
     r++;
 
     // Live streaming output while running
@@ -390,9 +426,21 @@ export function rasterize(
   // ── Footer — place right after content, or at bottom if content fills the screen ──
   const footerStart = Math.min(r, msgAreaHeight);
 
-  // Border line
+  // Border line with scroll indicator
   for (let c = 0; c < w; c++) {
     grid.setCell(footerStart, c, '─', S_BORDER);
+  }
+  if (state.manualScroll > 0 && totalRows > msgAreaHeight) {
+    // User scrolled up — show how many lines are hidden below
+    const hiddenBelow = state.manualScroll;
+    const indicator = ` ↓ ${hiddenBelow} more below `;
+    const startCol = Math.max(0, Math.floor((w - indicator.length) / 2));
+    grid.writeText(footerStart, startCol, indicator, S_DIM);
+  } else if (totalRows > msgAreaHeight && scrollOffset > 0) {
+    // Content overflows but auto-scrolled to bottom — show lines hidden above
+    const indicator = ` ↑ ${scrollOffset} more above `;
+    const startCol = Math.max(0, Math.floor((w - indicator.length) / 2));
+    grid.writeText(footerStart, startCol, indicator, S_DIM);
   }
 
   let nextRow = footerStart + 1;
@@ -440,18 +488,22 @@ export function rasterize(
       nextRow += diffRows;
     }
 
-    // Action keys
+    // Action keys — prominent colored letters
     const hasDiff = state.permissionDiffInfo !== null;
+    const S_KEY_GREEN: Style = { fg: 'green', bg: null, bold: true, dim: false, underline: false };
+    const S_KEY_RED: Style = { fg: 'red', bg: null, bold: true, dim: false, underline: false };
+    const S_KEY_CYAN: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
     grid.writeText(nextRow, 1, '│ ', riskDim);
-    grid.writeText(nextRow, 3, '[', S_TEXT);
-    grid.writeText(nextRow, 4, 'Y', S_GREEN);
-    grid.writeText(nextRow, 5, ']es  [', S_TEXT);
-    grid.writeText(nextRow, 11, 'N', S_ERROR);
-    grid.writeText(nextRow, 12, ']o', S_TEXT);
+    let kc = 3;
+    grid.writeText(nextRow, kc, 'Y', S_KEY_GREEN); kc += 1;
+    grid.writeText(nextRow, kc, 'es', S_DIM); kc += 2;
+    grid.writeText(nextRow, kc, '  ', S_DIM); kc += 2;
+    grid.writeText(nextRow, kc, 'N', S_KEY_RED); kc += 1;
+    grid.writeText(nextRow, kc, 'o', S_DIM); kc += 1;
     if (hasDiff) {
-      grid.writeText(nextRow, 15, '[', S_TEXT);
-      grid.writeText(nextRow, 16, 'D', { fg: 'cyan', bg: null, bold: true, dim: false, underline: false });
-      grid.writeText(nextRow, 17, ']iff', S_TEXT);
+      grid.writeText(nextRow, kc, '  ', S_DIM); kc += 2;
+      grid.writeText(nextRow, kc, 'D', S_KEY_CYAN); kc += 1;
+      grid.writeText(nextRow, kc, 'iff', S_DIM); kc += 3;
     }
     grid.writeText(nextRow, boxWidth, '│', riskDim);
     nextRow++;
