@@ -23,6 +23,7 @@ import { formatTokenCount } from './utils/format.js';
 import { formatToolArgs } from './utils/tool-summary.js';
 import { handleUserInput } from './harness/submit-handler.js';
 import { estimateMessageTokens, getContextWarning } from './harness/context-warning.js';
+import { setActiveTheme } from './utils/theme-data.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,9 +35,11 @@ export type REPLConfig = {
   model?: string;
   initialMessages?: Message[];
   resumeSessionId?: string;
+  theme?: 'dark' | 'light';
 };
 
 export async function startREPL(config: REPLConfig): Promise<void> {
+  if (config.theme) setActiveTheme(config.theme);
   const renderer = new TerminalRenderer();
 
   // Session
@@ -139,6 +142,18 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         return; // swallow other keys in normal mode
       }
     }
+
+    // Ctrl+K: toggle code block expansion
+    if (key.ctrl && key.char === 'k' && !loading) {
+      renderer.toggleCodeBlockExpansion();
+      return;
+    }
+
+    // Page Up/Down and Shift+Up/Down: scrollback navigation
+    if (key.name === 'pageup') { renderer.scrollUp(10); return; }
+    if (key.name === 'pagedown') { renderer.scrollDown(10); return; }
+    if (key.shift && key.name === 'up') { renderer.scrollUp(3); return; }
+    if (key.shift && key.name === 'down') { renderer.scrollDown(3); return; }
 
     // Tab: cycle tool call expansion (when not loading)
     if (key.name === 'tab' && !loading) {
@@ -268,6 +283,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       for await (const event of query(prompt, queryConfig, messages)) {
         switch (event.type) {
           case 'text_delta':
+            renderer.scrollToBottom(); // auto-scroll on new content
             accumulated += event.content;
             // Move completed lines to messages, keep partial in streaming
             const lines = accumulated.split('\n');

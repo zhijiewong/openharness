@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-export { type Theme, darkTheme, lightTheme, getTheme } from "./theme-data.js";
+export { type Theme, darkTheme, lightTheme, getTheme, setActiveTheme } from "./theme-data.js";
 import { darkTheme } from "./theme-data.js";
 import type { Theme } from "./theme-data.js";
 

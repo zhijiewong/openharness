@@ -64,6 +64,8 @@ export class TerminalRenderer {
       permissionDiffInfo: null,
       expandedToolCalls: new Set(),
       questionPrompt: null,
+      manualScroll: 0,
+      codeBlocksExpanded: false,
     };
   }
 
@@ -175,6 +177,23 @@ export class TerminalRenderer {
   setVimMode(mode: 'normal' | 'insert' | null): void { this.state.vimMode = mode; this.scheduleRender(); }
   setThinkingStartedAt(time: number | null): void { this.state.thinkingStartedAt = time; }
   setTokenCount(count: number): void { this.state.tokenCount = count; this.scheduleRender(); }
+
+  scrollUp(rows: number): void {
+    this.state.manualScroll += rows;
+    this.scheduleRender();
+  }
+  scrollDown(rows: number): void {
+    this.state.manualScroll = Math.max(0, this.state.manualScroll - rows);
+    this.scheduleRender();
+  }
+  scrollToBottom(): void {
+    this.state.manualScroll = 0;
+    this.scheduleRender();
+  }
+  toggleCodeBlockExpansion(): void {
+    this.state.codeBlocksExpanded = !this.state.codeBlocksExpanded;
+    this.scheduleRender();
+  }
   setToolCall(callId: string, info: ToolCallInfo): void {
     this.state.toolCalls.set(callId, info);
     this.scheduleRender();

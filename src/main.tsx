@@ -174,6 +174,7 @@ program
   .option("--resume <id>", "Resume a saved session")
   .option("--continue", "Resume the most recent session")
   .option("--fork <id>", "Fork (branch) from an existing session")
+  .option("--light", "Use light theme")
   .action(async (opts) => {
     // Load saved config as defaults (env vars + CLI flags override)
     const savedConfig = readOhConfig();
@@ -278,6 +279,7 @@ program
       model: resolvedModel,
       resumeSessionId,
       initialMessages,
+      theme: opts.light ? 'light' : 'dark',
     });
   });
 

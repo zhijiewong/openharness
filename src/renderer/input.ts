@@ -61,6 +61,14 @@ function parseKey(data: string, offset: number): { event: KeyEvent; consumed: nu
     if (seq.startsWith('\x1b[F')) return { event: key('', 'end', seq.slice(0, 3)), consumed: 3 };
     // Delete: ESC [ 3 ~
     if (seq.startsWith('\x1b[3~')) return { event: key('', 'delete', seq.slice(0, 4)), consumed: 4 };
+    // Page Up/Down: ESC [ 5 ~ / ESC [ 6 ~
+    if (seq.startsWith('\x1b[5~')) return { event: key('', 'pageup', seq.slice(0, 4)), consumed: 4 };
+    if (seq.startsWith('\x1b[6~')) return { event: key('', 'pagedown', seq.slice(0, 4)), consumed: 4 };
+    // Shift+Arrow: ESC [ 1 ; 2 A/B/C/D
+    if (seq.startsWith('\x1b[1;2A')) return { event: { char: '', name: 'up', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
+    if (seq.startsWith('\x1b[1;2B')) return { event: { char: '', name: 'down', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
+    if (seq.startsWith('\x1b[1;2C')) return { event: { char: '', name: 'right', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
+    if (seq.startsWith('\x1b[1;2D')) return { event: { char: '', name: 'left', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
     // Alt+char
     if (seq.length >= 2 && seq[1]! >= ' ') {
       return { event: { char: seq[1]!, name: seq[1]!, ctrl: false, meta: true, shift: false, sequence: seq.slice(0, 2) }, consumed: 2 };

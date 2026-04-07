@@ -41,34 +41,37 @@ export type LayoutState = {
   permissionDiffInfo: import('./diff.js').DiffInfo | null;
   expandedToolCalls: Set<string>;
   questionPrompt: { question: string; options: string[] | null; input: string; cursor: number } | null;
+  manualScroll: number; // 0 = auto-scroll to bottom, >0 = scrolled up by N rows
+  codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
 };
 
 // Styles
-// Styles derived from theme (supports dark/light switching)
-function buildStyles(t: Theme) {
-  const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
-  return {
-    user: s(t.user, true),
-    assistant: s(t.assistant, true),
-    text: s(null),
-    dim: s(null, false, true),
-    error: s(t.error),
-    tool: s(t.tool),
-    success: s(t.success),
-    border: s(null, false, true),
-  };
-}
+// Style helper
+const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
-const theme = getTheme();
-const ST = buildStyles(theme);
-const S_USER = ST.user;
-const S_ASSISTANT = ST.assistant;
-const S_TEXT = ST.text;
-const S_DIM = ST.dim;
-const S_ERROR = ST.error;
-const S_YELLOW = ST.tool;
-const S_GREEN = ST.success;
-const S_BORDER = ST.border;
+// Theme-independent styles
+const S_TEXT = s(null);
+const S_DIM = s(null, false, true);
+const S_BORDER = s(null, false, true);
+
+// Theme-dependent styles — lazily initialized on first rasterize() call
+let S_USER: Style;
+let S_ASSISTANT: Style;
+let S_ERROR: Style;
+let S_YELLOW: Style;
+let S_GREEN: Style;
+let _stylesInit = false;
+
+function ensureStyles() {
+  if (_stylesInit) return;
+  _stylesInit = true;
+  const t = getTheme();
+  S_USER = s(t.user, true);
+  S_ASSISTANT = s(t.assistant, true);
+  S_ERROR = s(t.error);
+  S_YELLOW = s(t.tool);
+  S_GREEN = s(t.success);
+}
 
 const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -80,6 +83,7 @@ export function rasterize(
   state: LayoutState,
   grid: CellGrid,
 ): { cursorRow: number; cursorCol: number } {
+  ensureStyles();
   const w = grid.width;
   const h = grid.height;
 
@@ -141,7 +145,9 @@ export function rasterize(
   }
 
   // If content exceeds area, scroll: offset so latest content is visible at bottom
-  const scrollOffset = totalRows > msgAreaHeight ? totalRows - msgAreaHeight : 0;
+  // manualScroll > 0 means user scrolled up by that many rows
+  const autoOffset = totalRows > msgAreaHeight ? totalRows - msgAreaHeight : 0;
+  const scrollOffset = Math.max(0, autoOffset - state.manualScroll);
   let r = 0;
   let virtualR = 0; // tracks position before scroll clipping
   let contentIdx = 0;
@@ -185,7 +191,7 @@ export function rasterize(
     // Write content — use markdown renderer for assistant messages
     let rows: number;
     if (item.role === 'assistant' || item.role === 'streaming') {
-      rows = renderMarkdown(grid, r, prefixLen, item.content, w);
+      rows = renderMarkdown(grid, r, prefixLen, item.content, w, state.codeBlocksExpanded);
     } else {
       rows = grid.writeWrapped(r, prefixLen, item.content, item.style, w);
     }
@@ -216,8 +222,9 @@ export function rasterize(
     const elapsed = state.thinkingStartedAt ? Math.floor((Date.now() - state.thinkingStartedAt) / 1000) : 0;
 
     // Color transitions: magenta → yellow (30s+) → red (60s+)
-    const baseColor = elapsed > 60 ? theme.error : elapsed > 30 ? theme.stall : theme.primary;
-    const shimmerColor = elapsed > 60 ? theme.stallShimmer : elapsed > 30 ? theme.warning : theme.primaryShimmer;
+    const t = getTheme();
+    const baseColor = elapsed > 60 ? t.error : elapsed > 30 ? t.stall : t.primary;
+    const shimmerColor = elapsed > 60 ? t.stallShimmer : elapsed > 30 ? t.warning : t.primaryShimmer;
     const baseStyle: Style = { fg: baseColor, bg: null, bold: false, dim: false, underline: false };
 
     // Prefix

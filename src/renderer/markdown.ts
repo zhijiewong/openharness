@@ -9,19 +9,35 @@ import type { Style } from './cells.js';
 import type { CellGrid } from './cells.js';
 import { getTheme } from '../utils/theme-data.js';
 
-const t = getTheme();
 const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
+// Theme-independent
 const S_TEXT = s(null);
 const S_BOLD = s(null, true);
-const S_HEADING = s(t.heading, true);
-const S_CODE = s(t.codeBlock, false, true);
-const S_CODE_FENCE = s(t.codeFence, false, true);
-const S_BULLET = s(t.bullet);
 const S_BLOCKQUOTE = s(null, false, true);
 const S_HR = s(null, false, true);
 const S_TABLE_HEADER = s(null, true);
 const S_TABLE_BORDER = s(null, false, true);
+
+// Theme-dependent (lazy)
+let S_HEADING: Style, S_CODE: Style, S_CODE_FENCE: Style, S_BULLET: Style;
+let S_KW: Style, S_STRING: Style, S_COMMENT: Style, S_NUMBER: Style, S_TYPE: Style;
+let _mdStylesInit = false;
+
+function ensureMdStyles() {
+  if (_mdStylesInit) return;
+  _mdStylesInit = true;
+  const t = getTheme();
+  S_HEADING = s(t.heading, true);
+  S_CODE = s(t.codeBlock, false, true);
+  S_CODE_FENCE = s(t.codeFence, false, true);
+  S_BULLET = s(t.bullet);
+  S_KW = s(t.assistant, true);
+  S_STRING = s(t.success);
+  S_COMMENT = s(null, false, true);
+  S_NUMBER = s(t.tool);
+  S_TYPE = s(t.user);
+}
 
 type Segment = { text: string; style: Style };
 
@@ -84,7 +100,9 @@ export function renderMarkdown(
   col: number,
   text: string,
   width: number,
+  codeBlocksExpanded = false,
 ): number {
+  ensureMdStyles();
   const wrapWidth = width;
   const lines = text.split('\n');
   let r = row;
@@ -103,14 +121,27 @@ export function renderMarkdown(
       i++;
 
       // Render code lines until closing fence (with syntax highlighting)
+      const CODE_COLLAPSE_THRESHOLD = 8;
+      let codeLineCount = 0;
+      let skippedLines = 0;
       while (i < lines.length) {
         if (r >= grid.height) break;
         const codeLine = lines[i]!;
         if (codeLine.trimStart().startsWith('```')) {
+          if (skippedLines > 0) {
+            grid.writeText(r, col + 2, `… ${skippedLines} more lines (Ctrl+K to expand)`, S_CODE_FENCE);
+            r++;
+          }
           grid.writeText(r, col, '```', S_CODE_FENCE);
           r++;
           i++;
           break;
+        }
+        codeLineCount++;
+        if (!codeBlocksExpanded && codeLineCount > CODE_COLLAPSE_THRESHOLD) {
+          skippedLines++;
+          i++;
+          continue;
         }
         renderHighlightedCode(grid, r, col + 2, codeLine.slice(0, wrapWidth - col - 4), lang);
         r++;
@@ -378,12 +409,6 @@ function parseTableRow(line: string): string[] {
 }
 
 // ── Syntax highlighting ──
-
-const S_KW: Style = s(t.assistant, true);       // keywords: magenta bold
-const S_STRING: Style = s(t.success);            // strings: green
-const S_COMMENT: Style = s(null, false, true);   // comments: dim
-const S_NUMBER: Style = s(t.tool);               // numbers: yellow
-const S_TYPE: Style = s(t.user);                 // types: cyan
 
 // Keywords for common languages
 const KEYWORDS = new Set([

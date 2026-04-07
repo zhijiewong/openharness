@@ -69,6 +69,13 @@ export const lightTheme: Theme = {
   bullet: "cyanBright",
 };
 
-export function getTheme(name: 'dark' | 'light' = 'dark'): Theme {
-  return name === 'light' ? lightTheme : darkTheme;
+let activeTheme: Theme = darkTheme;
+
+export function getTheme(): Theme {
+  return activeTheme;
+}
+
+/** Set the active theme. Must be called before renderer modules initialize. */
+export function setActiveTheme(name: 'dark' | 'light'): void {
+  activeTheme = name === 'light' ? lightTheme : darkTheme;
 }

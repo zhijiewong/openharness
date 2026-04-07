@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useTheme } from "../utils/theme.js";
 import { summarizeToolArgs } from "../utils/tool-summary.js";
+import { extractDiffInfo, type DiffInfo } from "../renderer/diff.js";
 import DiffView from "./DiffView.js";
-import { readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,36 +16,7 @@ type Props = {
   onResolve: (allowed: boolean) => void;
 };
 
-/** Try to parse file path and content from tool args for diff display */
-function extractFileInfo(toolName: string, description: string): {
-  filePath?: string;
-  oldContent?: string;
-  newContent?: string;
-  oldString?: string;
-  newString?: string;
-} | null {
-  try {
-    const args = JSON.parse(description);
-    const name = toolName.toLowerCase();
-
-    if (name.includes('write') && args.file_path && args.content) {
-      const old = existsSync(args.file_path) ? readFileSync(args.file_path, 'utf-8') : '';
-      return { filePath: args.file_path, oldContent: old, newContent: args.content };
-    }
-
-    if (name.includes('edit') && args.file_path && args.old_string && args.new_string) {
-      if (existsSync(args.file_path)) {
-        const old = readFileSync(args.file_path, 'utf-8');
-        const newContent = old.replace(args.old_string, args.new_string);
-        return { filePath: args.file_path, oldContent: old, newContent, oldString: args.old_string, newString: args.new_string };
-      }
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
+// extractFileInfo moved to shared renderer/diff.ts as extractDiffInfo
 
 export default function PermissionPrompt({
   toolName,
@@ -55,8 +27,8 @@ export default function PermissionPrompt({
   const theme = useTheme();
   const [showDiff, setShowDiff] = useState(false);
 
-  const fileInfo = extractFileInfo(toolName, description);
-  const hasDiff = fileInfo !== null && fileInfo.oldContent !== undefined && fileInfo.newContent !== undefined;
+  const fileInfo = extractDiffInfo(toolName, description);
+  const hasDiff = fileInfo !== null;
 
   useInput((input) => {
     const key = input.toLowerCase();

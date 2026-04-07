@@ -10,8 +10,9 @@ import { query, type QueryConfig } from "../query.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
-import { CostTracker, estimateCost, getContextWindow } from "../harness/cost.js";
+import { CostTracker, estimateCost } from "../harness/cost.js";
 import { processSlashCommand, type CommandContext } from "../commands/index.js";
+import { estimateMessageTokens, getContextWarning } from "../harness/context-warning.js";
 import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
 import Spinner from "./Spinner.js";
 import TextInput from "./TextInput.js";
@@ -627,21 +628,13 @@ export default function REPL({
           {cybergotchiConfigRef.current?.soul?.name ? ` | @${cybergotchiConfigRef.current!.soul.name} to chat` : ""}
         </Text>
 
-        {/* Token context warning — estimate from actual message content */}
+        {/* Token context warning */}
         {(() => {
-          const estimatedTokens = messages.reduce((sum, m) => {
-            let t = Math.ceil(m.content.length / 3.5);
-            if (m.toolCalls) for (const tc of m.toolCalls) t += Math.ceil(JSON.stringify(tc.arguments).length / 3.5);
-            if (m.toolResults) for (const tr of m.toolResults) t += Math.ceil(tr.output.length / 3.5);
-            return sum + t;
-          }, 0);
-          const window = getContextWindow(currentModel);
-          const usage = window > 0 ? estimatedTokens / window : 0;
-          if (usage < 0.75) return null;
-          const critical = usage >= 0.9;
+          const warning = getContextWarning(estimateMessageTokens(messages), currentModel);
+          if (!warning) return null;
           return (
-            <Text color={critical ? "yellow" : undefined} bold={critical} dimColor={!critical}>
-              {`⚠ Context ~${Math.round(usage * 100)}% full — consider /compact`}
+            <Text color={warning.critical ? "yellow" : undefined} bold={warning.critical} dimColor={!warning.critical}>
+              {warning.text}
             </Text>
           );
         })()}
