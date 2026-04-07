@@ -4,7 +4,7 @@
  */
 
 import { CellGrid } from './cells.js';
-import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
+import { diff, syncWrite, enterAltScreen, leaveAltScreen, hideCursor, showCursor, moveCursor } from './differ.js';
 import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
 import { createSessionBrowser, browserUp, browserDown, browserSelectedId, browserLoadPreview, browserSearch, type SessionBrowserState } from './session-browser.js';
 import { summarizeToolArgs } from '../utils/tool-summary.js';
@@ -26,6 +26,7 @@ export class TerminalRenderer {
 
   // Callbacks
   private keypressHandler: ((key: KeyEvent) => void) | null = null;
+  private resizeHandler: (() => void) | null = null;
 
   // Permission prompt state
   private permissionResolve: ((allowed: boolean) => void) | null = null;
@@ -77,6 +78,7 @@ export class TerminalRenderer {
 
   start(): void {
     this.started = true;
+    enterAltScreen();
     hideCursor();
 
     // Raw input
@@ -146,19 +148,22 @@ export class TerminalRenderer {
     }, 500);
 
     // Terminal resize
-    process.stdout.on('resize', () => this.handleResize());
+    this.resizeHandler = () => this.handleResize();
+    process.stdout.on('resize', this.resizeHandler);
 
     this.render();
   }
 
   stop(): void {
+    if (!this.started) return;
     this.started = false;
     if (this.animationTimer) { clearInterval(this.animationTimer); this.animationTimer = null; }
+    if (this.resizeHandler) { process.stdout.off('resize', this.resizeHandler); this.resizeHandler = null; }
     if (this.stopInput) { this.stopInput(); this.stopInput = null; }
+    // Restore terminal: leave alt screen (restores original scrollback), show cursor, reset attributes
+    process.stdout.write('\x1b[0m');
     showCursor();
-    // Move cursor to bottom
-    moveCursor((process.stdout.rows ?? 24) - 1, 0);
-    process.stdout.write('\n');
+    leaveAltScreen();
   }
 
   // ── State updates ──

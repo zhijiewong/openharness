@@ -80,6 +80,16 @@ export function syncWrite(output: string): void {
   process.stdout.write('\x1b[?2026h' + output + '\x1b[?2026l');
 }
 
+/** Enter alternate screen buffer (preserves main scrollback) */
+export function enterAltScreen(): void {
+  process.stdout.write('\x1b[?1049h');
+}
+
+/** Leave alternate screen buffer (restores main scrollback) */
+export function leaveAltScreen(): void {
+  process.stdout.write('\x1b[?1049l');
+}
+
 /** Clear the entire screen */
 export function clearScreen(): void {
   process.stdout.write('\x1b[2J\x1b[H');

@@ -40,6 +40,7 @@ export type REPLConfig = {
   initialMessages?: Message[];
   resumeSessionId?: string;
   theme?: 'dark' | 'light';
+  welcomeText?: string;
 };
 
 export async function startREPL(config: REPLConfig): Promise<void> {
@@ -58,6 +59,11 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
   const cost = new CostTracker();
   let messages: Message[] = config.resumeSessionId ? session.messages : (config.initialMessages ?? []);
+
+  // Show welcome info on fresh sessions
+  if (messages.length === 0 && config.welcomeText) {
+    messages = [createInfoMessage(config.welcomeText)];
+  }
   let loading = false;
   let currentModel = config.model ?? '';
   let abortController: AbortController | null = null;
@@ -154,7 +160,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       if (loading && abortController) {
         abortController.abort();
       } else {
-        renderer.stop();
+        cleanup();
         process.exit(0);
       }
       return;
@@ -279,10 +285,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   async function handleSubmit(input: string) {
     // Exit
     if (input === 'exit' || input === 'quit' || input === '/exit' || input === '/quit') {
-      renderer.stop();
-      session.messages = messages;
-      session.totalCost = cost.totalCost;
-      try { saveSession(session); } catch { /* ignore */ }
+      cleanup();
       process.exit(0);
     }
 
@@ -503,6 +506,22 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       syncRenderer();
     }
   }
+
+  // Centralized cleanup — ensures terminal is always restored
+  let cleanedUp = false;
+  function cleanup() {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    renderer.stop();
+    session.messages = messages;
+    session.totalCost = cost.totalCost;
+    try { saveSession(session); } catch { /* ignore */ }
+  }
+
+  // Ensure terminal restoration on unexpected exit
+  process.on('exit', cleanup);
+  process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+  process.on('uncaughtException', (err) => { cleanup(); console.error('Fatal:', err); process.exit(1); });
 
   // Start
   renderer.start();
