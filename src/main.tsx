@@ -238,8 +238,10 @@ program
     process.stdout.write(`\x1b[2m  ${cwd}${branchSuffix}\x1b[0m\n`);
     process.stdout.write("\x1b[2m" + "─".repeat(60) + "\x1b[0m\n\n");
 
-    // Plain-text welcome for renderer
-    const welcomeText = `OpenHarness v${VERSION} ${resolvedModel} (${effectivePermMode})\n  ${cwd}${gitBranch ? ` (${gitBranch})` : ''}`;
+    // Full banner for renderer (displayed on alt screen)
+    const welcomeText = BANNER + '\n' +
+      `OpenHarness v${VERSION} ${resolvedModel} (${effectivePermMode})` + '\n' +
+      `  ${cwd}${gitBranch ? ` (${gitBranch})` : ''}`;
 
     emitHook("sessionStart");
     const emitEnd = () => { emitHook("sessionEnd"); };

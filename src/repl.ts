@@ -60,10 +60,8 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   const cost = new CostTracker();
   let messages: Message[] = config.resumeSessionId ? session.messages : (config.initialMessages ?? []);
 
-  // Show welcome info on fresh sessions
-  if (messages.length === 0 && config.welcomeText) {
-    messages = [createInfoMessage(config.welcomeText)];
-  }
+  // Show banner on fresh sessions (set after renderer.start())
+  const showBanner = messages.length === 0 && config.welcomeText;
   let loading = false;
   let currentModel = config.model ?? '';
   let abortController: AbortController | null = null;
@@ -283,6 +281,9 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   }
 
   async function handleSubmit(input: string) {
+    // Clear welcome banner on first interaction
+    renderer.setBanner(null);
+
     // Exit
     if (input === 'exit' || input === 'quit' || input === '/exit' || input === '/quit') {
       cleanup();
@@ -525,5 +526,6 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
   // Start
   renderer.start();
+  if (showBanner) renderer.setBanner(config.welcomeText!.split('\n'));
   syncRenderer();
 }

@@ -71,6 +71,7 @@ export class TerminalRenderer {
       manualScroll: 0,
       codeBlocksExpanded: false,
       sessionBrowser: null,
+      bannerLines: null,
     };
   }
 
@@ -180,6 +181,7 @@ export class TerminalRenderer {
     this.state.companionColor = color;
     this.scheduleRender();
   }
+  setBanner(lines: string[] | null): void { this.state.bannerLines = lines; this.scheduleRender(); }
   setStatusHints(text: string): void { this.state.statusHints = text; this.scheduleRender(); }
   setAutocomplete(suggestions: string[], index: number): void {
     this.state.autocomplete = suggestions;

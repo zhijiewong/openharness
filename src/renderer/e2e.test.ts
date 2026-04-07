@@ -40,6 +40,7 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     manualScroll: 0,
     codeBlocksExpanded: false,
     sessionBrowser: null,
+    bannerLines: null,
     ...overrides,
   };
 }

@@ -49,6 +49,7 @@ export type LayoutState = {
   manualScroll: number; // 0 = auto-scroll to bottom, >0 = scrolled up by N rows
   codeBlocksExpanded: boolean; // false = collapse long code blocks to 3 lines
   sessionBrowser: import('./session-browser.js').SessionBrowserState | null;
+  bannerLines: string[] | null;
 };
 
 // Styles
@@ -157,6 +158,9 @@ export function rasterize(
 
   // Pre-compute total height to handle scrolling
   let totalRows = 0;
+  // Banner height
+  const bannerHeight = state.bannerLines ? state.bannerLines.length + 1 : 0; // +1 blank line after
+  totalRows += bannerHeight;
   for (const item of allContent) {
     if (item.role === 'user' && totalRows > 0) totalRows++;
     if (item.role === 'assistant' || item.role === 'streaming') {
@@ -176,6 +180,27 @@ export function rasterize(
   let r = 0;
   let virtualR = 0; // tracks position before scroll clipping
   let contentIdx = 0;
+
+  // ── Banner (ASCII art at top) ──
+  if (state.bannerLines) {
+    const S_BANNER = s('cyan');
+    const S_BANNER_DIM = s(null, false, true);
+    for (let i = 0; i < state.bannerLines.length; i++) {
+      if (virtualR >= scrollOffset && r < msgAreaHeight) {
+        const line = state.bannerLines[i]!;
+        // Use different style for info lines (after the ASCII art, starting with non-space or specific patterns)
+        const isBannerArt = i < state.bannerLines.length - 2; // last 2 lines are version + cwd info
+        grid.writeText(r, 0, line, isBannerArt ? S_BANNER : S_BANNER_DIM);
+        r++;
+      }
+      virtualR++;
+    }
+    // Blank line after banner
+    if (virtualR >= scrollOffset && r < msgAreaHeight) {
+      r++;
+    }
+    virtualR++;
+  }
 
   for (const item of allContent) {
     if (r >= msgAreaHeight) break;
