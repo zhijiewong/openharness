@@ -305,6 +305,81 @@ oh --model llamacpp/my-model
 oh --model lmstudio/my-model
 ```
 
+### Ollama (local, free)
+
+Run models locally with [Ollama](https://ollama.com) — no API key, no cost.
+
+**Install Ollama and pull a model:**
+```bash
+ollama pull qwen2.5:7b
+```
+
+**Run:**
+```bash
+oh --model ollama/qwen2.5:7b
+oh --model ollama/llama3
+oh                                    # auto-detects Ollama on localhost:11434
+```
+
+**Config** (`.oh/config.yaml`):
+```yaml
+provider: ollama
+model: qwen2.5:7b
+permissionMode: ask
+```
+
+If Ollama runs on a different host:
+```yaml
+provider: ollama
+model: llama3
+baseUrl: http://192.168.1.50:11434
+```
+
+### OpenRouter (100+ models, one API key)
+
+[OpenRouter](https://openrouter.ai) gives you access to models from OpenAI, Anthropic, Google, Meta, and others through a single API key.
+
+**Get an API key** at [openrouter.ai/keys](https://openrouter.ai/keys), then:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-...
+oh --model openrouter/anthropic/claude-sonnet-4-6
+oh --model openrouter/google/gemini-2.5-pro
+oh --model openrouter/meta-llama/llama-3.1-405b-instruct
+```
+
+**Config** (`.oh/config.yaml`):
+```yaml
+provider: openrouter
+model: anthropic/claude-sonnet-4-6
+permissionMode: ask
+```
+
+### Custom OpenAI-compatible endpoints
+
+Any server that speaks the OpenAI chat completions API works out of the box — LM Studio, vLLM, text-generation-webui, LocalAI, etc.
+
+**LM Studio:**
+```bash
+# start LM Studio server on default port 1234, then:
+oh --model lmstudio/my-model
+```
+
+**vLLM / other OpenAI-compatible servers:**
+```bash
+oh --model openai/my-model
+```
+
+**Config** (`.oh/config.yaml`):
+```yaml
+provider: openai
+model: my-model
+baseUrl: http://localhost:8000/v1
+permissionMode: ask
+```
+
+The `openai` provider works with any `baseUrl` that implements `/v1/chat/completions`. If the server needs an API key, set `OPENAI_API_KEY` or add `apiKey` in the config.
+
 ### llama.cpp / GGUF (local, no Ollama needed)
 
 For direct GGUF support via `llama-server`, without the overhead of Ollama. Often faster for large models.
