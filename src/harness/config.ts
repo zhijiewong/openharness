@@ -43,6 +43,7 @@ export type OhConfig = {
   mcpServers?: McpServerConfig[];
   hooks?: HooksConfig;
   toolPermissions?: ToolPermissionRule[];
+  statusLineFormat?: string; // Template: {model} {tokens} {cost} {ctx}
 };
 
 function yamlScalar(value: string): string {

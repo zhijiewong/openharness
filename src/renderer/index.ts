@@ -75,6 +75,10 @@ export class TerminalRenderer {
       bannerLines: null,
       thinkingExpanded: false,
       lastThinkingSummary: null,
+      searchMode: false,
+      searchQuery: '',
+      searchMatchCount: 0,
+      searchCurrentMatch: -1,
     };
   }
 
@@ -83,6 +87,8 @@ export class TerminalRenderer {
   start(): void {
     this.started = true;
     enterAltScreen();
+    // Enable SGR mouse tracking (scroll wheel support)
+    process.stdout.write('\x1b[?1000h\x1b[?1006h');
     hideCursor();
 
     // Raw input
@@ -164,8 +170,8 @@ export class TerminalRenderer {
     if (this.animationTimer) { clearInterval(this.animationTimer); this.animationTimer = null; }
     if (this.resizeHandler) { process.stdout.off('resize', this.resizeHandler); this.resizeHandler = null; }
     if (this.stopInput) { this.stopInput(); this.stopInput = null; }
-    // Restore terminal: leave alt screen (restores original scrollback), show cursor, reset attributes
-    process.stdout.write('\x1b[0m');
+    // Restore terminal: disable mouse, leave alt screen, show cursor, reset attributes
+    process.stdout.write('\x1b[?1006l\x1b[?1000l\x1b[0m');
     showCursor();
     leaveAltScreen();
   }
@@ -199,6 +205,55 @@ export class TerminalRenderer {
   getThinkingStartedAt(): number | null { return this.state.thinkingStartedAt; }
   setLastThinkingSummary(summary: string | null): void { this.state.lastThinkingSummary = summary; this.scheduleRender(); }
   toggleThinkingExpanded(): void { this.state.thinkingExpanded = !this.state.thinkingExpanded; this.scheduleRender(); }
+
+  // Search mode
+  enterSearchMode(): void {
+    this.state.searchMode = true;
+    this.state.searchQuery = '';
+    this.state.searchMatchCount = 0;
+    this.state.searchCurrentMatch = -1;
+    this.scheduleRender();
+  }
+  exitSearchMode(): void {
+    this.state.searchMode = false;
+    this.state.searchQuery = '';
+    this.state.searchMatchCount = 0;
+    this.state.searchCurrentMatch = -1;
+    this.scheduleRender();
+  }
+  setSearchQuery(query: string): void {
+    this.state.searchQuery = query;
+    // Count matches across all messages
+    if (query) {
+      const lq = query.toLowerCase();
+      let count = 0;
+      for (const msg of this.state.messages) {
+        const content = msg.content.toLowerCase();
+        let idx = 0;
+        while ((idx = content.indexOf(lq, idx)) !== -1) { count++; idx += lq.length; }
+      }
+      this.state.searchMatchCount = count;
+      this.state.searchCurrentMatch = count > 0 ? 0 : -1;
+    } else {
+      this.state.searchMatchCount = 0;
+      this.state.searchCurrentMatch = -1;
+    }
+    this.scheduleRender();
+  }
+  searchNext(): void {
+    if (this.state.searchMatchCount > 0) {
+      this.state.searchCurrentMatch = (this.state.searchCurrentMatch + 1) % this.state.searchMatchCount;
+      this.scheduleRender();
+    }
+  }
+  searchPrev(): void {
+    if (this.state.searchMatchCount > 0) {
+      this.state.searchCurrentMatch = (this.state.searchCurrentMatch - 1 + this.state.searchMatchCount) % this.state.searchMatchCount;
+      this.scheduleRender();
+    }
+  }
+  isSearchMode(): boolean { return this.state.searchMode; }
+  getSearchQuery(): string { return this.state.searchQuery; }
   setTokenCount(count: number): void { this.state.tokenCount = count; this.scheduleRender(); }
 
   scrollUp(rows: number): void {

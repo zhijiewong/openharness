@@ -61,6 +61,20 @@ function parseKey(data: string, offset: number): { event: KeyEvent; consumed: nu
     if (seq.startsWith('\x1b[F')) return { event: key('', 'end', seq.slice(0, 3)), consumed: 3 };
     // Delete: ESC [ 3 ~
     if (seq.startsWith('\x1b[3~')) return { event: key('', 'delete', seq.slice(0, 4)), consumed: 4 };
+    // SGR mouse events: ESC [ < button ; col ; row M/m
+    if (seq.startsWith('\x1b[<')) {
+      const endIdx = seq.search(/[Mm]/);
+      if (endIdx > 3) {
+        const params = seq.slice(3, endIdx).split(';');
+        const button = parseInt(params[0] ?? '0', 10);
+        const consumed = endIdx + 1;
+        // button 64 = scroll up, 65 = scroll down
+        if (button === 64) return { event: key('', 'scrollup', seq.slice(0, consumed)), consumed };
+        if (button === 65) return { event: key('', 'scrolldown', seq.slice(0, consumed)), consumed };
+        // Ignore other mouse events (clicks, moves)
+        return { event: key('', 'mouse', seq.slice(0, consumed)), consumed };
+      }
+    }
     // Page Up/Down: ESC [ 5 ~ / ESC [ 6 ~
     if (seq.startsWith('\x1b[5~')) return { event: key('', 'pageup', seq.slice(0, 4)), consumed: 4 };
     if (seq.startsWith('\x1b[6~')) return { event: key('', 'pagedown', seq.slice(0, 4)), consumed: 4 };

@@ -122,15 +122,13 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     renderer.setLoading(loading);
     const hints = `exit to quit${loading ? ' | Ctrl+C to interrupt' : ''}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name} to chat` : ''}`;
     renderer.setStatusHints(hints);
-    // Status line: model | tokens | cost
+    // Status line: model | tokens | cost | ctx
     const inTok = cost.totalInputTokens;
     const outTok = cost.totalOutputTokens;
     const totalCostVal = cost.totalCost;
-    const parts: string[] = [];
-    if (currentModel) parts.push(currentModel);
-    if (inTok > 0 || outTok > 0) parts.push(`${formatTokenCount(inTok)}↑ ${formatTokenCount(outTok)}↓`);
-    if (totalCostVal > 0) parts.push(`$${totalCostVal.toFixed(4)}`);
-    // Context usage bar
+    const tokensStr = (inTok > 0 || outTok > 0) ? `${formatTokenCount(inTok)}↑ ${formatTokenCount(outTok)}↓` : '';
+    const costStr = totalCostVal > 0 ? `$${totalCostVal.toFixed(4)}` : '';
+    let ctxStr = '';
     const ctxWindow = getContextWindow(currentModel);
     if (ctxWindow > 0 && estimatedTokenCount > 0) {
       const usage = Math.min(1, estimatedTokenCount / ctxWindow);
@@ -138,9 +136,28 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       const filled = Math.max(1, Math.round(usage * barWidth));
       const bar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
       const pct = Math.max(1, Math.ceil(usage * 100));
-      parts.push(`ctx [${bar}] ${pct}%`);
+      ctxStr = `ctx [${bar}] ${pct}%`;
     }
-    renderer.setStatusLine(parts.join(' │ '));
+
+    // Use template if configured, otherwise default format
+    const savedCfg = readOhConfig();
+    if (savedCfg?.statusLineFormat) {
+      const line = savedCfg.statusLineFormat
+        .replace('{model}', currentModel || '')
+        .replace('{tokens}', tokensStr)
+        .replace('{cost}', costStr)
+        .replace('{ctx}', ctxStr)
+        .replace(/\s*│\s*│/g, '│') // collapse empty sections
+        .replace(/^│\s*/, '').replace(/\s*│$/, ''); // trim leading/trailing separators
+      renderer.setStatusLine(line);
+    } else {
+      const parts: string[] = [];
+      if (currentModel) parts.push(currentModel);
+      if (tokensStr) parts.push(tokensStr);
+      if (costStr) parts.push(costStr);
+      if (ctxStr) parts.push(ctxStr);
+      renderer.setStatusLine(parts.join(' │ '));
+    }
     // Context warning
     updateContextWarning();
   }
@@ -166,6 +183,29 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       } else {
         cleanup();
         process.exit(0);
+      }
+      return;
+    }
+
+    // Ctrl+F: enter search mode
+    if (key.ctrl && key.char === 'f' && !loading) {
+      renderer.enterSearchMode();
+      return;
+    }
+
+    // Search mode intercepts all input
+    if (renderer.isSearchMode()) {
+      if (key.name === 'escape') {
+        renderer.exitSearchMode();
+      } else if (key.name === 'return') {
+        renderer.searchNext();
+      } else if (key.shift && key.name === 'return') {
+        renderer.searchPrev();
+      } else if (key.name === 'backspace') {
+        const q = renderer.getSearchQuery();
+        if (q.length > 0) renderer.setSearchQuery(q.slice(0, -1));
+      } else if (key.char && key.char.length === 1 && !key.ctrl && !key.meta) {
+        renderer.setSearchQuery(renderer.getSearchQuery() + key.char);
       }
       return;
     }
@@ -211,11 +251,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return;
     }
 
-    // Page Up/Down and Shift+Up/Down: scrollback navigation
+    // Page Up/Down, Shift+Up/Down, and mouse scroll: scrollback navigation
     if (key.name === 'pageup') { renderer.scrollUp(10); return; }
     if (key.name === 'pagedown') { renderer.scrollDown(10); return; }
     if (key.shift && key.name === 'up') { renderer.scrollUp(3); return; }
     if (key.shift && key.name === 'down') { renderer.scrollDown(3); return; }
+    if (key.name === 'scrollup') { renderer.scrollUp(3); return; }
+    if (key.name === 'scrolldown') { renderer.scrollDown(3); return; }
+    if (key.name === 'mouse') return; // ignore other mouse events
 
     // Tab: autocomplete slash commands, or cycle tool call expansion
     if (key.name === 'tab' && !loading) {

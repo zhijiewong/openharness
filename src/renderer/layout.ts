@@ -54,6 +54,10 @@ export type LayoutState = {
   bannerLines: string[] | null;
   thinkingExpanded: boolean;
   lastThinkingSummary: string | null; // e.g., "∴ Thinking (2.1s, 856 tokens)"
+  searchMode: boolean;
+  searchQuery: string;
+  searchMatchCount: number;
+  searchCurrentMatch: number; // 0-indexed, -1 = none
 };
 
 // Styles
@@ -569,16 +573,30 @@ export function rasterize(
     }
   }
 
-  // Input line
+  // Input line (or search bar in search mode)
   const inputRow = nextRow;
-  const vimIndicator = state.vimMode ? (state.vimMode === 'normal' ? '[N] ' : '[I] ') : '';
-  const prompt = vimIndicator + '❯ ';
-  grid.writeText(inputRow, 0, prompt, S_USER);
-  const inputStart = prompt.length;
-  grid.writeText(inputRow, inputStart, state.inputText, S_TEXT);
-
-  // Hints
-  grid.writeText(inputRow + 1, 0, state.statusHints, S_DIM);
+  let inputStart: number;
+  if (state.searchMode) {
+    const searchPrompt = '🔍 ';
+    grid.writeText(inputRow, 0, searchPrompt, S_USER);
+    inputStart = 3; // emoji + space
+    grid.writeText(inputRow, inputStart, state.searchQuery, S_TEXT);
+    // Match count
+    const matchInfo = state.searchMatchCount > 0
+      ? ` ${state.searchCurrentMatch + 1}/${state.searchMatchCount}`
+      : state.searchQuery ? ' No matches' : '';
+    grid.writeText(inputRow, inputStart + state.searchQuery.length, matchInfo, S_DIM);
+    // Hints
+    grid.writeText(inputRow + 1, 0, 'Enter/n next | N prev | Esc close', S_DIM);
+  } else {
+    const vimIndicator = state.vimMode ? (state.vimMode === 'normal' ? '[N] ' : '[I] ') : '';
+    const prompt = vimIndicator + '❯ ';
+    grid.writeText(inputRow, 0, prompt, S_USER);
+    inputStart = prompt.length;
+    grid.writeText(inputRow, inputStart, state.inputText, S_TEXT);
+    // Hints
+    grid.writeText(inputRow + 1, 0, state.statusHints, S_DIM);
+  }
 
   // Companion (right-aligned in footer)
   if (state.companionLines && w >= 40) {
@@ -602,7 +620,9 @@ export function rasterize(
 
   return {
     cursorRow: inputRow,
-    cursorCol: inputStart + state.inputCursor,
+    cursorCol: state.searchMode
+      ? inputStart + state.searchQuery.length
+      : inputStart + state.inputCursor,
   };
 }
 
