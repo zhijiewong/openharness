@@ -450,6 +450,76 @@ describe('E2E: REPL state machine', () => {
     assert.ok(found, 'Should show result summary for completed tool');
   });
 
+  // ── Agent mode UI ──
+
+  it('renders agent tool call with distinct icon and description', () => {
+    const toolCalls = new Map<string, ToolCallInfo>();
+    toolCalls.set('agent1', {
+      toolName: 'Agent',
+      status: 'running',
+      args: 'Explore codebase',
+      isAgent: true,
+      agentDescription: 'Search for authentication patterns across the project',
+      startedAt: Date.now(),
+    });
+    const state = makeState({ toolCalls, loading: true });
+    const grid = new CellGrid(80, 24);
+    rasterize(state, grid);
+    let foundIcon = false;
+    let foundDesc = false;
+    for (let r = 0; r < grid.height; r++) {
+      const line = gridText(grid, r);
+      if (line.includes('⊕') && line.includes('Agent')) foundIcon = true;
+      if (line.includes('authentication patterns')) foundDesc = true;
+    }
+    assert.ok(foundIcon, 'Should show agent icon ⊕');
+    assert.ok(foundDesc, 'Should show agent description');
+  });
+
+  it('renders completed agent with ◈ icon', () => {
+    const toolCalls = new Map<string, ToolCallInfo>();
+    toolCalls.set('agent1', {
+      toolName: 'Agent',
+      status: 'done',
+      isAgent: true,
+      output: 'Found 3 patterns',
+    });
+    const state = makeState({ toolCalls });
+    const grid = new CellGrid(80, 24);
+    rasterize(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('◈')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show completed agent icon ◈');
+  });
+
+  // ── Multi-line input ──
+
+  it('renders multi-line input with continuation indent', () => {
+    const state = makeState({ inputText: 'line 1\nline 2\nline 3', inputCursor: 19 });
+    const grid = new CellGrid(80, 24);
+    const cursor = rasterize(state, grid);
+    // First line has prompt, continuation lines have indent
+    let foundLine2 = false;
+    for (let r = 0; r < grid.height; r++) {
+      const line = gridText(grid, r);
+      if (line.includes('line 2') && !line.includes('❯')) { foundLine2 = true; break; }
+    }
+    assert.ok(foundLine2, 'Should render continuation lines');
+    // Cursor should be on line 3
+    assert.ok(cursor.cursorRow > 0, 'Cursor should be past first row');
+  });
+
+  it('positions cursor correctly in multi-line input', () => {
+    // Cursor at start of second line: "abc\n" → 4 chars, cursor at 4
+    const state = makeState({ inputText: 'abc\ndef', inputCursor: 4 });
+    const grid = new CellGrid(80, 24);
+    const cursor = rasterize(state, grid);
+    // Cursor should be on second line (inputRow + 1), col 2 (continuation indent)
+    assert.strictEqual(cursor.cursorCol, 2, 'Cursor col should be at continuation indent start');
+  });
+
   it('scrollback navigation changes visible content', () => {
     const messages = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,

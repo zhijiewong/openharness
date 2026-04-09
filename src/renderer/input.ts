@@ -24,12 +24,18 @@ export function startRawInput(handler: (key: KeyEvent) => void): () => void {
   process.stdin.setEncoding('utf8');
 
   const onData = (data: string) => {
-    // Parse each character/sequence in the data
+    // Paste detection: multi-byte reads with newlines → treat newlines as insertable
+    const isPaste = data.length > 4;
     let i = 0;
     while (i < data.length) {
-      const key = parseKey(data, i);
-      handler(key.event);
-      i += key.consumed;
+      const result = parseKey(data, i);
+      // During paste, convert 'return' to 'newline' so they insert instead of submit
+      if (isPaste && result.event.name === 'return') {
+        result.event.name = 'newline';
+        result.event.char = '\n';
+      }
+      handler(result.event);
+      i += result.consumed;
     }
   };
 
@@ -87,6 +93,10 @@ export function parseKey(data: string, offset: number): { event: KeyEvent; consu
     if (seq.startsWith('\x1b[1;2B')) return { event: { char: '', name: 'down', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
     if (seq.startsWith('\x1b[1;2C')) return { event: { char: '', name: 'right', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
     if (seq.startsWith('\x1b[1;2D')) return { event: { char: '', name: 'left', ctrl: false, meta: false, shift: true, sequence: seq.slice(0, 6) }, consumed: 6 };
+    // Alt+Enter (ESC + CR/LF) — newline insertion
+    if (seq.length >= 2 && (seq[1] === '\r' || seq[1] === '\n')) {
+      return { event: { char: '\n', name: 'newline', ctrl: false, meta: true, shift: false, sequence: seq.slice(0, 2) }, consumed: 2 };
+    }
     // Alt+char
     if (seq.length >= 2 && seq[1]! >= ' ') {
       return { event: { char: seq[1]!, name: seq[1]!, ctrl: false, meta: true, shift: false, sequence: seq.slice(0, 2) }, consumed: 2 };

@@ -17,6 +17,8 @@ export type ToolCallInfo = {
   status: 'running' | 'done' | 'error';
   output?: string;
   args?: string;
+  isAgent?: boolean;
+  agentDescription?: string;
   liveOutput?: string[];
   startedAt?: number; // timestamp for elapsed display
   resultSummary?: string; // e.g., "42 lines" or "exit 0"
@@ -116,7 +118,8 @@ export function rasterize(
   const statusLineHeight = state.statusLine ? 1 : 0;
   const contextWarningHeight = state.contextWarning ? 1 : 0;
   const autocompleteHeight = state.autocomplete.length;
-  const footerHeight = Math.max(3 + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
+  const inputLineCount = Math.min(10, (state.inputText.match(/\n/g)?.length ?? 0) + 1); // cap at 10 lines
+  const footerHeight = Math.max(2 + inputLineCount + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
   const msgAreaHeight = Math.max(1, h - footerHeight);
 
   // ── Session browser overlay ──
@@ -352,8 +355,15 @@ export function rasterize(
   for (const [callId, tc] of state.toolCalls) {
     if (r >= msgAreaHeight) break;
     const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    const icon = tc.status === 'running' ? spinnerChars[state.spinnerFrame % spinnerChars.length]! : tc.status === 'done' ? '✓' : '✗';
-    const statusStyle = tc.status === 'error' ? S_ERROR : tc.status === 'done' ? S_GREEN : S_YELLOW;
+    const isAgent = tc.isAgent || tc.toolName === 'Agent' || tc.toolName === 'ParallelAgents';
+
+    // Agent-specific icons and colors
+    const icon = isAgent
+      ? (tc.status === 'running' ? '⊕' : tc.status === 'done' ? '◈' : '◇')
+      : (tc.status === 'running' ? spinnerChars[state.spinnerFrame % spinnerChars.length]! : tc.status === 'done' ? '✓' : '✗');
+    const S_AGENT: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
+    const statusStyle = tc.status === 'error' ? S_ERROR : tc.status === 'done' ? S_GREEN : isAgent ? S_AGENT : S_YELLOW;
+    const nameStyle = isAgent ? S_AGENT : { ...S_YELLOW, bold: true };
     const isExpanded = state.expandedToolCalls.has(callId);
     const canExpand = tc.status !== 'running' && tc.output;
 
@@ -362,7 +372,7 @@ export function rasterize(
       grid.writeText(r, 0, isExpanded ? '▼' : '▶', S_DIM);
     }
     grid.writeText(r, 2, `${icon} `, statusStyle);
-    grid.writeText(r, 4, tc.toolName, { ...S_YELLOW, bold: true });
+    grid.writeText(r, 4, tc.toolName, nameStyle);
 
     // Show args + elapsed time on the same line
     let afterName = 4 + tc.toolName.length + 1;
@@ -390,6 +400,12 @@ export function rasterize(
       grid.writeText(r, Math.min(afterName, w - suffix.length - 2), suffix, S_DIM);
     }
     r++;
+
+    // Agent description line
+    if (isAgent && tc.agentDescription && r < msgAreaHeight) {
+      grid.writeText(r, 6, tc.agentDescription.slice(0, w - 8), S_DIM);
+      r++;
+    }
 
     // Live streaming output while running
     if (tc.status === 'running' && tc.liveOutput && tc.liveOutput.length > 0) {
@@ -606,9 +622,22 @@ export function rasterize(
     const prompt = vimIndicator + '❯ ';
     grid.writeText(inputRow, 0, prompt, S_USER);
     inputStart = prompt.length;
-    grid.writeText(inputRow, inputStart, state.inputText, S_TEXT);
+    // Multi-line input rendering
+    const inputLines = state.inputText.split('\n');
+    for (let li = 0; li < inputLines.length && li < 10; li++) {
+      if (li === 0) {
+        grid.writeText(inputRow, inputStart, inputLines[0]!, S_TEXT);
+      } else {
+        grid.writeText(inputRow + li, 0, '  ', S_DIM); // continuation indent
+        grid.writeText(inputRow + li, 2, inputLines[li]!, S_TEXT);
+      }
+    }
     // Hints
-    grid.writeText(inputRow + 1, 0, state.statusHints, S_DIM);
+    const hintsRow = inputRow + Math.min(inputLines.length, 10);
+    const hintsText = inputLines.length > 1
+      ? `${state.statusHints} | Alt+Enter newline`
+      : state.statusHints;
+    grid.writeText(hintsRow, 0, hintsText, S_DIM);
   }
 
   // Companion (right-aligned in footer)
@@ -631,11 +660,18 @@ export function rasterize(
     };
   }
 
+  if (state.searchMode) {
+    return { cursorRow: inputRow, cursorCol: inputStart + state.searchQuery.length };
+  }
+
+  // 2D cursor positioning for multi-line input
+  const textBeforeCursor = state.inputText.slice(0, state.inputCursor);
+  const cursorLines = textBeforeCursor.split('\n');
+  const cursorLineIdx = cursorLines.length - 1;
+  const cursorColInLine = cursorLines[cursorLineIdx]!.length;
   return {
-    cursorRow: inputRow,
-    cursorCol: state.searchMode
-      ? inputStart + state.searchQuery.length
-      : inputStart + state.inputCursor,
+    cursorRow: inputRow + cursorLineIdx,
+    cursorCol: cursorLineIdx === 0 ? inputStart + cursorColInLine : 2 + cursorColInLine,
   };
 }
 

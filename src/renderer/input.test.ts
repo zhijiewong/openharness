@@ -135,6 +135,21 @@ describe('parseKey', () => {
     assert.strictEqual(consumed, 2);
   });
 
+  // ── Alt+Enter (newline insertion) ──
+
+  it('parses Alt+Enter (ESC+CR) as newline', () => {
+    const { event, consumed } = parseKey('\x1b\r', 0);
+    assert.strictEqual(event.name, 'newline');
+    assert.strictEqual(event.char, '\n');
+    assert.strictEqual(event.meta, true);
+    assert.strictEqual(consumed, 2);
+  });
+
+  it('parses Alt+Enter (ESC+LF) as newline', () => {
+    const { event } = parseKey('\x1b\n', 0);
+    assert.strictEqual(event.name, 'newline');
+  });
+
   // ── Offset handling ──
 
   it('parses at non-zero offset', () => {

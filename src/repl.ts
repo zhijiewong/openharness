@@ -75,14 +75,54 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let acSuggestions: string[] = [];
   let acDescriptions: string[] = [];
   let acIndex = -1;
+  let acTokenStart = 0; // start index of the token being completed
+  let acIsPath = false; // true if completing file paths
 
   function updateAutocomplete() {
+    acIsPath = false;
     if (inputText.startsWith('/') && inputText.length > 1 && !inputText.includes(' ')) {
+      // Slash command autocomplete
       const prefix = inputText.slice(1).toLowerCase();
       const entries = getCommandEntries().filter(e => e.name.startsWith(prefix)).slice(0, 5);
       acSuggestions = entries.map(e => e.name);
       acDescriptions = entries.map(e => e.description);
+      acTokenStart = 0;
       acIndex = -1;
+    } else if (inputText.length > 0 && !inputText.startsWith('/')) {
+      // File path autocomplete: extract token under cursor
+      const beforeCursor = inputText.slice(0, inputCursor);
+      const tokenMatch = beforeCursor.match(/(\S+)$/);
+      if (tokenMatch && (tokenMatch[1]!.includes('/') || tokenMatch[1]!.includes('\\') || tokenMatch[1]!.startsWith('.') || tokenMatch[1]!.startsWith('~'))) {
+        const token = tokenMatch[1]!;
+        acTokenStart = inputCursor - token.length;
+        const expanded = token.startsWith('~') ? token.replace('~', homedir()) : token;
+        const lastSep = Math.max(expanded.lastIndexOf('/'), expanded.lastIndexOf('\\'));
+        const dir = lastSep >= 0 ? expanded.slice(0, lastSep + 1) : '.';
+        const prefix = lastSep >= 0 ? expanded.slice(lastSep + 1) : expanded;
+        try {
+          const { readdirSync, statSync } = require('node:fs');
+          const entries = (readdirSync(dir) as string[])
+            .filter((name: string) => name.toLowerCase().startsWith(prefix.toLowerCase()))
+            .slice(0, 10);
+          acSuggestions = entries.map((name: string) => {
+            const full = dir === '.' ? name : dir + name;
+            try { return statSync(full).isDirectory() ? full + '/' : full; } catch { return full; }
+          });
+          acDescriptions = entries.map((name: string) => {
+            const full = dir === '.' ? name : dir + name;
+            try { return statSync(full).isDirectory() ? '[dir]' : '[file]'; } catch { return ''; }
+          });
+          acIsPath = acSuggestions.length > 0;
+        } catch {
+          acSuggestions = [];
+          acDescriptions = [];
+        }
+        acIndex = -1;
+      } else {
+        acSuggestions = [];
+        acDescriptions = [];
+        acIndex = -1;
+      }
     } else {
       acSuggestions = [];
       acDescriptions = [];
@@ -260,18 +300,35 @@ export async function startREPL(config: REPLConfig): Promise<void> {
     if (key.name === 'scrolldown') { renderer.scrollDown(3); return; }
     if (key.name === 'mouse') return; // ignore other mouse events
 
-    // Tab: autocomplete slash commands, or cycle tool call expansion
+    // Tab: autocomplete slash commands or file paths, or cycle tool call expansion
     if (key.name === 'tab' && !loading) {
       if (acSuggestions.length > 0) {
         acIndex = (acIndex + 1) % acSuggestions.length;
-        inputText = `/${acSuggestions[acIndex]!}`;
-        inputCursor = inputText.length;
+        if (acIsPath) {
+          // Replace only the token under cursor
+          const afterToken = inputText.slice(inputCursor);
+          inputText = inputText.slice(0, acTokenStart) + acSuggestions[acIndex]! + afterToken;
+          inputCursor = acTokenStart + acSuggestions[acIndex]!.length;
+        } else {
+          // Replace entire input for slash commands
+          inputText = `/${acSuggestions[acIndex]!}`;
+          inputCursor = inputText.length;
+        }
         renderer.setInputText(inputText);
         renderer.setInputCursor(inputCursor);
         renderer.setAutocomplete(acSuggestions, acIndex, acDescriptions);
         return;
       }
       renderer.cycleToolCallExpansion();
+      return;
+    }
+
+    // Alt+Enter or paste newline: insert newline at cursor
+    if (key.name === 'newline') {
+      inputText = inputText.slice(0, inputCursor) + '\n' + inputText.slice(inputCursor);
+      inputCursor++;
+      renderer.setInputText(inputText);
+      renderer.setInputCursor(inputCursor);
       return;
     }
 
@@ -459,19 +516,24 @@ export async function startREPL(config: REPLConfig): Promise<void> {
             renderer.setThinkingText(event.content);
             break;
 
-          case 'tool_call_start':
+          case 'tool_call_start': {
             callIdToToolName.set(event.callId, event.toolName);
-            renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running', startedAt: Date.now() });
+            const isAgentTool = event.toolName === 'Agent' || event.toolName === 'ParallelAgents';
+            renderer.setToolCall(event.callId, { toolName: event.toolName, status: 'running', startedAt: Date.now(), isAgent: isAgentTool });
             break;
+          }
 
           case 'tool_call_complete': {
             const tcToolName = callIdToToolName.get(event.callId) ?? '';
             const existingTc = renderer.getToolCall(event.callId);
+            const isAgentCall = tcToolName === 'Agent' || tcToolName === 'ParallelAgents';
+            const agentDesc = isAgentCall ? (event.arguments as Record<string, unknown>).description as string | undefined : undefined;
             renderer.setToolCall(event.callId, {
               ...existingTc,
               toolName: tcToolName,
               status: 'running',
               args: formatToolArgs(tcToolName, event.arguments),
+              agentDescription: agentDesc ?? existingTc?.agentDescription,
             });
             break;
           }
