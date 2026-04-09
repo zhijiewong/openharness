@@ -889,6 +889,12 @@ export function rasterizeLive(
       grid.writeText(nextRow, 11, 'iff', S_DIM);
     }
     nextRow++;
+    // Inline diff (when toggled)
+    if (state.permissionDiffVisible && state.permissionDiffInfo && nextRow + 3 < h) {
+      const availDiffRows = Math.min(15, h - nextRow - 3);
+      const diffRows = renderDiff(grid, nextRow, 3, state.permissionDiffInfo, Math.min(w - 2, 70), availDiffRows);
+      nextRow += diffRows;
+    }
   }
 
   // ── Question prompt ──
@@ -963,15 +969,16 @@ export function rasterizeLive(
     }
   }
 
-  // ── Companion ──
-  if (state.companionLines && w >= 50 && r > 0) {
+  // ── Companion (right-aligned, anchored at footer border area) ──
+  if (state.companionLines && w >= 50) {
     const compWidth = Math.max(...state.companionLines.map(l => l.length), 0);
     const compStartCol = Math.max(0, w - compWidth - 1);
     if (compStartCol > promptWidth + 20) {
       const compStyle: Style = { fg: state.companionColor || 'cyan', bg: null, bold: false, dim: false, underline: false };
+      // Place companion starting at the border row, right-aligned
+      const borderRow = r; // r is at the border line position
       for (let i = 0; i < state.companionLines.length; i++) {
-        const compRow = i; // top of live area
-        if (compRow >= inputRow) break;
+        const compRow = borderRow + i;
         if (compRow >= h) break;
         grid.writeText(compRow, compStartCol, state.companionLines[i]!, compStyle);
       }

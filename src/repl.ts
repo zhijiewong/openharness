@@ -161,7 +161,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   function syncRenderer() {
     renderer.setMessages(messages);
     renderer.setLoading(loading);
-    const hints = `exit to quit${loading ? ' | Ctrl+C to interrupt' : ''}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name} to chat` : ''}`;
+    const hints = `exit to quit${loading ? ' | Ctrl+C stop' : ' | Tab expand tools | Ctrl+O thinking'}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name}` : ''}`;
     renderer.setStatusHints(hints);
     // Status line: model | tokens | cost | ctx
     const inTok = cost.totalInputTokens;

@@ -188,7 +188,12 @@ export class TerminalRenderer {
 
   // ── State updates ──
 
-  setMessages(msgs: Message[]): void { this.state.messages = msgs; this.scheduleRender(); }
+  setMessages(msgs: Message[]): void {
+    // Reset flush counter if messages array was replaced (e.g., session resume)
+    if (msgs.length < this.flushedMessageCount) this.flushedMessageCount = 0;
+    this.state.messages = msgs;
+    this.scheduleRender();
+  }
   setStreamingText(text: string): void { this.state.streamingText = text; this.scheduleRender(); }
   setThinkingText(text: string): void { this.state.thinkingText = text; this.scheduleRender(); }
   setError(text: string | null): void { this.state.errorText = text; this.scheduleRender(); }
@@ -351,8 +356,8 @@ export class TerminalRenderer {
   /** Apply lightweight markdown styling to a line for scrollback output */
   private styleMarkdownLine(line: string): string {
     return line
-      .replace(/\*\*(.+?)\*\*/g, '\x1b[1m$1\x1b[22m') // bold
-      .replace(/`([^`]+)`/g, '\x1b[2m$1\x1b[22m') // inline code → dim
+      .replace(/\*\*(.+?)\*\*/g, '\x1b[1m$1\x1b[0m') // bold → full reset after
+      .replace(/`([^`]+)`/g, '\x1b[2m$1\x1b[0m') // inline code → dim, full reset after
       .replace(/^(#{1,3})\s+(.+)$/, '\x1b[1m\x1b[36m$1 $2\x1b[0m'); // headings → bold cyan
   }
 
