@@ -44,10 +44,6 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     thinkingExpanded: false,
     lastThinkingSummary: null,
     autocompleteDescriptions: [],
-    searchMode: false,
-    searchQuery: '',
-    searchMatchCount: 0,
-    searchCurrentMatch: -1,
     ...overrides,
   };
 }
@@ -212,50 +208,6 @@ describe('E2E: REPL state machine', () => {
     assert.ok(foundQ, 'Should show question');
     // Cursor should be positioned in the question input
     assert.strictEqual(cursor.cursorCol, 5 + 2, 'Cursor should be at input position');
-  });
-
-  // ── Search mode ──
-
-  it('renders search bar when in search mode', () => {
-    const state = makeState({
-      searchMode: true,
-      searchQuery: 'hello',
-      searchMatchCount: 3,
-      searchCurrentMatch: 1,
-    });
-    const grid = new CellGrid(80, 24);
-    const cursor = rasterize(state, grid);
-    let foundSearchBar = false;
-    let foundMatchCount = false;
-    for (let r = 0; r < grid.height; r++) {
-      const line = gridText(grid, r);
-      if (line.includes('🔍') && line.includes('hello')) foundSearchBar = true;
-      if (line.includes('2/3')) foundMatchCount = true;
-    }
-    assert.ok(foundSearchBar, 'Should show search bar with query');
-    assert.ok(foundMatchCount, 'Should show match count (2/3)');
-  });
-
-  it('renders search hints in search mode', () => {
-    const state = makeState({ searchMode: true, searchQuery: '' });
-    const grid = new CellGrid(80, 24);
-    rasterize(state, grid);
-    let found = false;
-    for (let r = 0; r < grid.height; r++) {
-      if (gridText(grid, r).includes('Esc close')) { found = true; break; }
-    }
-    assert.ok(found, 'Should show search navigation hints');
-  });
-
-  it('hides normal input prompt in search mode', () => {
-    const state = makeState({ searchMode: true, searchQuery: 'test', inputText: 'should not show' });
-    const grid = new CellGrid(80, 24);
-    rasterize(state, grid);
-    let foundInput = false;
-    for (let r = 0; r < grid.height; r++) {
-      if (gridText(grid, r).includes('should not show')) { foundInput = true; break; }
-    }
-    assert.ok(!foundInput, 'Normal input should be hidden in search mode');
   });
 
   // ── Scroll indicator ──

@@ -56,10 +56,6 @@ export type LayoutState = {
   bannerLines: string[] | null;
   thinkingExpanded: boolean;
   lastThinkingSummary: string | null; // e.g., "∴ Thinking (2.1s, 856 tokens)"
-  searchMode: boolean;
-  searchQuery: string;
-  searchMatchCount: number;
-  searchCurrentMatch: number; // 0-indexed, -1 = none
 };
 
 // Styles
@@ -639,22 +635,10 @@ export function rasterize(
     }
   }
 
-  // Input line (or search bar in search mode)
+  // Input line
   const inputRow = nextRow;
   let inputStart: number;
-  if (state.searchMode) {
-    const searchPrompt = '🔍 ';
-    grid.writeText(inputRow, 0, searchPrompt, S_USER);
-    inputStart = 3; // emoji + space
-    grid.writeText(inputRow, inputStart, state.searchQuery, S_TEXT);
-    // Match count
-    const matchInfo = state.searchMatchCount > 0
-      ? ` ${state.searchCurrentMatch + 1}/${state.searchMatchCount}`
-      : state.searchQuery ? ' No matches' : '';
-    grid.writeText(inputRow, inputStart + state.searchQuery.length, matchInfo, S_DIM);
-    // Hints
-    grid.writeText(inputRow + 1, 0, 'Enter/↓ next | ↑ prev | Esc close', S_DIM);
-  } else {
+  {
     grid.writeText(inputRow, 0, promptText, S_USER);
     inputStart = promptWidth;
     // Multi-line input rendering
@@ -702,9 +686,6 @@ export function rasterize(
     };
   }
 
-  if (state.searchMode) {
-    return { cursorRow: inputRow, cursorCol: inputStart + state.searchQuery.length };
-  }
 
   // 2D cursor positioning for multi-line input (all lines aligned to inputStart)
   const textBeforeCursor = state.inputText.slice(0, state.inputCursor);
@@ -940,16 +921,7 @@ export function rasterizeLive(
   // ── Input line ──
   const inputRow = nextRow;
   let inputStart: number;
-  if (state.searchMode) {
-    grid.writeText(inputRow, 0, '🔍 ', S_USER);
-    inputStart = 3;
-    grid.writeText(inputRow, inputStart, state.searchQuery, S_TEXT);
-    const matchInfo = state.searchMatchCount > 0
-      ? ` ${state.searchCurrentMatch + 1}/${state.searchMatchCount}`
-      : state.searchQuery ? ' No matches' : '';
-    grid.writeText(inputRow, inputStart + state.searchQuery.length, matchInfo, S_DIM);
-    if (inputRow + 1 < h) grid.writeText(inputRow + 1, 0, 'Enter/↓ next | ↑ prev | Esc close', S_DIM);
-  } else {
+  {
     grid.writeText(inputRow, 0, promptText, S_USER);
     inputStart = promptWidth;
     const inputLines = state.inputText.split('\n');
@@ -988,9 +960,6 @@ export function rasterizeLive(
   // ── Cursor position ──
   if (state.questionPrompt && questionInputRow >= 0) {
     return { cursorRow: questionInputRow, cursorCol: 3 + state.questionPrompt.cursor };
-  }
-  if (state.searchMode) {
-    return { cursorRow: inputRow, cursorCol: inputStart + state.searchQuery.length };
   }
   const textBeforeCursor = state.inputText.slice(0, state.inputCursor);
   const cursorLines = textBeforeCursor.split('\n');

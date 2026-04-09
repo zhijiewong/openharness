@@ -40,10 +40,6 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     thinkingExpanded: false,
     lastThinkingSummary: null,
     autocompleteDescriptions: [],
-    searchMode: false,
-    searchQuery: '',
-    searchMatchCount: 0,
-    searchCurrentMatch: -1,
     ...overrides,
   };
 }

@@ -62,8 +62,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let cachedConfig = readOhConfig();
   let messages: Message[] = config.resumeSessionId ? session.messages : (config.initialMessages ?? []);
 
-  // Show banner on fresh sessions (set after renderer.start())
-  const showBanner = messages.length === 0 && config.welcomeText;
+  // Banner is printed to stdout by main.tsx before renderer starts
   let loading = false;
   let currentModel = config.model ?? '';
   let abortController: AbortController | null = null;
@@ -150,7 +149,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
     // Animate on timer
     renderer.onAnimation((frameIdx) => {
-      if (loading || !companionVisible) return;
+      if (!companionVisible) return;
       const f = idleFrames[frameIdx % idleFrames.length] ?? idleFrames[0] ?? [];
       const lines = f.map((l: string) => l.replace('{E}', eyes));
       renderer.setCompanion([...lines, nameLine], color);
@@ -622,6 +621,16 @@ export async function startREPL(config: REPLConfig): Promise<void> {
         renderer.setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
+      // Preserve partial streaming text on abort
+      if (accumulated) {
+        const last = messages[messages.length - 1];
+        if (last?.meta?.isStreaming) {
+          messages = [...messages.slice(0, -1), { ...last, content: last.content + accumulated, meta: {} }];
+        } else {
+          messages = [...messages, createAssistantMessage(accumulated + '\n\n[interrupted]')];
+        }
+        accumulated = '';
+      }
       loading = false;
       abortController = null;
       renderer.setLoading(false);

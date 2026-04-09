@@ -67,17 +67,16 @@ OpenHarness features a custom cell-level diffing renderer built for performance 
 | Key | Action |
 |-----|--------|
 | `Enter` | Submit prompt |
+| `Alt+Enter` | Insert newline (multi-line input) |
 | `↑` / `↓` | Navigate input history |
 | `Ctrl+C` | Cancel current request / exit |
 | `Ctrl+A` / `Ctrl+E` | Jump to start / end of input |
-| `Ctrl+F` | Search through conversation (Enter to cycle matches, Esc to close) |
 | `Ctrl+O` | Toggle thinking block expansion |
 | `Ctrl+K` | Toggle code block expansion in messages |
-| `Page Up` / `Page Down` | Scroll message history (10 rows) |
-| `Shift+↑` / `Shift+↓` | Scroll message history (3 rows) |
-| `Mouse scroll` | Scroll message history (3 rows per tick) |
-| `Tab` | Autocomplete slash commands / cycle tool call outputs |
+| `Tab` | Autocomplete slash commands / file paths / cycle tool outputs |
 | `/vim` | Toggle Vim mode (normal/insert) |
+
+Scrolling is handled by the terminal's native scrollbar. Completed messages flow into the terminal scrollback buffer. Use your terminal's search (e.g., `Ctrl+Shift+F` in VS Code) to search conversation history.
 
 ### Features
 
@@ -88,15 +87,13 @@ OpenHarness features a custom cell-level diffing renderer built for performance 
 - **Shimmer spinner** — animated "Thinking" indicator with color transitions (magenta → yellow at 30s → red at 60s)
 - **Tool call display** — args preview, live streaming output, result summaries (line counts, elapsed time), expand/collapse with `Tab`
 - **Permission prompts** — bordered box with risk coloring, bold colored **Y**es/**N**o/**D**iff keys, syntax-highlighted inline diffs
-- **Search mode** — `Ctrl+F` to search conversation with live match count and navigation
 - **Status line** — model name, token count, cost, context usage bar (customizable via config)
 - **Context warning** — yellow alert when context window exceeds 75%
-- **Scroll indicator** — footer shows `↑ N more above` / `↓ N more below` when content overflows
-- **Scrollback** — Page Up/Down, Shift+arrows, or mouse scroll wheel to navigate history
-- **Mouse support** — scroll wheel for messages, auto-enabled via SGR mouse tracking
-- **Autocomplete** — slash commands with descriptions shown in popup; Tab to cycle
+- **Native terminal scrollbar** — completed messages flow into scrollback; use your terminal's scrollbar and search
+- **Multi-line input** — `Alt+Enter` for newlines; paste detection auto-inserts newlines
+- **Autocomplete** — slash commands and file paths with descriptions; Tab to cycle
+- **File path autocomplete** — Tab-completes paths with `[dir]`/`[file]` indicators
 - **Session browser** — `/browse` to interactively browse and resume past sessions
-- **Alternate screen buffer** — preserves terminal scrollback; clean restore on exit
 - **Companion mascot** — animated Cybergotchi in the footer (toggle with `/companion off|on`)
 
 ### Themes

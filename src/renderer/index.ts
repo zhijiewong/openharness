@@ -85,10 +85,6 @@ export class TerminalRenderer {
       bannerLines: null,
       thinkingExpanded: false,
       lastThinkingSummary: null,
-      searchMode: false,
-      searchQuery: '',
-      searchMatchCount: 0,
-      searchCurrentMatch: -1,
     };
   }
 
