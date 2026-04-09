@@ -109,17 +109,18 @@ export function rasterize(
   const w = grid.width;
   const h = grid.height;
 
-  // Footer height: border(1) + status(1) + input(1) + hints(1) = 4, companion takes at most 7 rows
-  // Permission box adds 5 more rows when active
-  const companionHeight = state.companionLines ? state.companionLines.length + 1 : 0;
-  const diffHeight = (state.permissionDiffVisible && state.permissionDiffInfo) ? 20 : 0;
+  // Footer height — capped at 50% of terminal to preserve message area
+  const companionHeight = state.companionLines ? Math.min(state.companionLines.length + 1, 8) : 0;
+  const maxDiffHeight = Math.min(15, Math.floor(h / 3));
+  const diffHeight = (state.permissionDiffVisible && state.permissionDiffInfo) ? maxDiffHeight : 0;
   const permissionHeight = state.permissionBox ? 6 + diffHeight : 0;
   const questionHeight = state.questionPrompt ? 4 + (state.questionPrompt.options?.length ?? 0) : 0;
   const statusLineHeight = state.statusLine ? 1 : 0;
   const contextWarningHeight = state.contextWarning ? 1 : 0;
   const autocompleteHeight = state.autocomplete.length;
-  const inputLineCount = Math.min(10, (state.inputText.match(/\n/g)?.length ?? 0) + 1); // cap at 10 lines
-  const footerHeight = Math.max(2 + inputLineCount + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
+  const inputLineCount = Math.min(5, (state.inputText.match(/\n/g)?.length ?? 0) + 1);
+  const rawFooterHeight = Math.max(2 + inputLineCount + statusLineHeight + autocompleteHeight, companionHeight + 1) + permissionHeight + questionHeight + contextWarningHeight;
+  const footerHeight = Math.min(rawFooterHeight, Math.floor(h / 2));
   const msgAreaHeight = Math.max(1, h - footerHeight);
 
   // ── Session browser overlay ──
@@ -170,8 +171,8 @@ export function rasterize(
   // Pre-compute total height to handle scrolling
   let totalRows = 0;
   // Banner height (compact on small terminals, hidden if very small)
-  if (state.bannerLines && msgAreaHeight >= 8) {
-    const compact = msgAreaHeight < 15;
+  if (state.bannerLines && h >= 30) {
+    const compact = h < 40;
     const visibleLines = compact ? Math.min(2, state.bannerLines.length) : state.bannerLines.length;
     totalRows += visibleLines + 1; // +1 blank line after
   }
@@ -423,8 +424,8 @@ export function rasterize(
       }
     }
 
-    // Final output after completion
-    if (tc.output && tc.status !== 'running' && r < msgAreaHeight) {
+    // Final output — collapsed by default (only show when expanded via Tab)
+    if (tc.output && tc.status !== 'running' && isExpanded && r < msgAreaHeight) {
       // Image results: show inline placeholder
       if (isImageOutput(tc.output)) {
         const label = renderImageInline(tc.output);
@@ -433,7 +434,7 @@ export function rasterize(
         continue;
       }
       const outLines = tc.output.split('\n');
-      const maxOut = isExpanded ? 20 : 3;
+      const maxOut = 20;
       const showLines = outLines.slice(0, maxOut);
       for (const line of showLines) {
         if (r >= msgAreaHeight) break;
@@ -587,7 +588,12 @@ export function rasterize(
     nextRow++;
   }
 
-  // Autocomplete suggestions (above input)
+  // Pre-compute prompt width for alignment
+  const vimIndicator = state.vimMode ? (state.vimMode === 'normal' ? '[N] ' : '[I] ') : '';
+  const promptText = vimIndicator + '❯ ';
+  const promptWidth = promptText.length;
+
+  // Autocomplete suggestions (above input, aligned to prompt)
   if (state.autocomplete.length > 0) {
     for (let ai = 0; ai < state.autocomplete.length; ai++) {
       const cmd = state.autocomplete[ai]!;
@@ -596,8 +602,8 @@ export function rasterize(
       const acStyle = selected
         ? s(getTheme().user, true)
         : s(null, false, true);
-      grid.writeText(nextRow, 2, `/${cmd.padEnd(12)}`, acStyle);
-      if (desc) grid.writeText(nextRow, 15, desc.slice(0, w - 17), S_DIM);
+      grid.writeText(nextRow, promptWidth, `/${cmd.padEnd(12)}`, acStyle);
+      if (desc && w > promptWidth + 15) grid.writeText(nextRow, promptWidth + 13, desc.slice(0, w - promptWidth - 15), S_DIM);
       nextRow++;
     }
   }
@@ -618,37 +624,39 @@ export function rasterize(
     // Hints
     grid.writeText(inputRow + 1, 0, 'Enter/↓ next | ↑ prev | Esc close', S_DIM);
   } else {
-    const vimIndicator = state.vimMode ? (state.vimMode === 'normal' ? '[N] ' : '[I] ') : '';
-    const prompt = vimIndicator + '❯ ';
-    grid.writeText(inputRow, 0, prompt, S_USER);
-    inputStart = prompt.length;
+    grid.writeText(inputRow, 0, promptText, S_USER);
+    inputStart = promptWidth;
     // Multi-line input rendering
     const inputLines = state.inputText.split('\n');
-    for (let li = 0; li < inputLines.length && li < 10; li++) {
+    const maxInputLines = Math.min(inputLines.length, 5);
+    for (let li = 0; li < maxInputLines; li++) {
       if (li === 0) {
         grid.writeText(inputRow, inputStart, inputLines[0]!, S_TEXT);
       } else {
-        grid.writeText(inputRow + li, 0, '  ', S_DIM); // continuation indent
-        grid.writeText(inputRow + li, 2, inputLines[li]!, S_TEXT);
+        // Align continuation to prompt position
+        grid.writeText(inputRow + li, inputStart, inputLines[li]!, S_TEXT);
       }
     }
     // Hints
-    const hintsRow = inputRow + Math.min(inputLines.length, 10);
+    const hintsRow = inputRow + maxInputLines;
     const hintsText = inputLines.length > 1
       ? `${state.statusHints} | Alt+Enter newline`
       : state.statusHints;
     grid.writeText(hintsRow, 0, hintsText, S_DIM);
   }
 
-  // Companion (right-aligned in footer)
-  if (state.companionLines && w >= 40) {
+  // Companion (right-aligned in footer, skipped if it would overlap input)
+  if (state.companionLines && w >= 50) {
     const compWidth = Math.max(...state.companionLines.map(l => l.length), 0);
-    const compStartCol = w - compWidth - 1;
-    const compStyle: Style = { fg: state.companionColor || 'cyan', bg: null, bold: false, dim: false, underline: false };
-    for (let i = 0; i < state.companionLines.length; i++) {
-      const compRow = footerStart + i;
-      if (compRow >= h) break;
-      grid.writeText(compRow, compStartCol, state.companionLines[i]!, compStyle);
+    const compStartCol = Math.max(0, w - compWidth - 1);
+    const inputEndCol = promptWidth + state.inputText.split('\n')[0]!.length;
+    if (compStartCol > inputEndCol + 3) {
+      const compStyle: Style = { fg: state.companionColor || 'cyan', bg: null, bold: false, dim: false, underline: false };
+      for (let i = 0; i < state.companionLines.length; i++) {
+        const compRow = footerStart + i;
+        if (compRow >= h) break;
+        grid.writeText(compRow, compStartCol, state.companionLines[i]!, compStyle);
+      }
     }
   }
 
@@ -664,14 +672,14 @@ export function rasterize(
     return { cursorRow: inputRow, cursorCol: inputStart + state.searchQuery.length };
   }
 
-  // 2D cursor positioning for multi-line input
+  // 2D cursor positioning for multi-line input (all lines aligned to inputStart)
   const textBeforeCursor = state.inputText.slice(0, state.inputCursor);
   const cursorLines = textBeforeCursor.split('\n');
-  const cursorLineIdx = cursorLines.length - 1;
-  const cursorColInLine = cursorLines[cursorLineIdx]!.length;
+  const cursorLineIdx = Math.min(cursorLines.length - 1, 4); // capped at 5 visible lines
+  const cursorColInLine = cursorLines[cursorLines.length - 1]!.length;
   return {
     cursorRow: inputRow + cursorLineIdx,
-    cursorCol: cursorLineIdx === 0 ? inputStart + cursorColInLine : 2 + cursorColInLine,
+    cursorCol: inputStart + cursorColInLine,
   };
 }
 

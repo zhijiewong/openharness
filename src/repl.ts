@@ -634,6 +634,8 @@ export async function startREPL(config: REPLConfig): Promise<void> {
               }
             }
             renderer.setStreamingText('');
+            // Collapse all tool calls from this turn (clean up visual noise)
+            renderer.collapseAllToolCalls();
             // Save session
             session.messages = messages;
             session.totalCost = cost.totalCost;

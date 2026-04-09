@@ -368,6 +368,7 @@ export class TerminalRenderer {
   }
   getToolCall(callId: string): ToolCallInfo | undefined { return this.state.toolCalls.get(callId); }
   clearToolCalls(): void { this.state.toolCalls.clear(); this.scheduleRender(); }
+  collapseAllToolCalls(): void { this.state.expandedToolCalls.clear(); this.scheduleRender(); }
 
   /** Show a question prompt and wait for text answer */
   askQuestion(question: string, options?: string[]): Promise<string> {
