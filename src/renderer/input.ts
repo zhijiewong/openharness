@@ -44,7 +44,7 @@ export function startRawInput(handler: (key: KeyEvent) => void): () => void {
   };
 }
 
-function parseKey(data: string, offset: number): { event: KeyEvent; consumed: number } {
+export function parseKey(data: string, offset: number): { event: KeyEvent; consumed: number } {
   const ch = data[offset]!;
   const code = ch.charCodeAt(0);
   const seq = data.slice(offset);

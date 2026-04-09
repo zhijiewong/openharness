@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { summarizeToolArgs, formatToolArgs } from './tool-summary.js';
+import { summarizeToolArgs, formatToolArgs, summarizeToolOutput } from './tool-summary.js';
 
 describe('summarizeToolArgs', () => {
   it('extracts command from Bash tool', () => {
@@ -74,5 +74,37 @@ describe('formatToolArgs', () => {
     const args = { foo: 'bar' };
     const result = formatToolArgs('UnknownTool', args);
     assert.strictEqual(result, JSON.stringify(args));
+  });
+
+  it('truncates long args with ellipsis', () => {
+    const result = formatToolArgs('Unknown', { data: 'a'.repeat(100) });
+    assert.ok(result.length <= 60, `Expected <= 60 chars, got ${result.length}`);
+    assert.ok(result.endsWith('...'));
+  });
+
+  it('returns url when present', () => {
+    const result = formatToolArgs('WebFetch', { url: 'https://example.com' });
+    assert.strictEqual(result, 'https://example.com');
+  });
+});
+
+describe('summarizeToolOutput', () => {
+  it('returns empty string for empty output', () => {
+    assert.strictEqual(summarizeToolOutput(''), '');
+  });
+
+  it('returns short single-line output directly', () => {
+    assert.strictEqual(summarizeToolOutput('OK'), 'OK');
+  });
+
+  it('returns line count for multi-line output', () => {
+    const result = summarizeToolOutput('line1\nline2\nline3');
+    assert.strictEqual(result, '3 lines');
+  });
+
+  it('returns line count for long single-line output', () => {
+    const longLine = 'x'.repeat(100);
+    const result = summarizeToolOutput(longLine);
+    assert.strictEqual(result, '1 lines');
   });
 });
