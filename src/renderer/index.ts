@@ -5,7 +5,7 @@
 
 import { CellGrid } from './cells.js';
 import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
-import { rasterize, rasterizeLive, type LayoutState, type ToolCallInfo } from './layout.js';
+import { rasterizeLive, type LayoutState, type ToolCallInfo } from './layout.js';
 import { getTheme } from '../utils/theme-data.js';
 
 const FG_MAP: Record<string, number> = {
@@ -32,6 +32,7 @@ export class TerminalRenderer {
   private renderPending = false;
   private started = false;
   private flushedMessageCount = 0;
+  private flushedToolCallIds = new Set<string>();
 
   // Callbacks
   private keypressHandler: ((key: KeyEvent) => void) | null = null;
@@ -181,9 +182,8 @@ export class TerminalRenderer {
     // Restore terminal: disable mouse, show cursor, reset attributes
     process.stdout.write('\x1b[?1006l\x1b[?1000l\x1b[0m');
     showCursor();
-    // Move cursor below live area so terminal prompt appears cleanly
-    moveCursor((process.stdout.rows ?? 24) - 1, 0);
-    process.stdout.write('\n');
+    // Position cursor at bottom for clean shell prompt
+    process.stdout.write(`\x1b[${process.stdout.rows ?? 24};1H\n`);
   }
 
   // ── State updates ──
@@ -274,7 +274,7 @@ export class TerminalRenderer {
     this.scheduleRender();
   }
   getToolCall(callId: string): ToolCallInfo | undefined { return this.state.toolCalls.get(callId); }
-  clearToolCalls(): void { this.state.toolCalls.clear(); this.scheduleRender(); }
+  clearToolCalls(): void { this.state.toolCalls.clear(); this.flushedToolCallIds.clear(); this.scheduleRender(); }
   collapseAllToolCalls(): void { this.state.expandedToolCalls.clear(); this.scheduleRender(); }
 
   /** Show a question prompt and wait for text answer */
@@ -385,10 +385,12 @@ export class TerminalRenderer {
       didFlush = true;
     }
 
-    // Flush completed tool calls as single-line summaries
+    // Flush completed tool calls as single-line summaries (once each)
     if (didFlush) {
       for (const [callId, tc] of this.state.toolCalls) {
         if (tc.status === 'running') continue;
+        if (this.flushedToolCallIds.has(callId)) continue;
+        this.flushedToolCallIds.add(callId);
         const t = getTheme();
         const icon = tc.status === 'done' ? `\x1b[${FG(t.success)}m✓` : `\x1b[${FG(t.error)}m✗`;
         const summary = tc.resultSummary ? `  ${tc.resultSummary}` : '';
@@ -421,10 +423,12 @@ export class TerminalRenderer {
 
     // Position live area at bottom of terminal
     const liveStartRow = h - liveHeight;
-    // Erase from live area start, then render diff with offset
-    const eraseAndDiff = `\x1b[${liveStartRow + 1};1H\x1b[J` + diff(this.previous, this.current, liveStartRow);
-    if (eraseAndDiff.length > 10) { // more than just the erase sequence
-      syncWrite(eraseAndDiff);
+    const cellDiff = diff(this.previous, this.current, liveStartRow);
+    // Only erase+redraw when grid size changed or cells differ
+    const needsErase = this.previous.width !== this.current.width || this.previous.height !== this.current.height;
+    if (cellDiff || needsErase) {
+      const output = (needsErase ? `\x1b[${liveStartRow + 1};1H\x1b[J` : '') + cellDiff;
+      if (output) syncWrite(output);
     }
 
     // Show cursor at input position (offset by live area start)

@@ -6,7 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { CellGrid } from './cells.js';
-import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
+import { rasterize, rasterizeLive, type LayoutState, type ToolCallInfo } from './layout.js';
 import { setActiveTheme } from '../utils/theme-data.js';
 
 setActiveTheme('dark');
@@ -586,5 +586,123 @@ describe('E2E: REPL state machine', () => {
     const line1 = gridText(grid1, 0);
     const line2 = gridText(grid2, 0);
     assert.notStrictEqual(line1, line2, 'Scrolled view should show different content');
+  });
+});
+
+// ── rasterizeLive tests (the active production renderer) ──
+describe('rasterizeLive: live area renderer', () => {
+  it('renders input prompt', () => {
+    const state = makeState();
+    const grid = new CellGrid(80, 10);
+    const cursor = rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('❯')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show input prompt');
+  });
+
+  it('renders spinner when loading', () => {
+    const state = makeState({ loading: true, thinkingStartedAt: Date.now() });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('Thinking')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show spinner');
+  });
+
+  it('renders streaming text', () => {
+    const state = makeState({ loading: true, streamingText: 'streaming response' });
+    const grid = new CellGrid(80, 15);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('streaming response')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show streaming text');
+  });
+
+  it('renders error text', () => {
+    const state = makeState({ errorText: 'Connection failed' });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('Connection failed')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show error');
+  });
+
+  it('renders tool calls', () => {
+    const toolCalls = new Map<string, ToolCallInfo>();
+    toolCalls.set('tc1', { toolName: 'Read', status: 'done', args: '/path/to/file.ts' });
+    const state = makeState({ toolCalls });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('Read') && gridText(grid, r).includes('✓')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show completed tool');
+  });
+
+  it('renders permission prompt with Y/N', () => {
+    const state = makeState({
+      permissionBox: { toolName: 'Bash', description: 'rm -rf', riskLevel: 'high', suggestion: null },
+    });
+    const grid = new CellGrid(80, 12);
+    rasterizeLive(state, grid);
+    let foundTool = false, foundYN = false;
+    for (let r = 0; r < grid.height; r++) {
+      const line = gridText(grid, r);
+      if (line.includes('Bash') && line.includes('high')) foundTool = true;
+      if (line.includes('Yes') && line.includes('No')) foundYN = true;
+    }
+    assert.ok(foundTool, 'Should show tool name and risk');
+    assert.ok(foundYN, 'Should show Y/N options');
+  });
+
+  it('renders question prompt with correct cursor', () => {
+    const state = makeState({
+      questionPrompt: { question: 'Pick one', options: ['A', 'B'], input: 'A', cursor: 1 },
+    });
+    const grid = new CellGrid(80, 15);
+    const cursor = rasterizeLive(state, grid);
+    assert.strictEqual(cursor.cursorCol, 3 + 1, 'Cursor should be at col 3 + cursor offset');
+  });
+
+  it('renders status line', () => {
+    const state = makeState({ statusLine: 'llama3 │ 1K↑ 500↓' });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('llama3')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show status line');
+  });
+
+  it('renders context warning', () => {
+    const state = makeState({ contextWarning: { text: '⚠ Context 85% full', critical: false } });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('Context 85%')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show context warning');
+  });
+
+  it('renders collapsed thinking summary', () => {
+    const state = makeState({ lastThinkingSummary: '∴ Thought for 3s [Ctrl+O]' });
+    const grid = new CellGrid(80, 10);
+    rasterizeLive(state, grid);
+    let found = false;
+    for (let r = 0; r < grid.height; r++) {
+      if (gridText(grid, r).includes('Thought for 3s')) { found = true; break; }
+    }
+    assert.ok(found, 'Should show thinking summary');
   });
 });
