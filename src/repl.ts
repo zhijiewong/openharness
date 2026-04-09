@@ -227,28 +227,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return;
     }
 
-    // Ctrl+F: enter search mode
-    if (key.ctrl && key.char === 'f' && !loading) {
-      renderer.enterSearchMode();
-      return;
-    }
-
-    // Search mode intercepts all input
-    if (renderer.isSearchMode()) {
-      if (key.name === 'escape') {
-        renderer.exitSearchMode();
-      } else if (key.name === 'return' || key.name === 'down') {
-        renderer.searchNext();
-      } else if (key.name === 'up') {
-        renderer.searchPrev();
-      } else if (key.name === 'backspace') {
-        const q = renderer.getSearchQuery();
-        if (q.length > 0) renderer.setSearchQuery(q.slice(0, -1));
-      } else if (key.char && key.char.length === 1 && !key.ctrl && !key.meta) {
-        renderer.setSearchQuery(renderer.getSearchQuery() + key.char);
-      }
-      return;
-    }
+    // Search: use terminal's native search (Ctrl+Shift+F in VS Code)
 
     // Vim mode toggle via escape
     if (vimMode !== null) {
@@ -291,14 +270,9 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return;
     }
 
-    // Page Up/Down, Shift+Up/Down, and mouse scroll: scrollback navigation
-    if (key.name === 'pageup') { renderer.scrollUp(10); return; }
-    if (key.name === 'pagedown') { renderer.scrollDown(10); return; }
-    if (key.shift && key.name === 'up') { renderer.scrollUp(3); return; }
-    if (key.shift && key.name === 'down') { renderer.scrollDown(3); return; }
-    if (key.name === 'scrollup') { renderer.scrollUp(3); return; }
-    if (key.name === 'scrolldown') { renderer.scrollDown(3); return; }
-    if (key.name === 'mouse') return; // ignore other mouse events
+    // Scrolling handled by terminal's native scrollbar — ignore scroll keys
+    if (key.name === 'pageup' || key.name === 'pagedown') return;
+    if (key.name === 'scrollup' || key.name === 'scrolldown' || key.name === 'mouse') return;
 
     // Tab: autocomplete slash commands or file paths, or cycle tool call expansion
     if (key.name === 'tab' && !loading) {
@@ -492,7 +466,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       for await (const event of query(prompt, queryConfig, messages)) {
         switch (event.type) {
           case 'text_delta':
-            renderer.scrollToBottom(); // auto-scroll on new content
+            // Content auto-scrolls via terminal native scrollback
             accumulated += event.content;
             // Move completed lines to messages, keep partial in streaming
             const lines = accumulated.split('\n');
@@ -652,7 +626,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       abortController = null;
       renderer.setLoading(false);
       renderer.setStreamingText('');
-      renderer.scrollToBottom(); // Reset scroll so user sees latest content
+      // Content auto-scrolls via terminal native scrollback
       syncRenderer();
     }
   }

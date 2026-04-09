@@ -200,7 +200,6 @@ export class TerminalRenderer {
     this.state.companionColor = color;
     this.scheduleRender();
   }
-  setBanner(lines: string[] | null): void { this.state.bannerLines = lines; this.scheduleRender(); }
   setStatusHints(text: string): void { this.state.statusHints = text; this.scheduleRender(); }
   setAutocomplete(suggestions: string[], index: number, descriptions?: string[]): void {
     this.state.autocomplete = suggestions;
@@ -216,117 +215,7 @@ export class TerminalRenderer {
   setLastThinkingSummary(summary: string | null): void { this.state.lastThinkingSummary = summary; this.scheduleRender(); }
   toggleThinkingExpanded(): void { this.state.thinkingExpanded = !this.state.thinkingExpanded; this.scheduleRender(); }
 
-  // Search mode
-  enterSearchMode(): void {
-    this.state.searchMode = true;
-    this.state.searchQuery = '';
-    this.state.searchMatchCount = 0;
-    this.state.searchCurrentMatch = -1;
-    this.scheduleRender();
-  }
-  exitSearchMode(): void {
-    this.state.searchMode = false;
-    this.state.searchQuery = '';
-    this.state.searchMatchCount = 0;
-    this.state.searchCurrentMatch = -1;
-    this.scheduleRender();
-  }
-  setSearchQuery(query: string): void {
-    this.state.searchQuery = query;
-    // Count matches across all messages
-    if (query) {
-      const lq = query.toLowerCase();
-      let count = 0;
-      for (const msg of this.state.messages) {
-        const content = msg.content.toLowerCase();
-        let idx = 0;
-        while ((idx = content.indexOf(lq, idx)) !== -1) { count++; idx += lq.length; }
-      }
-      this.state.searchMatchCount = count;
-      this.state.searchCurrentMatch = count > 0 ? 0 : -1;
-    } else {
-      this.state.searchMatchCount = 0;
-      this.state.searchCurrentMatch = -1;
-    }
-    this.scheduleRender();
-  }
-  searchNext(): void {
-    if (this.state.searchMatchCount > 0) {
-      this.state.searchCurrentMatch = (this.state.searchCurrentMatch + 1) % this.state.searchMatchCount;
-      this.scrollToSearchMatch();
-      this.scheduleRender();
-    }
-  }
-  searchPrev(): void {
-    if (this.state.searchMatchCount > 0) {
-      this.state.searchCurrentMatch = (this.state.searchCurrentMatch - 1 + this.state.searchMatchCount) % this.state.searchMatchCount;
-      this.scrollToSearchMatch();
-      this.scheduleRender();
-    }
-  }
-  private scrollToSearchMatch(): void {
-    // Estimate which row the current match is on and scroll to it
-    const lq = this.state.searchQuery.toLowerCase();
-    const w = process.stdout.columns ?? 80;
-    let matchIdx = 0;
-    let rowEstimate = 0;
-    for (const msg of this.state.messages) {
-      const content = msg.content;
-      const lines = content.split('\n');
-      for (const line of lines) {
-        const lineRows = Math.max(1, Math.ceil((line.length || 1) / (w - 2)));
-        // Count matches in this line
-        const ll = line.toLowerCase();
-        let idx = 0;
-        while ((idx = ll.indexOf(lq, idx)) !== -1) {
-          if (matchIdx === this.state.searchCurrentMatch) {
-            // Found it — scroll so this row is visible
-            const h = process.stdout.rows ?? 24;
-            const targetScroll = Math.max(0, rowEstimate - Math.floor(h / 3));
-            // manualScroll is offset from bottom: convert
-            const totalRows = this.estimateTotalRows();
-            this.state.manualScroll = Math.max(0, totalRows - targetScroll - h + 15);
-            return;
-          }
-          matchIdx++;
-          idx += lq.length;
-        }
-        rowEstimate += lineRows;
-      }
-      rowEstimate++; // gap between messages
-    }
-  }
-  private estimateTotalRows(): number {
-    const w = process.stdout.columns ?? 80;
-    let total = 0;
-    for (const msg of this.state.messages) {
-      const lines = msg.content.split('\n');
-      for (const line of lines) {
-        total += Math.max(1, Math.ceil((line.length || 1) / (w - 2)));
-      }
-      total++;
-    }
-    return total;
-  }
-  isSearchMode(): boolean { return this.state.searchMode; }
-  getSearchQuery(): string { return this.state.searchQuery; }
   setTokenCount(count: number): void { this.state.tokenCount = count; this.scheduleRender(); }
-
-  scrollUp(rows: number): void {
-    // Cap manualScroll to prevent scrolling past the top
-    const h = process.stdout.rows ?? 24;
-    const maxScroll = Math.max(0, this.estimateTotalRows() - Math.floor(h / 3));
-    this.state.manualScroll = Math.min(this.state.manualScroll + rows, maxScroll);
-    this.scheduleRender();
-  }
-  scrollDown(rows: number): void {
-    this.state.manualScroll = Math.max(0, this.state.manualScroll - rows);
-    this.scheduleRender();
-  }
-  scrollToBottom(): void {
-    this.state.manualScroll = 0;
-    this.scheduleRender();
-  }
   toggleCodeBlockExpansion(): void {
     this.state.codeBlocksExpanded = !this.state.codeBlocksExpanded;
     this.scheduleRender();
@@ -459,24 +348,50 @@ export class TerminalRenderer {
     });
   }
 
+  /** Apply lightweight markdown styling to a line for scrollback output */
+  private styleMarkdownLine(line: string): string {
+    return line
+      .replace(/\*\*(.+?)\*\*/g, '\x1b[1m$1\x1b[22m') // bold
+      .replace(/`([^`]+)`/g, '\x1b[2m$1\x1b[22m') // inline code → dim
+      .replace(/^(#{1,3})\s+(.+)$/, '\x1b[1m\x1b[36m$1 $2\x1b[0m'); // headings → bold cyan
+  }
+
   /** Flush completed messages to terminal scrollback (native scrollbar) */
   private flushMessages(): void {
     const messages = this.state.messages;
+    let didFlush = false;
     while (this.flushedMessageCount < messages.length) {
       const msg = messages[this.flushedMessageCount]!;
       // Don't flush the message currently being streamed
       if (this.state.loading && this.flushedMessageCount === messages.length - 1 && msg.meta?.isStreaming) break;
 
       const t = getTheme();
-      const prefix = msg.role === 'user' ? `\x1b[${FG(t.user)}m\x1b[1m❯ ` : msg.role === 'assistant' ? `\x1b[${FG(t.assistant)}m\x1b[1m◆ ` : '  ';
+      const colorCode = msg.role === 'user' ? `\x1b[${FG(t.user)}m\x1b[1m` : msg.role === 'assistant' ? `\x1b[${FG(t.assistant)}m` : '\x1b[2m';
+      const prefixChar = msg.role === 'user' ? '❯ ' : msg.role === 'assistant' ? '◆ ' : '  ';
       const lines = msg.content.split('\n');
       for (let i = 0; i < lines.length; i++) {
-        process.stdout.write((i === 0 ? prefix : '  ') + lines[i] + '\x1b[0m\n');
+        const styledLine = msg.role === 'assistant' ? this.styleMarkdownLine(lines[i]!) : lines[i]!;
+        const linePrefix = i === 0 ? prefixChar : '  ';
+        process.stdout.write(colorCode + linePrefix + styledLine + '\x1b[0m\n');
       }
-      if (msg.role === 'user') {
-        process.stdout.write('\x1b[2m' + '─'.repeat(Math.min(60, process.stdout.columns ?? 80)) + '\x1b[0m\n');
-      }
+      // Divider after each message
+      process.stdout.write('\x1b[2m' + '─'.repeat(Math.min(60, process.stdout.columns ?? 80)) + '\x1b[0m\n');
       this.flushedMessageCount++;
+      didFlush = true;
+    }
+
+    // Flush completed tool calls as single-line summaries
+    if (didFlush) {
+      for (const [callId, tc] of this.state.toolCalls) {
+        if (tc.status === 'running') continue;
+        const t = getTheme();
+        const icon = tc.status === 'done' ? `\x1b[${FG(t.success)}m✓` : `\x1b[${FG(t.error)}m✗`;
+        const summary = tc.resultSummary ? `  ${tc.resultSummary}` : '';
+        const elapsed = tc.startedAt ? ` · ${Math.floor((Date.now() - tc.startedAt) / 1000)}s` : '';
+        process.stdout.write(`${icon} ${tc.toolName}\x1b[0m \x1b[2m${tc.args ?? ''}${summary}${elapsed}\x1b[0m\n`);
+      }
+      // Force full repaint of live area after flush to avoid stale artifacts
+      this.previous = new CellGrid(1, 1);
     }
   }
 
@@ -523,16 +438,23 @@ export class TerminalRenderer {
     if (!this.state.loading && this.state.lastThinkingSummary) rows += 1;
     if (this.state.loading && !this.state.streamingText && !this.state.thinkingText) rows += 1; // spinner
     if (this.state.errorText) rows += 1;
-    rows += this.state.toolCalls.size * 2; // header + possible description
+    for (const [, tc] of this.state.toolCalls) {
+      rows += 2; // header + possible description/agent line
+      if (tc.status === 'running' && tc.liveOutput) rows += Math.min(tc.liveOutput.length, 3);
+    }
     if (this.state.contextWarning) rows += 1;
     if (this.state.statusLine) rows += 1;
     rows += this.state.autocomplete.length;
-    if (this.state.permissionBox) rows += 3;
+    if (this.state.permissionBox) {
+      rows += 3;
+      if (this.state.permissionDiffVisible && this.state.permissionDiffInfo) rows += 15;
+    }
     if (this.state.questionPrompt) rows += 3 + (this.state.questionPrompt.options?.length ?? 0);
+    if (this.state.companionLines) rows = Math.max(rows, this.state.companionLines.length + 2);
     const inputLineCount = Math.min(5, (this.state.inputText.match(/\n/g)?.length ?? 0) + 1);
-    rows += inputLineCount - 1; // first line already counted
+    rows += inputLineCount - 1;
     const h = process.stdout.rows ?? 24;
-    return Math.min(rows, Math.floor(h * 0.6)); // never exceed 60% of terminal
+    return Math.min(rows, Math.floor(h * 0.7)); // never exceed 70% of terminal
   }
 
   private handleResize(): void {
