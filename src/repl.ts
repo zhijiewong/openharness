@@ -393,8 +393,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   }
 
   async function handleSubmit(input: string) {
-    // Clear welcome banner and any previous errors on new input
-    renderer.setBanner(null);
+    // Clear any previous errors on new input
     renderer.setError(null);
 
     // Exit
@@ -676,6 +675,6 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
   // Start
   renderer.start();
-  if (showBanner) renderer.setBanner(config.welcomeText!.split('\n'));
+  // Banner is already printed to stdout by main.tsx (visible in terminal scrollback)
   syncRenderer();
 }

@@ -32,7 +32,7 @@ export function styleToSGR(style: Style): string {
  * Compare two grids and return the ANSI string that transforms prev into next.
  * Only emits escape sequences for changed cells.
  */
-export function diff(prev: CellGrid, next: CellGrid): string {
+export function diff(prev: CellGrid, next: CellGrid, rowOffset = 0): string {
   const parts: string[] = [];
   let lastStyle: string | null = null;
   let expectedRow = -1;
@@ -47,7 +47,7 @@ export function diff(prev: CellGrid, next: CellGrid): string {
 
       // Position cursor if not already there
       if (r !== expectedRow || c !== expectedCol) {
-        parts.push(`\x1b[${r + 1};${c + 1}H`);
+        parts.push(`\x1b[${r + 1 + rowOffset};${c + 1}H`);
       }
 
       // Apply style if changed

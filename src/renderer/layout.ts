@@ -718,3 +718,276 @@ export function rasterize(
 }
 
 // extractSuggestion moved to shared utils/tool-summary.ts as summarizeToolArgs
+
+/**
+ * Rasterize only the "live area" — streaming text, thinking, tool calls, and footer.
+ * Used in hybrid mode where completed messages are flushed to terminal scrollback.
+ * The grid should be sized to fit just the live content.
+ */
+export function rasterizeLive(
+  state: LayoutState,
+  grid: CellGrid,
+): { cursorRow: number; cursorCol: number } {
+  ensureStyles();
+  const w = grid.width;
+  const h = grid.height;
+  let r = 0;
+
+  // ── Streaming text ──
+  if (state.loading && state.streamingText) {
+    grid.writeText(r, 0, '◆ ', S_ASSISTANT);
+    const rows = renderMarkdown(grid, r, 2, state.streamingText, w, state.codeBlocksExpanded, h);
+    r += rows;
+  }
+
+  // ── Thinking (live shimmer) ──
+  if (state.thinkingText && r < h) {
+    if (state.thinkingExpanded) {
+      const thinkLines = state.thinkingText.split('\n').slice(-10);
+      const shimmerPos = state.spinnerFrame % 20;
+      const S_BRIGHT: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
+      for (const tLine of thinkLines) {
+        if (r >= h) break;
+        grid.writeText(r, 0, '💭 ', S_DIM);
+        const chars = [...tLine];
+        for (let ci = 0; ci < chars.length && ci + 3 < w; ci++) {
+          grid.setCell(r, 3 + ci, chars[ci]!, Math.abs(ci - shimmerPos) <= 2 ? S_BRIGHT : S_DIM);
+        }
+        r++;
+      }
+    } else {
+      const lineCount = state.thinkingText.split('\n').length;
+      const elapsed = state.thinkingStartedAt ? Math.floor((Date.now() - state.thinkingStartedAt) / 1000) : 0;
+      const summary = `∴ Thinking${elapsed > 0 ? ` (${elapsed}s)` : ''} — ${lineCount} lines [Ctrl+O expand]`;
+      grid.writeText(r, 0, summary, S_DIM);
+      r++;
+    }
+  }
+
+  // ── Thinking summary (after completion) ──
+  if (!state.loading && state.lastThinkingSummary && r < h) {
+    grid.writeText(r, 0, state.lastThinkingSummary, S_DIM);
+    r++;
+  }
+
+  // ── Spinner ──
+  if (state.loading && !state.streamingText && !state.thinkingText && r < h) {
+    const thinkText = 'Thinking';
+    const elapsed = state.thinkingStartedAt ? Math.floor((Date.now() - state.thinkingStartedAt) / 1000) : 0;
+    const t = getTheme();
+    const baseColor = elapsed > 60 ? t.error : elapsed > 30 ? t.stall : t.primary;
+    const shimmerColor = elapsed > 60 ? t.stallShimmer : elapsed > 30 ? t.warning : t.primaryShimmer;
+    const baseStyle: Style = { fg: baseColor, bg: null, bold: false, dim: false, underline: false };
+    grid.writeText(r, 0, '◆ ', { ...baseStyle, bold: true });
+    const shimmerPos = state.spinnerFrame % (thinkText.length + 6);
+    const shimmerStyle: Style = { fg: shimmerColor, bg: null, bold: true, dim: false, underline: false };
+    for (let ci = 0; ci < thinkText.length; ci++) {
+      grid.setCell(r, 2 + ci, thinkText[ci]!, Math.abs(ci - shimmerPos) <= 1 ? shimmerStyle : baseStyle);
+    }
+    let suffix = '';
+    if (elapsed > 0) suffix += ` ${elapsed}s`;
+    if (state.tokenCount > 0) {
+      const tokStr = state.tokenCount >= 1000 ? `${(state.tokenCount / 1000).toFixed(1)}K` : `${state.tokenCount}`;
+      suffix += ` | ${tokStr} tokens`;
+    }
+    suffix += '...';
+    grid.writeText(r, 2 + thinkText.length, suffix, S_DIM);
+    r++;
+  }
+
+  // ── Error ──
+  if (state.errorText && r < h) {
+    grid.writeText(r, 0, '✗ ', S_ERROR);
+    grid.writeText(r, 2, state.errorText.slice(0, w - 4), S_ERROR);
+    r++;
+  }
+
+  // ── Tool calls ──
+  for (const [callId, tc] of state.toolCalls) {
+    if (r >= h) break;
+    const isAgent = tc.isAgent || tc.toolName === 'Agent' || tc.toolName === 'ParallelAgents';
+    const icon = isAgent
+      ? (tc.status === 'running' ? '⊕' : tc.status === 'done' ? '◈' : '◇')
+      : (tc.status === 'running' ? SPINNER_CHARS[state.spinnerFrame % SPINNER_CHARS.length]! : tc.status === 'done' ? '✓' : '✗');
+    const S_AGENT: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
+    const statusStyle = tc.status === 'error' ? S_ERROR : tc.status === 'done' ? S_GREEN : isAgent ? S_AGENT : S_YELLOW;
+    const nameStyle = isAgent ? S_AGENT : { ...S_YELLOW, bold: true };
+    const isExpanded = state.expandedToolCalls.has(callId);
+
+    grid.writeText(r, 0, isExpanded ? '▼' : '▶', S_DIM);
+    grid.writeText(r, 2, `${icon} `, statusStyle);
+    grid.writeText(r, 4, tc.toolName, nameStyle);
+    let afterName = 4 + tc.toolName.length + 1;
+    if (tc.args) {
+      const maxArgs = w - afterName - 15;
+      if (maxArgs > 5) {
+        const argsText = tc.args.slice(0, maxArgs) + (tc.args.length > maxArgs ? '…' : '');
+        grid.writeText(r, afterName, argsText, S_DIM);
+        afterName += argsText.length + 1;
+      }
+    }
+    if (tc.resultSummary && tc.status !== 'running') {
+      grid.writeText(r, Math.min(afterName, w - tc.resultSummary.length - 2), tc.resultSummary, S_DIM);
+    }
+    r++;
+    if (isAgent && tc.agentDescription && r < h) {
+      grid.writeText(r, 6, tc.agentDescription.slice(0, w - 8), S_DIM);
+      r++;
+    }
+    // Live output while running
+    if (tc.status === 'running' && tc.liveOutput && tc.liveOutput.length > 0) {
+      const visible = tc.liveOutput.slice(-3);
+      for (const line of visible) {
+        if (r >= h) break;
+        grid.writeText(r, 6, line.slice(0, w - 8), S_DIM);
+        r++;
+      }
+    }
+    // Expanded output
+    if (tc.output && tc.status !== 'running' && isExpanded && r < h) {
+      const outLines = tc.output.split('\n').slice(0, 20);
+      for (const line of outLines) {
+        if (r >= h) break;
+        grid.writeText(r, 6, line.slice(0, w - 8), tc.status === 'error' ? S_ERROR : S_DIM);
+        r++;
+      }
+    }
+  }
+
+  // ── Context warning ──
+  if (state.contextWarning && r < h) {
+    const warnStyle: Style = { fg: 'yellow', bg: null, bold: state.contextWarning.critical, dim: false, underline: false };
+    grid.writeText(r, 0, state.contextWarning.text, warnStyle);
+    r++;
+  }
+
+  // ── Footer border ──
+  if (r < h) {
+    for (let c = 0; c < w; c++) grid.setCell(r, c, '─', S_BORDER);
+    r++;
+  }
+
+  let nextRow = r;
+
+  // ── Permission box ──
+  let questionInputRow = -1;
+  if (state.permissionBox && w >= 20 && (h - nextRow) >= 4) {
+    const { toolName, riskLevel } = state.permissionBox;
+    const riskColor = riskLevel === 'high' ? 'red' : riskLevel === 'medium' ? 'yellow' : 'green';
+    const riskStyle: Style = { fg: riskColor, bg: null, bold: true, dim: false, underline: false };
+    grid.writeText(nextRow, 1, `⚠ ${toolName} (${riskLevel} risk)`, riskStyle);
+    nextRow++;
+    const S_KEY_GREEN: Style = { fg: 'green', bg: null, bold: true, dim: false, underline: false };
+    const S_KEY_RED: Style = { fg: 'red', bg: null, bold: true, dim: false, underline: false };
+    grid.writeText(nextRow, 1, 'Y', S_KEY_GREEN);
+    grid.writeText(nextRow, 2, 'es  ', S_DIM);
+    grid.writeText(nextRow, 6, 'N', S_KEY_RED);
+    grid.writeText(nextRow, 7, 'o', S_DIM);
+    if (state.permissionDiffInfo) {
+      const S_KEY_CYAN: Style = { fg: 'cyan', bg: null, bold: true, dim: false, underline: false };
+      grid.writeText(nextRow, 10, 'D', S_KEY_CYAN);
+      grid.writeText(nextRow, 11, 'iff', S_DIM);
+    }
+    nextRow++;
+  }
+
+  // ── Question prompt ──
+  if (state.questionPrompt && w >= 20 && (h - nextRow) >= 3) {
+    grid.writeText(nextRow, 1, `❓ ${state.questionPrompt.question}`, S_TEXT);
+    nextRow++;
+    if (state.questionPrompt.options) {
+      for (const opt of state.questionPrompt.options) {
+        if (nextRow >= h) break;
+        grid.writeText(nextRow, 3, opt, S_DIM);
+        nextRow++;
+      }
+    }
+    questionInputRow = nextRow;
+    grid.writeText(nextRow, 1, '❯ ', S_USER);
+    grid.writeText(nextRow, 3, state.questionPrompt.input, S_TEXT);
+    nextRow++;
+  }
+
+  // ── Status line ──
+  if (state.statusLine && nextRow < h) {
+    grid.writeText(nextRow, 0, state.statusLine, S_DIM);
+    nextRow++;
+  }
+
+  // ── Autocomplete ──
+  const vimIndicator = state.vimMode ? (state.vimMode === 'normal' ? '[N] ' : '[I] ') : '';
+  const promptText = vimIndicator + '❯ ';
+  const promptWidth = promptText.length;
+  if (state.autocomplete.length > 0) {
+    for (let ai = 0; ai < state.autocomplete.length; ai++) {
+      if (nextRow >= h) break;
+      const cmd = state.autocomplete[ai]!;
+      const desc = state.autocompleteDescriptions[ai] ?? '';
+      const selected = ai === state.autocompleteIndex;
+      const acStyle = selected ? s(getTheme().user, true) : s(null, false, true);
+      grid.writeText(nextRow, promptWidth, `/${cmd.padEnd(12)}`, acStyle);
+      if (desc && w > promptWidth + 15) grid.writeText(nextRow, promptWidth + 13, desc.slice(0, w - promptWidth - 15), S_DIM);
+      nextRow++;
+    }
+  }
+
+  // ── Input line ──
+  const inputRow = nextRow;
+  let inputStart: number;
+  if (state.searchMode) {
+    grid.writeText(inputRow, 0, '🔍 ', S_USER);
+    inputStart = 3;
+    grid.writeText(inputRow, inputStart, state.searchQuery, S_TEXT);
+    const matchInfo = state.searchMatchCount > 0
+      ? ` ${state.searchCurrentMatch + 1}/${state.searchMatchCount}`
+      : state.searchQuery ? ' No matches' : '';
+    grid.writeText(inputRow, inputStart + state.searchQuery.length, matchInfo, S_DIM);
+    if (inputRow + 1 < h) grid.writeText(inputRow + 1, 0, 'Enter/↓ next | ↑ prev | Esc close', S_DIM);
+  } else {
+    grid.writeText(inputRow, 0, promptText, S_USER);
+    inputStart = promptWidth;
+    const inputLines = state.inputText.split('\n');
+    const maxInputLines = Math.min(inputLines.length, 5);
+    for (let li = 0; li < maxInputLines; li++) {
+      if (inputRow + li >= h) break;
+      if (li === 0) {
+        grid.writeText(inputRow, inputStart, inputLines[0]!, S_TEXT);
+      } else {
+        grid.writeText(inputRow + li, inputStart, inputLines[li]!, S_TEXT);
+      }
+    }
+    const hintsRow = inputRow + maxInputLines;
+    if (hintsRow < h) {
+      const hintsText = inputLines.length > 1 ? `${state.statusHints} | Alt+Enter newline` : state.statusHints;
+      grid.writeText(hintsRow, 0, hintsText, S_DIM);
+    }
+  }
+
+  // ── Companion ──
+  if (state.companionLines && w >= 50 && r > 0) {
+    const compWidth = Math.max(...state.companionLines.map(l => l.length), 0);
+    const compStartCol = Math.max(0, w - compWidth - 1);
+    if (compStartCol > promptWidth + 20) {
+      const compStyle: Style = { fg: state.companionColor || 'cyan', bg: null, bold: false, dim: false, underline: false };
+      for (let i = 0; i < state.companionLines.length; i++) {
+        const compRow = i; // top of live area
+        if (compRow >= inputRow) break;
+        if (compRow >= h) break;
+        grid.writeText(compRow, compStartCol, state.companionLines[i]!, compStyle);
+      }
+    }
+  }
+
+  // ── Cursor position ──
+  if (state.questionPrompt && questionInputRow >= 0) {
+    return { cursorRow: questionInputRow, cursorCol: 3 + state.questionPrompt.cursor };
+  }
+  if (state.searchMode) {
+    return { cursorRow: inputRow, cursorCol: inputStart + state.searchQuery.length };
+  }
+  const textBeforeCursor = state.inputText.slice(0, state.inputCursor);
+  const cursorLines = textBeforeCursor.split('\n');
+  const cursorLineIdx = Math.min(cursorLines.length - 1, 4);
+  const cursorColInLine = cursorLines[cursorLines.length - 1]!.length;
+  return { cursorRow: inputRow + cursorLineIdx, cursorCol: inputStart + cursorColInLine };
+}

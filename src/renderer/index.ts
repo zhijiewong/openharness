@@ -4,8 +4,16 @@
  */
 
 import { CellGrid } from './cells.js';
-import { diff, syncWrite, enterAltScreen, leaveAltScreen, hideCursor, showCursor, moveCursor } from './differ.js';
-import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
+import { diff, syncWrite, clearScreen, hideCursor, showCursor, moveCursor } from './differ.js';
+import { rasterize, rasterizeLive, type LayoutState, type ToolCallInfo } from './layout.js';
+import { getTheme } from '../utils/theme-data.js';
+
+const FG_MAP: Record<string, number> = {
+  black: 30, red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36, white: 37,
+  gray: 90, brightRed: 91, brightGreen: 92, brightYellow: 93, brightBlue: 94,
+  brightMagenta: 95, brightCyan: 96, brightWhite: 97,
+};
+function FG(color: string): number { return FG_MAP[color] ?? 37; }
 import { createSessionBrowser, browserUp, browserDown, browserSelectedId, browserLoadPreview, browserSearch, type SessionBrowserState } from './session-browser.js';
 import { summarizeToolArgs } from '../utils/tool-summary.js';
 import { extractDiffInfo } from './diff.js';
@@ -23,6 +31,7 @@ export class TerminalRenderer {
   private animationTimer: ReturnType<typeof setInterval> | null = null;
   private renderPending = false;
   private started = false;
+  private flushedMessageCount = 0;
 
   // Callbacks
   private keypressHandler: ((key: KeyEvent) => void) | null = null;
@@ -86,7 +95,6 @@ export class TerminalRenderer {
 
   start(): void {
     this.started = true;
-    enterAltScreen();
     // Enable SGR mouse tracking (scroll wheel support)
     process.stdout.write('\x1b[?1000h\x1b[?1006h');
     hideCursor();
@@ -170,10 +178,12 @@ export class TerminalRenderer {
     if (this.animationTimer) { clearInterval(this.animationTimer); this.animationTimer = null; }
     if (this.resizeHandler) { process.stdout.off('resize', this.resizeHandler); this.resizeHandler = null; }
     if (this.stopInput) { this.stopInput(); this.stopInput = null; }
-    // Restore terminal: disable mouse, leave alt screen, show cursor, reset attributes
+    // Restore terminal: disable mouse, show cursor, reset attributes
     process.stdout.write('\x1b[?1006l\x1b[?1000l\x1b[0m');
     showCursor();
-    leaveAltScreen();
+    // Move cursor below live area so terminal prompt appears cleanly
+    moveCursor((process.stdout.rows ?? 24) - 1, 0);
+    process.stdout.write('\n');
   }
 
   // ── State updates ──
@@ -449,30 +459,80 @@ export class TerminalRenderer {
     });
   }
 
+  /** Flush completed messages to terminal scrollback (native scrollbar) */
+  private flushMessages(): void {
+    const messages = this.state.messages;
+    while (this.flushedMessageCount < messages.length) {
+      const msg = messages[this.flushedMessageCount]!;
+      // Don't flush the message currently being streamed
+      if (this.state.loading && this.flushedMessageCount === messages.length - 1 && msg.meta?.isStreaming) break;
+
+      const t = getTheme();
+      const prefix = msg.role === 'user' ? `\x1b[${FG(t.user)}m\x1b[1m❯ ` : msg.role === 'assistant' ? `\x1b[${FG(t.assistant)}m\x1b[1m◆ ` : '  ';
+      const lines = msg.content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        process.stdout.write((i === 0 ? prefix : '  ') + lines[i] + '\x1b[0m\n');
+      }
+      if (msg.role === 'user') {
+        process.stdout.write('\x1b[2m' + '─'.repeat(Math.min(60, process.stdout.columns ?? 80)) + '\x1b[0m\n');
+      }
+      this.flushedMessageCount++;
+    }
+  }
+
   private render(): void {
     const w = process.stdout.columns ?? 80;
     const h = process.stdout.rows ?? 24;
 
+    // Flush completed messages to terminal scrollback
+    this.flushMessages();
+
+    // Calculate live area height
+    const liveHeight = Math.min(h, this.calculateLiveHeight());
+
     // Resize if needed
-    if (w !== this.current.width || h !== this.current.height) {
-      this.current = new CellGrid(w, h);
-      this.previous = new CellGrid(w, h); // force full repaint
+    if (w !== this.current.width || liveHeight !== this.current.height) {
+      this.current = new CellGrid(w, liveHeight);
+      this.previous = new CellGrid(w, liveHeight); // force full repaint
     }
 
     this.current.clear();
-    const cursor = rasterize(this.state, this.current);
+    const cursor = rasterizeLive(this.state, this.current);
 
-    const output = diff(this.previous, this.current);
-    if (output) {
-      syncWrite(output);
+    // Position live area at bottom of terminal
+    const liveStartRow = h - liveHeight;
+    // Erase from live area start, then render diff with offset
+    const eraseAndDiff = `\x1b[${liveStartRow + 1};1H\x1b[J` + diff(this.previous, this.current, liveStartRow);
+    if (eraseAndDiff.length > 10) { // more than just the erase sequence
+      syncWrite(eraseAndDiff);
     }
 
-    // Show cursor at input position
-    moveCursor(cursor.cursorRow, cursor.cursorCol);
+    // Show cursor at input position (offset by live area start)
+    moveCursor(liveStartRow + cursor.cursorRow, cursor.cursorCol);
     showCursor();
 
     // Swap buffers
     this.previous = this.current.clone();
+  }
+
+  /** Estimate the height needed for the live area */
+  private calculateLiveHeight(): number {
+    let rows = 3; // border + input + hints (minimum)
+    if (this.state.loading && this.state.streamingText) rows += Math.min(this.state.streamingText.split('\n').length, 10);
+    if (this.state.thinkingText) rows += this.state.thinkingExpanded ? 10 : 1;
+    if (!this.state.loading && this.state.lastThinkingSummary) rows += 1;
+    if (this.state.loading && !this.state.streamingText && !this.state.thinkingText) rows += 1; // spinner
+    if (this.state.errorText) rows += 1;
+    rows += this.state.toolCalls.size * 2; // header + possible description
+    if (this.state.contextWarning) rows += 1;
+    if (this.state.statusLine) rows += 1;
+    rows += this.state.autocomplete.length;
+    if (this.state.permissionBox) rows += 3;
+    if (this.state.questionPrompt) rows += 3 + (this.state.questionPrompt.options?.length ?? 0);
+    const inputLineCount = Math.min(5, (this.state.inputText.match(/\n/g)?.length ?? 0) + 1);
+    rows += inputLineCount - 1; // first line already counted
+    const h = process.stdout.rows ?? 24;
+    return Math.min(rows, Math.floor(h * 0.6)); // never exceed 60% of terminal
   }
 
   private handleResize(): void {
