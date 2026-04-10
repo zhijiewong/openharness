@@ -6,7 +6,7 @@ import type { Provider } from "../providers/base.js";
 import type { Tools } from "../Tool.js";
 import type { PermissionMode } from "../types/permissions.js";
 import { createAssistantMessage, createUserMessage, createMessage, createInfoMessage } from "../types/message.js";
-import { query, type QueryConfig } from "../query.js";
+import { query, type QueryConfig } from "../query/index.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";

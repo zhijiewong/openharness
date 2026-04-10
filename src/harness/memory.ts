@@ -24,6 +24,10 @@ export type MemoryEntry = {
   description: string;
   content: string;
   filePath: string;
+  relevance?: number;     // 0-1 relevance score (default 0.5)
+  lastAccessed?: number;  // timestamp of last access
+  createdAt?: number;     // timestamp of creation
+  accessCount?: number;   // how many times accessed
 };
 
 /** Load all memories from project and global dirs */
@@ -56,12 +60,21 @@ function parseMemory(raw: string, filePath: string): MemoryEntry | null {
   const fmEnd = raw.indexOf('---', raw.indexOf('---') + 3);
   const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : '';
 
+  const relevanceMatch = raw.match(/^relevance:\s*([0-9.]+)$/m);
+  const lastAccessedMatch = raw.match(/^lastAccessed:\s*(\d+)$/m);
+  const createdAtMatch = raw.match(/^createdAt:\s*(\d+)$/m);
+  const accessCountMatch = raw.match(/^accessCount:\s*(\d+)$/m);
+
   return {
     name: nameMatch[1]!.trim(),
     type: (typeMatch?.[1]?.trim() ?? 'convention') as MemoryEntry['type'],
     description: descMatch?.[1]?.trim() ?? '',
     content,
     filePath,
+    relevance: relevanceMatch ? parseFloat(relevanceMatch[1]!) : 0.5,
+    lastAccessed: lastAccessedMatch ? parseInt(lastAccessedMatch[1]!) : undefined,
+    createdAt: createdAtMatch ? parseInt(createdAtMatch[1]!) : undefined,
+    accessCount: accessCountMatch ? parseInt(accessCountMatch[1]!) : 0,
   };
 }
 
@@ -88,10 +101,15 @@ export function saveMemory(
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
   const filePath = join(dir, `${slug}.md`);
 
+  const now = Date.now();
   const md = `---
 name: ${name}
 type: ${type}
 description: ${description}
+relevance: 0.5
+createdAt: ${now}
+lastAccessed: ${now}
+accessCount: 0
 ---
 
 ${content}
@@ -99,6 +117,84 @@ ${content}
 
   writeFileSync(filePath, md);
   return filePath;
+}
+
+/** Mark a memory as accessed — updates lastAccessed and accessCount in the file */
+export function touchMemory(entry: MemoryEntry): void {
+  try {
+    let raw = readFileSync(entry.filePath, 'utf-8');
+    const now = Date.now();
+    const newCount = (entry.accessCount ?? 0) + 1;
+
+    // Update or insert metadata fields in frontmatter
+    if (raw.match(/^lastAccessed:/m)) {
+      raw = raw.replace(/^lastAccessed:\s*\d+$/m, `lastAccessed: ${now}`);
+    } else {
+      raw = raw.replace(/^---\s*$/m, `lastAccessed: ${now}\n---`);
+    }
+    if (raw.match(/^accessCount:/m)) {
+      raw = raw.replace(/^accessCount:\s*\d+$/m, `accessCount: ${newCount}`);
+    } else {
+      raw = raw.replace(/^---\s*$/m, `accessCount: ${newCount}\n---`);
+    }
+
+    writeFileSync(entry.filePath, raw);
+    entry.lastAccessed = now;
+    entry.accessCount = newCount;
+  } catch { /* ignore write errors */ }
+}
+
+/** Boost a memory's relevance score (capped at 1.0) */
+export function boostRelevance(entry: MemoryEntry, amount = 0.1): void {
+  const newRelevance = Math.min(1.0, (entry.relevance ?? 0.5) + amount);
+  try {
+    let raw = readFileSync(entry.filePath, 'utf-8');
+    if (raw.match(/^relevance:/m)) {
+      raw = raw.replace(/^relevance:\s*[0-9.]+$/m, `relevance: ${newRelevance.toFixed(2)}`);
+    }
+    writeFileSync(entry.filePath, raw);
+    entry.relevance = newRelevance;
+  } catch { /* ignore */ }
+}
+
+/**
+ * Apply temporal decay to memory relevance.
+ * Memories not accessed in >30 days lose relevance gradually.
+ * Returns memories that should be pruned (relevance < 0.1).
+ */
+export function decayAndPrune(memories: MemoryEntry[]): { active: MemoryEntry[]; pruned: MemoryEntry[] } {
+  const now = Date.now();
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  const active: MemoryEntry[] = [];
+  const pruned: MemoryEntry[] = [];
+
+  for (const m of memories) {
+    const lastAccess = m.lastAccessed ?? m.createdAt ?? now;
+    const age = now - lastAccess;
+
+    if (age > THIRTY_DAYS) {
+      // Decay: lose 0.1 relevance per 30 days of inactivity
+      const decayPeriods = Math.floor(age / THIRTY_DAYS);
+      const decayed = Math.max(0, (m.relevance ?? 0.5) - decayPeriods * 0.1);
+      m.relevance = decayed;
+
+      if (decayed < 0.1) {
+        pruned.push(m);
+        continue;
+      }
+    }
+    active.push(m);
+  }
+
+  return { active, pruned };
+}
+
+/** Load memories with decay applied, sorted by relevance */
+export function loadActiveMemories(): MemoryEntry[] {
+  const all = loadMemories();
+  const { active } = decayAndPrune(all);
+  // Sort by relevance (highest first), then by access count
+  return active.sort((a, b) => (b.relevance ?? 0.5) - (a.relevance ?? 0.5) || (b.accessCount ?? 0) - (a.accessCount ?? 0));
 }
 
 /**

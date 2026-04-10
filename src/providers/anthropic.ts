@@ -96,17 +96,29 @@ export class AnthropicProvider implements Provider {
     model?: string,
   ): AsyncGenerator<StreamEvent, void> {
     const m = model ?? this.defaultModel;
+    // Prompt caching: send system prompt as content blocks with cache_control.
+    // Anthropic caches matching prefixes — 90% cost reduction on repeat turns.
+    const systemBlocks = [
+      { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+    ];
+
     const body: Record<string, unknown> = {
       model: m,
       max_tokens: 8192,
-      system: systemPrompt,
+      system: systemBlocks,
       messages: this.convertMessages(messages),
       stream: true,
     };
     // Enable extended thinking for Claude models
     body.thinking = { type: "enabled", budget_tokens: 10000 };
     const anthropicTools = this.convertTools(tools);
-    if (anthropicTools) body.tools = anthropicTools;
+    if (anthropicTools) {
+      // Mark last tool definition as cacheable (cache covers all tools before it)
+      if (anthropicTools.length > 0) {
+        (anthropicTools[anthropicTools.length - 1] as Record<string, unknown>).cache_control = { type: "ephemeral" };
+      }
+      body.tools = anthropicTools;
+    }
 
     let res: Response;
     try {
@@ -201,11 +213,19 @@ export class AnthropicProvider implements Provider {
           case "content_block_stop": {
             inThinkingBlock = false;
             if (currentToolId) {
+              let parsedArgs: Record<string, unknown> = {};
+              if (currentToolArgs) {
+                try {
+                  parsedArgs = JSON.parse(currentToolArgs);
+                } catch {
+                  yield { type: "error", message: `Malformed tool args for ${currentToolName}: ${currentToolArgs.slice(0, 200)}` };
+                }
+              }
               yield {
                 type: "tool_call_complete",
                 callId: currentToolId,
                 toolName: currentToolName,
-                arguments: currentToolArgs ? JSON.parse(currentToolArgs) : {},
+                arguments: parsedArgs,
               } satisfies ToolCallComplete;
               currentToolId = "";
               currentToolName = "";
@@ -265,7 +285,7 @@ export class AnthropicProvider implements Provider {
     const body: Record<string, unknown> = {
       model: m,
       max_tokens: 8192,
-      system: systemPrompt,
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: this.convertMessages(messages),
     };
     const anthropicTools = this.convertTools(tools);

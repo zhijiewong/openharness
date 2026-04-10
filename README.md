@@ -49,18 +49,25 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 |---|---|---|---|---|
 | Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
 | Free local models | Ollama native | No | Yes | Yes |
-| Tools | 18 with permission gates | 40+ | File-focused | 20+ |
-| Git integration | Auto-commit + /undo | Yes | Deep git | Basic |
-| Slash commands | 19 built-in | 80+ | Some | Some |
-| Headless/CI mode | `oh run --json` | Yes | Yes | Yes |
-| Terminal UI | Custom cell-level renderer + React/Ink | React + Ink | Basic | BubbleTea |
+| Tools | 25 with permission gates | 43+ | File-focused | 20+ |
+| Permission modes | 7 (ask, trust, deny, acceptEdits, plan, auto, bypass) | 7 | Basic | Basic |
+| Git integration | Auto-commit + /undo + /rewind checkpoints | Yes | Deep git | Basic |
+| Slash commands | 30+ built-in | 80+ | Some | Some |
+| Headless/CI mode | `oh -p "prompt"` or `oh run --json` | Yes | Yes | Yes |
+| GitHub Action | Built-in PR review action | Yes | No | No |
+| Agent roles | 6 specializations (reviewer, tester, debugger...) | Yes | No | No |
+| Vim mode | hjkl, w/b/e, 0/$, x, d, i/a/I/A/o | Full vim | No | No |
+| Prompt caching | Anthropic cache_control | Yes | No | No |
+| Bash security | AST-based command analysis | AST analysis | No | No |
+| Companion | Cybergotchi virtual pet | Basic | No | No |
+| Terminal UI | Sequential renderer (Ink pattern) | React + Ink | Basic | BubbleTea |
 | Language | TypeScript | TypeScript | Python | Go |
 | License | MIT | Proprietary | Apache 2.0 | MIT |
 | Price | Free (BYOK) | $20+/month | Free (BYOK) | Free (BYOK) |
 
 ## Terminal UI
 
-OpenHarness features a custom cell-level diffing renderer built for performance and rich display.
+OpenHarness features a sequential terminal renderer inspired by Ink/Claude Code's default mode. Completed messages flush to native scrollback (scrollable), while the live area (streaming, spinner, input) rewrites in-place using relative cursor movement.
 
 ### Keybindings
 
@@ -116,7 +123,7 @@ statusLineFormat: '{model} │ {tokens} │ {cost} │ {ctx}'
 
 Available variables: `{model}`, `{tokens}` (input↑ output↓), `{cost}` ($X.XXXX), `{ctx}` (context usage bar). Empty sections are automatically collapsed.
 
-## Tools (18)
+## Tools (25)
 
 | Tool | Risk | Description |
 |------|------|-------------|
@@ -142,7 +149,7 @@ Available variables: `{model}`, `{tokens}` (input↑ output↓), `{cost}` ($X.XX
 
 Low-risk read-only tools auto-approve. Medium and high risk tools require confirmation in `ask` mode. Use `--trust` to skip all prompts.
 
-## Slash Commands (19)
+## Slash Commands (30+)
 
 Type these during a chat session. Aliases: `/q` exit, `/h` help, `/c` commit, `/m` model, `/s` status.
 
@@ -205,6 +212,10 @@ Control how aggressively OpenHarness auto-approves tool calls:
 | `deny` | `--deny` | Only allow low-risk read-only operations |
 | `acceptEdits` | `--permission-mode acceptEdits` | Auto-approve file edits, ask for Bash/WebFetch/Agent |
 | `plan` | `--permission-mode plan` | Read-only mode — block all write operations |
+| `auto` | `--auto` | Auto-approve all, block dangerous bash (AST-analyzed) |
+| `bypassPermissions` | `--permission-mode bypassPermissions` | Approve everything unconditionally (CI only) |
+
+Bash commands are analyzed by a lightweight AST parser that detects destructive patterns (`rm -rf`, `git push --force`, `curl | bash`, etc.) and adjusts risk level accordingly.
 
 Set permanently in `.oh/config.yaml`: `permissionMode: 'acceptEdits'`
 
@@ -308,20 +319,75 @@ oh: Write tests/app.test.ts
 - `/diff` shows what changed
 - Your dirty files are safe — committed separately before AI edits
 
+## Checkpoints & Rewind
+
+Every file modification is automatically checkpointed before execution. If something goes wrong:
+
+```
+/rewind           # restore files from the last checkpoint
+/undo             # revert the last AI git commit
+```
+
+Checkpoints are stored in `.oh/checkpoints/` and cover FileWrite, FileEdit, and Bash commands that modify files.
+
+## Agent Roles
+
+Dispatch specialized sub-agents for focused tasks:
+
+```
+/roles            # list all available roles
+```
+
+| Role | Description |
+|------|-------------|
+| `code-reviewer` | Find bugs, security issues, style problems |
+| `test-writer` | Generate unit and integration tests |
+| `docs-writer` | Write documentation and comments |
+| `debugger` | Systematic bug investigation |
+| `refactorer` | Simplify code without changing behavior |
+| `security-auditor` | OWASP, injection, secrets, CVE scanning |
+
+The LLM can dispatch these via `Agent({ subagent_type: 'code-reviewer', prompt: '...' })`.
+
 ## Headless Mode
 
-Run a single prompt without interactive UI — perfect for CI/CD:
+Run a single prompt without interactive UI — perfect for CI/CD and scripting:
 
 ```bash
+# Chat command with -p flag (recommended)
+oh -p "fix the failing tests" --model ollama/llama3 --trust
+oh -p "review src/query.ts" --auto --output-format json
+
+# Run command (alternative)
 oh run "fix the failing tests" --model ollama/llama3 --trust
 oh run "add error handling to api.ts" --json    # JSON output
-oh run "explain this codebase" --model gpt-4o
 
-# Pipe stdin — prompt from stdin, or prepend context
+# Pipe stdin
 cat error.log | oh run "what's wrong here?"
 git diff | oh run "review these changes"
-oh run - < prompt.txt                           # read full prompt from file
-oh run "fix this:" < broken.py                  # prepend arg, append stdin
+```
+
+### GitHub Action for PR Review
+
+OpenHarness includes a built-in GitHub Action for automated code review:
+
+```yaml
+# .github/workflows/ai-review.yml
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/review
+        with:
+          model: 'claude-sonnet-4-6'
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 Exit code 0 on success, 1 on failure.

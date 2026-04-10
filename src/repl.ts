@@ -9,7 +9,7 @@ import type { Provider } from './providers/base.js';
 import type { Tools } from './Tool.js';
 import type { PermissionMode } from './types/permissions.js';
 import { createAssistantMessage, createMessage, createInfoMessage } from './types/message.js';
-import { query } from './query.js';
+import { query } from './query/index.js';
 import { createSession, saveSession, loadSession, type Session } from './harness/session.js';
 import { CostTracker, estimateCost, getContextWindow } from './harness/cost.js';
 import { autoCommitAIEdits, isGitRepo } from './git/index.js';
@@ -48,15 +48,29 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   if (config.theme) setActiveTheme(config.theme);
   const renderer = new TerminalRenderer();
 
+  // Set banner in live area (avoids the empty gap between scrollback banner and bottom-anchored input)
+  if (config.welcomeText) {
+    renderer.setBannerLines(config.welcomeText.split('\n'));
+  }
+
   // Session
   let session: Session;
+  const sessionExtras = {
+    workingDir: process.cwd(),
+    gitBranch: isGitRepo() ? (await import('./git/index.js')).gitBranch() : undefined,
+    tools: config.tools.map(t => t.name),
+  };
   try {
     session = config.resumeSessionId
       ? loadSession(config.resumeSessionId)
-      : createSession(config.provider.name, config.model ?? '');
+      : createSession(config.provider.name, config.model ?? '', sessionExtras);
   } catch {
-    session = createSession(config.provider.name, config.model ?? '');
+    session = createSession(config.provider.name, config.model ?? '', sessionExtras);
   }
+
+  // Initialize checkpoints for file rewind
+  const { initCheckpoints } = await import('./harness/checkpoints.js');
+  initCheckpoints(session.id);
 
   const cost = new CostTracker();
   let cachedConfig = readOhConfig();
@@ -71,6 +85,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   let inputHistory: string[] = [];
   let historyIndex = -1;
   let vimMode: 'normal' | 'insert' | null = null;
+  let fastMode = false;
   let acSuggestions: string[] = [];
   let acDescriptions: string[] = [];
   let acIndex = -1;
@@ -160,7 +175,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   function syncRenderer() {
     renderer.setMessages(messages);
     renderer.setLoading(loading);
-    const hints = `exit to quit${loading ? ' | Ctrl+C stop' : ' | Tab expand tools | Ctrl+O thinking'}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name}` : ''}`;
+    const hints = `exit to quit${loading ? ' | Ctrl+C stop | Ctrl+O thinking' : ' | Tab expand tools | Ctrl+O transcript'}${companionConfig?.soul?.name ? ` | @${companionConfig.soul.name}` : ''}`;
     renderer.setStatusHints(hints);
     // Status line: model | tokens | cost | ctx
     const inTok = cost.totalInputTokens;
@@ -228,13 +243,101 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
     // Search: use terminal's native search (Ctrl+Shift+F in VS Code)
 
-    // Vim mode toggle via escape
+    // Vim mode
     if (vimMode !== null) {
       if (key.name === 'escape') { vimMode = 'normal'; renderer.setVimMode(vimMode); return; }
       if (vimMode === 'normal') {
-        if (key.char === 'i' || key.char === 'a') { vimMode = 'insert'; renderer.setVimMode(vimMode); return; }
-        if (key.char === 'k' || key.name === 'up') { navigateHistory(-1); return; }
+        // -- Mode transitions --
+        if (key.char === 'i') { vimMode = 'insert'; renderer.setVimMode(vimMode); return; }
+        if (key.char === 'a') {
+          vimMode = 'insert'; renderer.setVimMode(vimMode);
+          if (inputCursor < inputText.length) inputCursor++;
+          renderer.setInputCursor(inputCursor);
+          return;
+        }
+        if (key.char === 'I') {
+          vimMode = 'insert'; renderer.setVimMode(vimMode);
+          inputCursor = 0; renderer.setInputCursor(inputCursor);
+          return;
+        }
+        if (key.char === 'A') {
+          vimMode = 'insert'; renderer.setVimMode(vimMode);
+          inputCursor = inputText.length; renderer.setInputCursor(inputCursor);
+          return;
+        }
+        if (key.char === 'o') {
+          vimMode = 'insert'; renderer.setVimMode(vimMode);
+          inputText = inputText + '\n'; inputCursor = inputText.length;
+          renderer.setInputText(inputText); renderer.setInputCursor(inputCursor);
+          return;
+        }
+        // -- Movement --
+        if (key.char === 'h' || key.name === 'left') {
+          if (inputCursor > 0) { inputCursor--; renderer.setInputCursor(inputCursor); }
+          return;
+        }
+        if (key.char === 'l' || key.name === 'right') {
+          if (inputCursor < inputText.length) { inputCursor++; renderer.setInputCursor(inputCursor); }
+          return;
+        }
         if (key.char === 'j' || key.name === 'down') { navigateHistory(1); return; }
+        if (key.char === 'k' || key.name === 'up') { navigateHistory(-1); return; }
+        if (key.char === '0') { inputCursor = 0; renderer.setInputCursor(inputCursor); return; }
+        if (key.char === '$') { inputCursor = inputText.length; renderer.setInputCursor(inputCursor); return; }
+        // Word forward (w)
+        if (key.char === 'w') {
+          const rest = inputText.slice(inputCursor);
+          const m = rest.match(/^\S*\s+/);
+          inputCursor = m ? Math.min(inputCursor + m[0].length, inputText.length) : inputText.length;
+          renderer.setInputCursor(inputCursor);
+          return;
+        }
+        // Word backward (b)
+        if (key.char === 'b') {
+          const before = inputText.slice(0, inputCursor);
+          const m = before.match(/\S+\s*$/);
+          inputCursor = m ? inputCursor - m[0].length : 0;
+          renderer.setInputCursor(inputCursor);
+          return;
+        }
+        // End of word (e)
+        if (key.char === 'e') {
+          const rest = inputText.slice(inputCursor + 1);
+          const m = rest.match(/^\s*\S*/);
+          inputCursor = m ? Math.min(inputCursor + 1 + m[0].length, inputText.length) : inputText.length;
+          renderer.setInputCursor(inputCursor);
+          return;
+        }
+        // -- Editing --
+        if (key.char === 'x') {
+          if (inputCursor < inputText.length) {
+            inputText = inputText.slice(0, inputCursor) + inputText.slice(inputCursor + 1);
+            if (inputCursor >= inputText.length && inputCursor > 0) inputCursor--;
+            renderer.setInputText(inputText); renderer.setInputCursor(inputCursor);
+          }
+          return;
+        }
+        // dd — delete entire line
+        if (key.char === 'd') {
+          // Simple: clear entire input (like dd in single-line mode)
+          inputText = ''; inputCursor = 0;
+          renderer.setInputText(inputText); renderer.setInputCursor(inputCursor);
+          return;
+        }
+        // Submit with Enter even in normal mode
+        if (key.name === 'return') {
+          if (inputText.trim() && !loading) {
+            handleSubmit(inputText.trim());
+            inputHistory.unshift(inputText);
+            historyIndex = -1;
+            inputText = ''; inputCursor = 0;
+            acSuggestions = []; acDescriptions = [];
+            renderer.setInputText(inputText);
+            renderer.setInputCursor(inputCursor);
+            renderer.setAutocomplete([], -1);
+          }
+          return;
+        }
         return; // swallow other keys in normal mode
       }
     }
@@ -263,15 +366,26 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return;
     }
 
-    // Ctrl+O: toggle thinking expansion
+    // Ctrl+O: cycle through views — thinking toggle → transcript (flush all to scrollback)
     if (key.ctrl && key.char === 'o') {
-      renderer.toggleThinkingExpanded();
+      if (loading) {
+        // During streaming: toggle thinking expansion
+        renderer.toggleThinkingExpanded();
+      } else {
+        // When idle: flush all messages to scrollback for review (transcript mode)
+        // This makes the full conversation visible in native terminal scrollback
+        renderer.clearLiveArea();
+        renderer.setMessages(messages);
+        renderer.flushMessages();
+        renderer.notify('Transcript written to scrollback (scroll up to review)');
+      }
       return;
     }
 
-    // Scrolling handled by terminal's native scrollbar — ignore scroll keys
-    if (key.name === 'pageup' || key.name === 'pagedown') return;
-    if (key.name === 'scrollup' || key.name === 'scrolldown' || key.name === 'mouse') return;
+    // Scroll wheel: adjust manual scroll offset
+    if (key.name === 'scrollup') { renderer.scrollBy(3); return; }
+    if (key.name === 'scrolldown') { renderer.scrollBy(-3); return; }
+    if (key.name === 'pageup' || key.name === 'pagedown' || key.name === 'mouse') return;
 
     // Tab: autocomplete slash commands or file paths, or cycle tool call expansion
     if (key.name === 'tab' && !loading) {
@@ -426,12 +540,25 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       messages = [...messages, createInfoMessage(vimMode ? 'Vim mode ON' : 'Vim mode OFF')];
       renderer.setVimMode(vimMode);
     }
+    if (result.fastModeToggled) {
+      fastMode = !fastMode;
+      messages = [...messages, createInfoMessage(fastMode ? 'Fast mode ON — optimized for speed' : 'Fast mode OFF')];
+    }
+    // Clear old live area BEFORE syncRenderer when a query will follow.
+    // syncRenderer → scheduleRender → queueMicrotask(render). The microtask fires
+    // at the next await boundary. Without clearing first, the render's flushMessages()
+    // writes on top of the old live area (banner/companion/input), causing double ❯
+    // and ghost artifacts.
+    if (result.prompt) renderer.clearLiveArea();
     syncRenderer();
     if (result.handled) return;
     if (result.prompt) await runQuery(result.prompt);
   }
 
   async function runQuery(prompt: string) {
+    // Messages already set by handleSubmit's syncRenderer().
+    // Live area already cleared and flushed by the render microtask
+    // that fires between syncRenderer() and this await point.
     loading = true;
     renderer.setLoading(true);
     // Don't set thinkingStartedAt here — only on first thinking_delta event
@@ -450,10 +577,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       return renderer.askQuestion(question, options);
     };
 
+    const effectiveSystemPrompt = fastMode
+      ? config.systemPrompt + "\n\nIMPORTANT: Fast mode is active. Be extremely concise. Skip explanations. Go straight to the answer or action."
+      : config.systemPrompt;
+
     const queryConfig = {
       provider: config.provider,
       tools: config.tools,
-      systemPrompt: config.systemPrompt,
+      systemPrompt: effectiveSystemPrompt,
       permissionMode: config.permissionMode,
       askUser,
       askUserQuestion,

@@ -16,8 +16,11 @@ import { listSessions, loadSession, createSession, saveSession } from "../harnes
 import { readOhConfig } from "../harness/config.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { compressMessages } from "../query.js";
+import { compressMessages } from "../query/index.js";
 import { getContextWindow } from "../harness/cost.js";
+import { loadKeybindings } from "../harness/keybindings.js";
+import { isInMergeOrRebase } from "../git/index.js";
+import { estimateMessageTokens } from "../harness/context-warning.js";
 
 export type CommandResult = {
   /** Text output to display */
@@ -36,6 +39,8 @@ export type CommandResult = {
   resumeSessionId?: string;
   /** If set, prepend this text to the user's prompt before sending to LLM */
   prependToPrompt?: string;
+  /** If set, toggle fast mode */
+  toggleFastMode?: boolean;
 };
 
 type CommandHandler = (args: string, context: CommandContext) => CommandResult;
@@ -61,11 +66,11 @@ function register(name: string, description: string, handler: CommandHandler) {
 
 register("help", "Show available commands", () => {
   const categories: Record<string, string[]> = {
-    'Session': ['clear', 'compact', 'export', 'history', 'browse', 'resume', 'fork'],
-    'Git': ['diff', 'undo', 'commit', 'log'],
-    'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory'],
-    'Settings': ['theme', 'vim', 'companion'],
-    'AI': ['plan', 'review'],
+    'Session': ['clear', 'compact', 'export', 'history', 'browse', 'resume', 'fork', 'pin', 'unpin'],
+    'Git': ['diff', 'undo', 'rewind', 'commit', 'log'],
+    'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory', 'doctor', 'context', 'mcp'],
+    'Settings': ['theme', 'vim', 'companion', 'fast', 'keys'],
+    'AI': ['plan', 'review', 'roles'],
     'Pet': ['cybergotchi'],
   };
   const lines: string[] = [];
@@ -137,6 +142,19 @@ register("undo", "Undo last AI commit", () => {
   const success = gitUndo();
   return {
     output: success ? "Undone. Last AI commit reverted." : "Nothing to undo (last commit wasn't from OpenHarness).",
+    handled: true,
+  };
+});
+
+register("rewind", "Restore files from last checkpoint (undo last AI edit)", () => {
+  const { rewindLastCheckpoint, checkpointCount } = require("../harness/checkpoints.js");
+  const cp = rewindLastCheckpoint();
+  if (!cp) {
+    return { output: "No checkpoints available. Checkpoints are created before file modifications.", handled: true };
+  }
+  const remaining = checkpointCount();
+  return {
+    output: `Rewound: ${cp.description}\nRestored ${cp.files.length} file(s): ${cp.files.join(", ")}\n${remaining} checkpoint(s) remaining.`,
     handled: true,
   };
 });
@@ -375,6 +393,64 @@ register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · stat
   return handleCybergotchiCommand(args);
 });
 
+register("roles", "List available agent specialization roles", () => {
+  const { listRoles } = require("../agents/roles.js");
+  const roles = listRoles();
+  const lines = ["Available agent roles:\n"];
+  for (const role of roles) {
+    lines.push(`  ${role.id.padEnd(18)} ${role.name}`);
+    lines.push(`  ${''.padEnd(18)} ${role.description}`);
+    if (role.suggestedTools?.length) {
+      lines.push(`  ${''.padEnd(18)} Tools: ${role.suggestedTools.join(', ')}`);
+    }
+    lines.push('');
+  }
+  lines.push("Usage: Agent({ subagent_type: 'code-reviewer', prompt: '...' })");
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("fast", "Toggle fast mode (optimized for speed)", () => {
+  return { output: "", handled: true, toggleFastMode: true };
+});
+
+register("keys", "Show keyboard shortcuts", () => {
+  const bindings = loadKeybindings();
+
+  const shortcuts = [
+    "Keyboard Shortcuts:",
+    "",
+    "  Navigation:",
+    "    ↑ / ↓           Input history",
+    "    Tab              Cycle autocomplete suggestions",
+    "    Escape           Cancel / clear autocomplete",
+    "    Ctrl+C           Abort current request / exit",
+    "    Scroll wheel     Scroll through messages",
+    "",
+    "  Editing:",
+    "    Alt+Enter        Insert newline (multi-line input)",
+    "    Ctrl+A           Move cursor to start of line",
+    "    Ctrl+E           Move cursor to end of line",
+    "",
+    "  Display:",
+    "    Ctrl+K           Toggle code block expansion",
+    "    Ctrl+O           Toggle thinking block expansion",
+    "    Tab (in output)  Expand/collapse tool call output",
+    "",
+    "  Custom keybindings (~/.oh/keybindings.json):",
+  ];
+  for (const b of bindings) {
+    shortcuts.push(`    ${b.key.padEnd(18)} ${b.action}`);
+  }
+  shortcuts.push(
+    "",
+    "  Session:",
+    "    /vim              Toggle Vim mode",
+    "    /browse           Interactive session browser",
+    "    /theme dark|light Switch theme",
+  );
+  return { output: shortcuts.join("\n"), handled: true };
+});
+
 register("plan", "Enter plan mode", (_args, _ctx) => {
   const task = _args.trim();
   if (!task) {
@@ -400,6 +476,147 @@ register("review", "Review recent code changes", () => {
     prependToPrompt: `Review these uncommitted changes and give feedback on correctness, style, and potential issues:\n\n\`\`\`diff\n${diff}\n\`\`\`\n\n`,
   };
 });
+
+register("doctor", "Run diagnostic health checks", (_args, ctx) => {
+  const lines: string[] = [];
+  const issues: string[] = [];
+
+  lines.push("─── Health Check ───");
+  lines.push("");
+
+  // Provider & Model
+  lines.push(`  Provider:      ${ctx.providerName || "⚠ not set"}`);
+  lines.push(`  Model:         ${ctx.model || "⚠ not set"}`);
+  lines.push(`  Permission:    ${ctx.permissionMode}`);
+  if (!ctx.model) issues.push("No model configured. Use --model or set in .oh/config.yaml");
+
+  // API Key check
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+  if (ctx.providerName === "anthropic" && !hasAnthropicKey) {
+    issues.push("ANTHROPIC_API_KEY not set. Run: export ANTHROPIC_API_KEY=sk-...");
+  }
+  if (ctx.providerName === "openai" && !hasOpenAIKey) {
+    issues.push("OPENAI_API_KEY not set. Run: export OPENAI_API_KEY=sk-...");
+  }
+  if (ctx.providerName === "ollama") {
+    lines.push(`  Ollama:        checking...`);
+    try {
+      // Quick check if Ollama is running (sync fetch isn't available, just note it)
+      lines.pop();
+      lines.push(`  Ollama:        configured (ensure 'ollama serve' is running)`);
+    } catch {
+      issues.push("Ollama may not be running. Start with: ollama serve");
+    }
+  }
+
+  // Context window
+  const ctxWindow = getContextWindow(ctx.model);
+  const totalTokens = estimateMessageTokens(ctx.messages);
+  const usage = ctxWindow > 0 ? Math.round((totalTokens / ctxWindow) * 100) : 0;
+  lines.push(`  Context:       ~${totalTokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tokens (${usage}%)`);
+  if (usage > 80) issues.push(`Context ${usage}% full. Consider /compact to free space.`);
+
+  // Git
+  lines.push("");
+  if (isGitRepo()) {
+    lines.push(`  Git:           ✓ (branch: ${gitBranch()})`);
+    if (isInMergeOrRebase()) {
+      lines.push(`  ⚠ Merge/rebase in progress`);
+      issues.push("Git merge/rebase in progress. Resolve before making changes.");
+    }
+  } else {
+    lines.push(`  Git:           ✗ (not a git repo)`);
+  }
+
+  // MCP
+  const mcp = connectedMcpServers();
+  lines.push(`  MCP servers:   ${mcp.length > 0 ? mcp.join(", ") : "none"}`);
+
+  // Config
+  const cfg = readOhConfig();
+  lines.push(`  Config:        ${cfg ? ".oh/config.yaml ✓" : "not found"}`);
+
+  // Session
+  lines.push("");
+  lines.push(`  Session:       ${ctx.sessionId}`);
+  lines.push(`  Messages:      ${ctx.messages.length}`);
+  lines.push(`  Cost:          $${ctx.totalCost.toFixed(4)}`);
+
+  // Disk space (basic check)
+  try {
+    const { statSync } = require("node:fs");
+    const ohDir = join(homedir(), ".oh");
+    if (existsSync(ohDir)) {
+      const sessions = readdirSync(join(ohDir, "sessions")).length;
+      lines.push(`  Sessions:      ${sessions} saved`);
+      if (sessions > 80) issues.push(`${sessions} saved sessions. Consider cleaning old ones.`);
+    }
+  } catch { /* ignore */ }
+
+  // Issues summary
+  if (issues.length > 0) {
+    lines.push("");
+    lines.push("─── Issues Found ───");
+    for (const issue of issues) {
+      lines.push(`  ⚠ ${issue}`);
+    }
+  } else {
+    lines.push("");
+    lines.push("  ✓ No issues found");
+  }
+
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("context", "Show context window usage breakdown", (_args, ctx) => {
+  const ctxWindow = getContextWindow(ctx.model);
+  const totalTokens = estimateMessageTokens(ctx.messages);
+  const breakdown: string[] = [`Context window: ${ctxWindow.toLocaleString()} tokens\n`];
+  for (let i = 0; i < ctx.messages.length; i++) {
+    const msg = ctx.messages[i]!;
+    const tokens = Math.round((msg.content?.length ?? 0) / 3.5); // rough per-message estimate
+    const role = msg.role.padEnd(9);
+    const pinned = (msg.meta as any)?.pinned ? " 📌" : "";
+    breakdown.push(`  #${(i + 1).toString().padStart(3)} ${role} ~${tokens.toLocaleString().padStart(6)} tokens${pinned}`);
+  }
+  const usage = totalTokens / ctxWindow;
+  breakdown.push("");
+  breakdown.push(`Total:    ~${totalTokens.toLocaleString()} tokens (${Math.round(usage * 100)}% of ${ctxWindow.toLocaleString()})`);
+  breakdown.push(`Compress: at ${Math.round(ctxWindow * 0.8).toLocaleString()} tokens (80%)`);
+  return { output: breakdown.join("\n"), handled: true };
+});
+
+register("mcp", "Show MCP server status", () => {
+  const mcp = connectedMcpServers();
+  if (mcp.length === 0) {
+    return { output: "No MCP servers connected.\nConfigure in .oh/config.yaml under mcpServers.", handled: true };
+  }
+  const lines = [`MCP Servers (${mcp.length} connected):\n`];
+  for (const name of mcp) {
+    lines.push(`  ✓ ${name}`);
+  }
+  return { output: lines.join("\n"), handled: true };
+});
+
+function setPinned(args: string, ctx: CommandContext, pinned: boolean): CommandResult {
+  const idx = parseInt(args.trim(), 10);
+  if (isNaN(idx) || idx < 1 || idx > ctx.messages.length) {
+    return { output: `Usage: /${pinned ? 'pin' : 'unpin'} <message-number> (1-${ctx.messages.length})`, handled: true };
+  }
+  // Immutable update — replace message with updated meta
+  const updatedMessages = ctx.messages.map((m, i) =>
+    i === idx - 1 ? { ...m, meta: { ...m.meta, pinned } } : m
+  );
+  return {
+    output: `Message #${idx} ${pinned ? 'pinned' : 'unpinned'}.`,
+    handled: true,
+    compactedMessages: updatedMessages,
+  };
+}
+
+register("pin", "Pin a message (survives /compact)", (args, ctx) => setPinned(args, ctx, true));
+register("unpin", "Unpin a message", (args, ctx) => setPinned(args, ctx, false));
 
 // ── Command Parser ──
 

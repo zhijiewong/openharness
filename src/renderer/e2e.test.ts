@@ -44,6 +44,7 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
     thinkingExpanded: false,
     lastThinkingSummary: null,
     autocompleteDescriptions: [],
+    notifications: [],
     ...overrides,
   };
 }

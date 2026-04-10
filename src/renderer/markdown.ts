@@ -13,11 +13,18 @@ const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: nu
 
 // Theme-independent
 const S_TEXT = s(null);
-const S_BOLD = s(null, true);
 const S_BLOCKQUOTE = s(null, false, true);
 const S_HR = s(null, false, true);
 const S_TABLE_HEADER = s(null, true);
 const S_TABLE_BORDER = s(null, false, true);
+
+// Pre-compiled regex patterns
+const TABLE_SEPARATOR_RE = /^\s*\|?[\s:]*-{2,}[\s:|-]*$/;
+const RE_DIGIT = /[0-9]/;
+const RE_NUM_BOUNDARY = /[\s(,=+\-*/<>[\]{}:;!&|^~%]/;
+const RE_NUM_CHAR = /[0-9._xXa-fA-F]/;
+const RE_IDENT_START = /[a-zA-Z_$]/;
+const RE_IDENT_CHAR = /[a-zA-Z0-9_$]/;
 
 // Theme-dependent (lazy)
 let S_HEADING: Style, S_CODE: Style, S_CODE_FENCE: Style, S_BULLET: Style;
@@ -72,7 +79,7 @@ export function measureMarkdown(text: string, width: number): number {
     }
 
     // Table detection
-    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?[\s:]*-{2,}[\s:|-]*$/.test(lines[i + 1]!)) {
+    if (line.includes('|') && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
       rows += 2; // header + separator
       i += 2; // skip header and separator
       while (i < lines.length && lines[i]!.includes('|')) {
@@ -213,7 +220,7 @@ export function renderMarkdown(
     }
 
     // Table detection: line with | separators
-    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?[\s:]*-{2,}[\s:|-]*$/.test(lines[i + 1]!)) {
+    if (line.includes('|') && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
       r = renderTable(grid, r, col, lines, i, wrapWidth);
       // Skip past the table: advance past header + separator first, then data rows
       i += 2; // header + separator
@@ -333,6 +340,22 @@ function writeSegments(
   return r - row + 1;
 }
 
+/** Write a single table row's cells into the grid */
+function writeTableCells(
+  grid: CellGrid, r: number, col: number, cells: string[],
+  colWidths: number[], style: Style, wrapWidth: number,
+): void {
+  let c = col;
+  for (let j = 0; j < cells.length && j < colWidths.length; j++) {
+    const cell = cells[j]!.padEnd(colWidths[j]!);
+    grid.writeText(r, c, cell, style);
+    c += colWidths[j]! + 3;
+    if (j < cells.length - 1 && c - 3 < wrapWidth) {
+      grid.writeText(r, c - 3, ' │ ', S_TABLE_BORDER);
+    }
+  }
+}
+
 /** Render a markdown table. Returns the row after the table. */
 function renderTable(
   grid: CellGrid,
@@ -364,15 +387,7 @@ function renderTable(
 
   // Render header
   if (r < grid.height) {
-    let c = col;
-    for (let j = 0; j < headerCells.length; j++) {
-      const cell = headerCells[j]!.padEnd(colWidths[j]!);
-      grid.writeText(r, c, cell, S_TABLE_HEADER);
-      c += colWidths[j]! + 3; // " | " separator
-      if (j < headerCells.length - 1 && c - 2 < wrapWidth) {
-        grid.writeText(r, c - 3, ' │ ', S_TABLE_BORDER);
-      }
-    }
+    writeTableCells(grid, r, col, headerCells, colWidths, S_TABLE_HEADER, wrapWidth);
     r++;
   }
 
@@ -394,15 +409,7 @@ function renderTable(
   // Render data rows
   for (const dataRow of dataRows) {
     if (r >= grid.height) break;
-    let c = col;
-    for (let j = 0; j < dataRow.length && j < colWidths.length; j++) {
-      const cell = dataRow[j]!.padEnd(colWidths[j]!);
-      grid.writeText(r, c, cell, S_TEXT);
-      c += colWidths[j]! + 3;
-      if (j < dataRow.length - 1 && c - 3 < wrapWidth) {
-        grid.writeText(r, c - 3, ' │ ', S_TABLE_BORDER);
-      }
-    }
+    writeTableCells(grid, r, col, dataRow, colWidths, S_TEXT, wrapWidth);
     r++;
   }
 
@@ -464,18 +471,22 @@ export function renderHighlightedCode(
   let i = 0;
 
   while (i < line.length && c < grid.width) {
-    // Line comments: // or #
-    if ((line[i] === '/' && line[i + 1] === '/') || (line[i] === '#' && i === line.trimStart().length - line.length + line.indexOf('#'))) {
-      // Check if # is a comment (not inside a string, at start after whitespace)
-      const isComment = line[i] === '/' || (line[i] === '#' && line.slice(0, i).trim() === '' || line.slice(0, i).endsWith(' '));
-      if (line[i] === '/' || isComment) {
-        const rest = line.slice(i);
-        for (let j = 0; j < rest.length && c < grid.width; j++) {
-          grid.setCell(row, c, rest[j]!, S_COMMENT);
-          c++;
-        }
-        return;
+    // Line comments: // or # (# only when at line start or after whitespace)
+    if (line[i] === '/' && line[i + 1] === '/') {
+      const rest = line.slice(i);
+      for (let j = 0; j < rest.length && c < grid.width; j++) {
+        grid.setCell(row, c, rest[j]!, S_COMMENT);
+        c++;
       }
+      return;
+    }
+    if (line[i] === '#' && (line.slice(0, i).trim() === '' || line[i - 1] === ' ')) {
+      const rest = line.slice(i);
+      for (let j = 0; j < rest.length && c < grid.width; j++) {
+        grid.setCell(row, c, rest[j]!, S_COMMENT);
+        c++;
+      }
+      return;
     }
 
     // Strings: "..." or '...' or `...`
@@ -492,8 +503,8 @@ export function renderHighlightedCode(
     }
 
     // Numbers
-    if (/[0-9]/.test(line[i]!) && (i === 0 || /[\s(,=+\-*/<>[\]{}:;!&|^~%]/.test(line[i - 1]!))) {
-      while (i < line.length && c < grid.width && /[0-9._xXa-fA-F]/.test(line[i]!)) {
+    if (RE_DIGIT.test(line[i]!) && (i === 0 || RE_NUM_BOUNDARY.test(line[i - 1]!))) {
+      while (i < line.length && c < grid.width && RE_NUM_CHAR.test(line[i]!)) {
         grid.setCell(row, c, line[i]!, S_NUMBER);
         c++; i++;
       }
@@ -501,9 +512,9 @@ export function renderHighlightedCode(
     }
 
     // Words (identifiers/keywords)
-    if (/[a-zA-Z_$]/.test(line[i]!)) {
+    if (RE_IDENT_START.test(line[i]!)) {
       const start = i;
-      while (i < line.length && /[a-zA-Z0-9_$]/.test(line[i]!)) i++;
+      while (i < line.length && RE_IDENT_CHAR.test(line[i]!)) i++;
       const word = line.slice(start, i);
       const style = KEYWORDS.has(word) ? S_KW : TYPE_KEYWORDS.has(word) ? S_TYPE : S_CODE;
       for (let j = 0; j < word.length && c < grid.width; j++) {

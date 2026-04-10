@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { query, compressMessages } from './query.js';
+import { query, compressMessages } from './query/index.js';
 import { createMockProvider, textResponseEvents, toolCallEvents, createErrorProvider, createMockTool } from './test-helpers.js';
 import { createUserMessage, createAssistantMessage, createToolResultMessage, createMessage } from './types/message.js';
 import type { Message } from './types/message.js';

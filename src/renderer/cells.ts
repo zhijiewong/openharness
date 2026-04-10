@@ -48,14 +48,27 @@ export class CellGrid {
   clear(): void {
     for (let r = 0; r < this.height; r++) {
       for (let c = 0; c < this.width; c++) {
-        this.cells[r]![c] = { char: ' ', style: { ...EMPTY_STYLE } };
+        const cell = this.cells[r]![c]!;
+        cell.char = ' ';
+        cell.style.fg = null;
+        cell.style.bg = null;
+        cell.style.bold = false;
+        cell.style.dim = false;
+        cell.style.underline = false;
       }
     }
   }
 
   setCell(row: number, col: number, char: string, style: Style): void {
     if (row < 0 || row >= this.height || col < 0 || col >= this.width) return;
-    this.cells[row]![col] = { char, style };
+    const cell = this.cells[row]![col]!;
+    cell.char = char;
+    const s = style ?? EMPTY_STYLE;
+    cell.style.fg = s.fg;
+    cell.style.bg = s.bg;
+    cell.style.bold = s.bold;
+    cell.style.dim = s.dim;
+    cell.style.underline = s.underline;
   }
 
   /**

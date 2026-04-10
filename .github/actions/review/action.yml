@@ -1,0 +1,103 @@
+name: 'OpenHarness Code Review'
+description: 'AI-powered code review using OpenHarness CLI'
+branding:
+  icon: 'code'
+  color: 'purple'
+
+inputs:
+  model:
+    description: 'Model to use (e.g., claude-sonnet-4-6, gpt-4o, ollama/llama3)'
+    required: false
+    default: 'claude-sonnet-4-6'
+  anthropic_api_key:
+    description: 'Anthropic API key (required for Claude models)'
+    required: false
+  openai_api_key:
+    description: 'OpenAI API key (required for OpenAI models)'
+    required: false
+  permission_mode:
+    description: 'Permission mode (trust, auto, deny)'
+    required: false
+    default: 'deny'
+  max_diff_size:
+    description: 'Max diff size in characters to include in review prompt'
+    required: false
+    default: '50000'
+  custom_prompt:
+    description: 'Additional instructions to append to the review prompt'
+    required: false
+    default: ''
+
+outputs:
+  review:
+    description: 'The review output text'
+  exit_code:
+    description: 'Exit code (0 = pass, 1 = issues found)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install OpenHarness
+      shell: bash
+      run: npm install -g @zhijiewang/openharness
+
+    - name: Get PR diff
+      id: diff
+      shell: bash
+      run: |
+        # Get the diff between base and head
+        git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > /tmp/pr-diff.txt
+        DIFF_SIZE=$(wc -c < /tmp/pr-diff.txt)
+        MAX_SIZE=${{ inputs.max_diff_size }}
+        if [ "$DIFF_SIZE" -gt "$MAX_SIZE" ]; then
+          head -c $MAX_SIZE /tmp/pr-diff.txt > /tmp/pr-diff-trimmed.txt
+          echo "... [diff truncated at ${MAX_SIZE} chars]" >> /tmp/pr-diff-trimmed.txt
+          mv /tmp/pr-diff-trimmed.txt /tmp/pr-diff.txt
+        fi
+
+    - name: Run review
+      id: review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+      run: |
+        REVIEW_PROMPT="Review this pull request diff for bugs, security issues, code quality, and correctness. Be specific about line numbers and file paths. If everything looks good, say so briefly.
+
+        PR Title: ${{ github.event.pull_request.title }}
+        PR Body: ${{ github.event.pull_request.body }}
+
+        ${{ inputs.custom_prompt }}
+
+        \`\`\`diff
+        $(cat /tmp/pr-diff.txt)
+        \`\`\`"
+
+        openharness run -m "${{ inputs.model }}" \
+          --permission-mode "${{ inputs.permission_mode }}" \
+          --output-format text \
+          "$REVIEW_PROMPT" > /tmp/review-output.txt 2>/tmp/review-errors.txt || true
+
+        echo "review<<EOF" >> $GITHUB_OUTPUT
+        cat /tmp/review-output.txt >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Post review comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const review = `${{ steps.review.outputs.review }}`;
+          if (review.trim()) {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🤖 OpenHarness Code Review\n\n${review}\n\n---\n*Reviewed by [OpenHarness](https://github.com/zhijiewang/openCLI) with model \`${{ inputs.model }}\`*`
+            });
+          }

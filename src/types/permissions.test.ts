@@ -82,3 +82,73 @@ test("plan mode allows high-risk reads", () => {
   assert.equal(r.allowed, true);
   assert.equal(r.reason, "plan-mode-readonly");
 });
+
+// ── permission pattern regex matching ──
+
+import { setToolPermissionRules } from "./permissions.js";
+
+test("pattern rule allows matching Bash commands", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "allow", pattern: "^npm (test|run)" }]);
+  const r = checkPermission("ask", "high", false, "Bash", { command: "npm test" });
+  assert.equal(r.allowed, true);
+  assert.equal(r.reason, "tool-rule-allow");
+  setToolPermissionRules(undefined);
+});
+
+test("pattern rule blocks non-matching Bash commands", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "allow", pattern: "^npm test$" }]);
+  const r = checkPermission("ask", "high", false, "Bash", { command: "rm -rf /" });
+  // Should fall through to ask mode since pattern doesn't match
+  assert.equal(r.allowed, false);
+  assert.equal(r.reason, "needs-approval");
+  setToolPermissionRules(undefined);
+});
+
+test("pattern only applies to Bash tool, not others", () => {
+  setToolPermissionRules([{ tool: "Read", action: "allow", pattern: "etc" }]);
+  // Pattern should be ignored for non-Bash tools, rule matches on tool name only
+  const r = checkPermission("ask", "low", true, "Read", { file_path: "/etc/passwd" });
+  assert.equal(r.allowed, true);
+  setToolPermissionRules(undefined);
+});
+
+test("toolInput parameter passed correctly", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "deny", pattern: "^rm " }]);
+  const r = checkPermission("trust", "high", false, "Bash", { command: "rm -rf /tmp" });
+  assert.equal(r.allowed, false);
+  assert.equal(r.reason, "tool-rule-deny");
+  setToolPermissionRules(undefined);
+});
+
+// ── auto mode ──
+
+test("auto mode approves safe bash commands", () => {
+  const r = checkPermission("auto", "high", false, "Bash", { command: "git status" });
+  assert.equal(r.allowed, true);
+  assert.equal(r.reason, "auto-mode");
+});
+
+test("auto mode blocks dangerous bash (rm -rf)", () => {
+  const r = checkPermission("auto", "high", false, "Bash", { command: "rm -rf /" });
+  assert.equal(r.allowed, false);
+  assert.equal(r.reason, "auto-mode-dangerous-bash");
+});
+
+test("auto mode approves non-bash tools", () => {
+  const r = checkPermission("auto", "high", false, "FileWrite");
+  assert.equal(r.allowed, true);
+  assert.equal(r.reason, "auto-mode");
+});
+
+// ── bypassPermissions mode ──
+
+test("bypassPermissions approves everything", () => {
+  const r = checkPermission("bypassPermissions", "high", false, "Bash", { command: "rm -rf /" });
+  assert.equal(r.allowed, true);
+  assert.equal(r.reason, "bypass-mode");
+});
+
+test("bypassPermissions approves even in high-risk writes", () => {
+  const r = checkPermission("bypassPermissions", "high", false);
+  assert.equal(r.allowed, true);
+});

@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { spawn } from "child_process";
 import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import { safeEnv } from "../../utils/safe-env.js";
 
 const inputSchema = z.object({
   command: z.string(),
+  description: z.string().optional(),
   timeout: z.number().optional(),
+  run_in_background: z.boolean().optional(),
 });
 
 const MAX_OUTPUT = 100_000;
@@ -32,6 +35,46 @@ export const BashTool: Tool<typeof inputSchema> = {
     const shell = isWin ? "cmd.exe" : "/bin/bash";
     const shellArgs = isWin ? ["/c", input.command] : ["-c", input.command];
 
+    // Background execution: spawn and return immediately
+    if (input.run_in_background) {
+      const bgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const proc = spawn(shell, shellArgs, {
+        cwd: context.workingDir,
+        env: safeEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: false,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+      proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+      const timer = setTimeout(() => { proc.kill("SIGTERM"); }, timeoutMs);
+
+      if (context.abortSignal) {
+        context.abortSignal.addEventListener("abort", () => { proc.kill("SIGTERM"); });
+      }
+
+      proc.on("close", (code) => {
+        clearTimeout(timer);
+        let output = stdout + (stderr ? "\n[stderr]\n" + stderr : "");
+        if (output.length > MAX_OUTPUT) {
+          output = output.slice(0, MAX_OUTPUT) + "\n... [truncated]";
+        }
+        // Notify via output chunk when background process completes
+        if (context.onOutputChunk && context.callId) {
+          context.onOutputChunk(context.callId, `\n[background:${bgId} completed, exit code ${code}]\n${output}`);
+        }
+      });
+
+      return Promise.resolve({
+        output: `Background process started (id: ${bgId}, pid: ${proc.pid}). You will be notified when it completes.`,
+        isError: false,
+      });
+    }
+
     return new Promise((resolve) => {
       let stdout = "";
       let stderr = "";
@@ -39,7 +82,7 @@ export const BashTool: Tool<typeof inputSchema> = {
 
       const proc = spawn(shell, shellArgs, {
         cwd: context.workingDir,
-        env: process.env,
+        env: safeEnv(),
         stdio: ["ignore", "pipe", "pipe"],
       });
 
@@ -95,7 +138,9 @@ export const BashTool: Tool<typeof inputSchema> = {
   prompt() {
     return `Execute a bash command and return stdout/stderr. Parameters:
 - command (string, required): The shell command to run.
+- description (string, optional): A human-readable description of what the command does.
 - timeout (number, optional): Timeout in seconds (default 120, max 600).
+- run_in_background (boolean, optional): Run the command in the background. Returns immediately with a process ID. You will be notified when it completes.
 Output is truncated at 100K characters.`;
   },
 };
