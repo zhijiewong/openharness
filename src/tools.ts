@@ -19,6 +19,9 @@ import { WebSearchTool } from "./tools/WebSearchTool/index.js";
 import { TaskCreateTool } from "./tools/TaskCreateTool/index.js";
 import { TaskUpdateTool } from "./tools/TaskUpdateTool/index.js";
 import { TaskListTool } from "./tools/TaskListTool/index.js";
+import { TaskGetTool } from "./tools/TaskGetTool/index.js";
+import { TaskStopTool } from "./tools/TaskStopTool/index.js";
+import { TaskOutputTool } from "./tools/TaskOutputTool/index.js";
 import { AskUserTool } from "./tools/AskUserTool/index.js";
 import { SkillTool } from "./tools/SkillTool/index.js";
 import { AgentTool } from "./tools/AgentTool/index.js";
@@ -29,6 +32,10 @@ import { ImageReadTool } from "./tools/ImageReadTool/index.js";
 import { DiagnosticsTool } from "./tools/DiagnosticsTool/index.js";
 import { ParallelAgentTool } from "./tools/ParallelAgentTool/index.js";
 import { ToolSearchTool } from "./tools/ToolSearchTool/index.js";
+// Agent messaging
+import { SendMessageTool } from "./tools/SendMessageTool/index.js";
+// Scheduled tasks
+import { CronCreateTool, CronDeleteTool, CronListTool } from "./tools/CronTool/index.js";
 
 /**
  * Returns all registered tools.
@@ -50,6 +57,9 @@ export function getAllTools(): Tools {
     TaskCreateTool,
     TaskUpdateTool,
     TaskListTool,
+    TaskGetTool,
+    TaskStopTool,
+    TaskOutputTool,
     // Agent interaction
     AskUserTool,
     SkillTool,
@@ -65,5 +75,11 @@ export function getAllTools(): Tools {
     ParallelAgentTool,
     // Tool Discovery
     ToolSearchTool,
+    // Agent messaging
+    SendMessageTool,
+    // Scheduled tasks
+    CronCreateTool,
+    CronDeleteTool,
+    CronListTool,
   ];
 }

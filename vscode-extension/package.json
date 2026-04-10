@@ -1,0 +1,64 @@
+{
+  "name": "openharness-vscode",
+  "displayName": "OpenHarness",
+  "description": "AI coding agent in your editor — works with any LLM",
+  "version": "0.1.0",
+  "publisher": "zhijiewang",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Programming Languages", "Other"],
+  "keywords": ["ai", "coding", "agent", "llm", "ollama", "openai", "claude"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "openharness.start",
+        "title": "OpenHarness: Start Chat"
+      },
+      {
+        "command": "openharness.run",
+        "title": "OpenHarness: Run Prompt"
+      },
+      {
+        "command": "openharness.review",
+        "title": "OpenHarness: Review Selection"
+      }
+    ],
+    "configuration": {
+      "title": "OpenHarness",
+      "properties": {
+        "openharness.model": {
+          "type": "string",
+          "default": "ollama/llama3",
+          "description": "Default model (e.g., ollama/llama3, gpt-4o, claude-sonnet-4-6)"
+        },
+        "openharness.permissionMode": {
+          "type": "string",
+          "enum": ["ask", "trust", "deny", "acceptEdits", "auto"],
+          "default": "ask",
+          "description": "Permission mode for tool execution"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "openharness.review",
+          "group": "openharness",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

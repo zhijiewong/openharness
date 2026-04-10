@@ -10,6 +10,7 @@ import type { Tools } from './Tool.js';
 import type { PermissionMode } from './types/permissions.js';
 import { createAssistantMessage, createMessage, createInfoMessage } from './types/message.js';
 import { query } from './query/index.js';
+import { createStore, type Store } from './harness/store.js';
 import { createSession, saveSession, loadSession, type Session } from './harness/session.js';
 import { CostTracker, estimateCost, getContextWindow } from './harness/cost.js';
 import { autoCommitAIEdits, isGitRepo } from './git/index.js';
@@ -74,23 +75,64 @@ export async function startREPL(config: REPLConfig): Promise<void> {
 
   const cost = new CostTracker();
   let cachedConfig = readOhConfig();
-  let messages: Message[] = config.resumeSessionId ? session.messages : (config.initialMessages ?? []);
 
-  // Banner is printed to stdout by main.tsx before renderer starts
-  let loading = false;
-  let currentModel = config.model ?? '';
+  // Centralized state store — all REPL state lives here
+  const store = createStore({
+    messages: config.resumeSessionId ? session.messages : (config.initialMessages ?? []),
+    loading: false,
+    currentModel: config.model ?? '',
+    inputText: '',
+    inputCursor: 0,
+    inputHistory: [],
+    historyIndex: -1,
+    vimMode: null,
+    fastMode: false,
+    acSuggestions: [],
+    acDescriptions: [],
+    acIndex: -1,
+    acTokenStart: 0,
+    acIsPath: false,
+    session,
+  });
+
+  // Convenience accessors (avoids store.getState().x everywhere)
+  const s = () => store.getState();
   let abortController: AbortController | null = null;
-  let inputText = '';
-  let inputCursor = 0;
-  let inputHistory: string[] = [];
-  let historyIndex = -1;
-  let vimMode: 'normal' | 'insert' | null = null;
-  let fastMode = false;
-  let acSuggestions: string[] = [];
-  let acDescriptions: string[] = [];
-  let acIndex = -1;
-  let acTokenStart = 0; // start index of the token being completed
-  let acIsPath = false; // true if completing file paths
+
+  // Legacy aliases — these read/write through the store.
+  // Gradually migrate callers to use store.setState() directly.
+  let messages = s().messages;
+  let loading = s().loading;
+  let currentModel = s().currentModel;
+  let inputText = s().inputText;
+  let inputCursor = s().inputCursor;
+  let inputHistory = s().inputHistory;
+  let historyIndex = s().historyIndex;
+  let vimMode = s().vimMode;
+  let fastMode = s().fastMode;
+  let acSuggestions = s().acSuggestions;
+  let acDescriptions = s().acDescriptions;
+  let acIndex = s().acIndex;
+  let acTokenStart = s().acTokenStart;
+  let acIsPath = s().acIsPath;
+
+  // Sync store → legacy aliases when store changes (for code that reads locals)
+  store.subscribe((state) => {
+    messages = state.messages;
+    loading = state.loading;
+    currentModel = state.currentModel;
+    inputText = state.inputText;
+    inputCursor = state.inputCursor;
+    inputHistory = state.inputHistory;
+    historyIndex = state.historyIndex;
+    vimMode = state.vimMode;
+    fastMode = state.fastMode;
+    acSuggestions = state.acSuggestions;
+    acDescriptions = state.acDescriptions;
+    acIndex = state.acIndex;
+    acTokenStart = state.acTokenStart;
+    acIsPath = state.acIsPath;
+  });
 
   function updateAutocomplete() {
     acIsPath = false;
