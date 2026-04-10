@@ -462,18 +462,21 @@ export class TerminalRenderer {
     const w = process.stdout.columns ?? 80;
     const h = process.stdout.rows ?? 24;
 
-    // 1. Move UP from cursor to start of old live area, then erase below.
-    //    lastLiveLines = cursor.cursorRow from last frame (distance from cursor to live area start).
-    //    Using relative movement so it works correctly even after terminal scroll.
+    // 1. Build erase command: move UP to start of old live area, erase below.
     let eraseCmd = '';
     if (this.lastLiveLines > 0) {
       eraseCmd += `\x1b[${this.lastLiveLines}A`;
     }
-    eraseCmd += '\r\x1b[J'; // column 0, erase to end of screen
-    syncWrite(eraseCmd);
+    eraseCmd += '\r\x1b[J';
 
-    // 2. Flush completed messages to scrollback (sequential, cursor moves down)
-    this.flushMessages();
+    // 2. Flush completed messages to scrollback
+    //    If nothing to flush, we combine erase + rewrite into a single
+    //    atomic syncWrite to prevent any flickering.
+    const hasFlush = this.hasPendingFlush();
+    if (hasFlush) {
+      syncWrite('\x1b[?25l' + eraseCmd); // hide cursor + erase
+      this.flushMessages();
+    }
 
     // 3. Calculate and render new live area
     const liveHeight = Math.min(h, this.calculateLiveHeight());
@@ -483,21 +486,28 @@ export class TerminalRenderer {
     this.current.clear();
     const cursor = rasterizeLive(this.state, this.current);
 
-    // 4. Write live area sequentially, then position cursor using relative movement.
-    //    After grid output, cursor may be in pending-wrap state at end of last row.
-    //    \r resolves wrap and goes to column 0, then we move up to cursor row.
+    // 4. Write EVERYTHING in one atomic syncWrite: hide cursor, erase, content,
+    //    position cursor, show cursor. Terminal paints this as a single frame.
     const liveOutput = this.renderGridToAnsi(this.current);
     const upFromEnd = liveHeight - 1 - cursor.cursorRow;
-    syncWrite(
-      liveOutput + '\r' +
-      (upFromEnd > 0 ? `\x1b[${upFromEnd}A` : '') +
-      `\x1b[${cursor.cursorCol + 1}G` // move to column (1-indexed)
-    );
-    showCursor();
+    const cursorPos = (upFromEnd > 0 ? `\x1b[${upFromEnd}A` : '') +
+      `\x1b[${cursor.cursorCol + 1}G`;
 
-    // Track cursor's distance from live area start (NOT total height).
-    // Next frame moves up by this amount to get back to live area start.
+    syncWrite(
+      (hasFlush ? '' : '\x1b[?25l' + eraseCmd) + // hide + erase (if not already done)
+      liveOutput + '\r' + cursorPos +
+      '\x1b[?25h'                                  // show cursor at final position
+    );
+
     this.lastLiveLines = cursor.cursorRow;
+  }
+
+  /** Check if there are messages pending flush (without flushing) */
+  private hasPendingFlush(): boolean {
+    if (this.flushedMessageCount >= this.state.messages.length) return false;
+    const msg = this.state.messages[this.flushedMessageCount]!;
+    if (this.state.loading && this.flushedMessageCount === this.state.messages.length - 1 && msg.meta?.isStreaming) return false;
+    return true;
   }
 
   /** Estimate the height needed for the live area */
