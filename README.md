@@ -17,7 +17,28 @@
 
 AI coding agent in your terminal. Works with any LLM -- free local models or cloud APIs.
 
-[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
+[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![tests](https://img.shields.io/badge/tests-562-brightgreen) ![tools](https://img.shields.io/badge/tools-35-blue) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Why OpenHarness?](#why-openharness)
+- [Terminal UI](#terminal-ui)
+- [Tools (35)](#tools-35)
+- [Slash Commands (33)](#slash-commands-33)
+- [Permission Modes](#permission-modes)
+- [Hooks](#hooks)
+- [Checkpoints & Rewind](#checkpoints--rewind)
+- [Agent Roles](#agent-roles)
+- [Headless Mode & CI/CD](#headless-mode)
+- [Cybergotchi](#cybergotchi)
+- [MCP Servers](#mcp-servers)
+- [Providers](#providers)
+- [FAQ](#faq)
+- [Install](#install)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Community](#community)
 
 ---
 
@@ -42,7 +63,17 @@ oh                                    # auto-detect local model
 oh --model ollama/qwen2.5:7b         # specific model
 oh --model gpt-4o                     # cloud model (needs OPENAI_API_KEY)
 oh --trust                            # auto-approve all tool calls
-oh run "fix the tests" --json         # headless mode for CI/CD
+oh --auto                             # auto-approve, block dangerous bash
+oh -p "fix the tests" --trust         # headless mode (single prompt, exit)
+oh run "review code" --json           # CI/CD with JSON output
+```
+
+**In-session commands:**
+```
+/rewind                               # undo last AI file change (checkpoint restore)
+/roles                                # list agent specializations
+/vim                                  # toggle vim mode
+Ctrl+O                                # flush transcript to scrollback for review
 ```
 
 ## Why OpenHarness?
@@ -53,7 +84,7 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 |---|---|---|---|---|
 | Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
 | Free local models | Ollama native | No | Yes | Yes |
-| Tools | 25 with permission gates | 43+ | File-focused | 20+ |
+| Tools | 35 with permission gates | 43+ | File-focused | 20+ |
 | Permission modes | 7 (ask, trust, deny, acceptEdits, plan, auto, bypass) | 7 | Basic | Basic |
 | Git integration | Auto-commit + /undo + /rewind checkpoints | Yes | Deep git | Basic |
 | Slash commands | 30+ built-in | 80+ | Some | Some |
@@ -127,33 +158,59 @@ statusLineFormat: '{model} │ {tokens} │ {cost} │ {ctx}'
 
 Available variables: `{model}`, `{tokens}` (input↑ output↓), `{cost}` ($X.XXXX), `{ctx}` (context usage bar). Empty sections are automatically collapsed.
 
-## Tools (25)
+## Tools (35)
 
 | Tool | Risk | Description |
 |------|------|-------------|
-| Bash | high | Execute shell commands with live streaming output |
-| Read | low | Read files with line ranges |
+| **Core** | | |
+| Bash | high | Execute shell commands with live streaming output (AST safety analysis) |
+| Read | low | Read files with line ranges, PDF support |
 | ImageRead | low | Read images/PDFs for multimodal analysis |
 | Write | medium | Create or overwrite files |
 | Edit | medium | Search-and-replace edits |
+| MultiEdit | medium | Atomic multi-file edits (all succeed or none) |
 | Glob | low | Find files by pattern |
-| Grep | low | Regex content search |
+| Grep | low | Regex content search with context lines |
 | LS | low | List directory contents with sizes |
+| **Web** | | |
 | WebFetch | medium | Fetch URL content (SSRF-protected) |
 | WebSearch | medium | Search the web |
+| RemoteTrigger | high | HTTP requests to webhooks/APIs |
+| **Tasks** | | |
 | TaskCreate | low | Create structured tasks |
 | TaskUpdate | low | Update task status |
 | TaskList | low | List all tasks |
+| TaskGet | low | Get task details |
+| TaskStop | low | Stop a running task |
+| TaskOutput | low | Get task output |
+| **Agents** | | |
+| Agent | medium | Spawn a sub-agent (with role specialization) |
+| ParallelAgent | medium | Dispatch multiple agents with DAG dependencies |
+| SendMessage | low | Agent-to-agent peer messaging |
 | AskUser | low | Ask user a question with options |
-| Skill | low | Invoke a skill from .oh/skills/ |
-| Agent | medium | Spawn a sub-agent for delegation |
+| **Scheduling** | | |
+| CronCreate | medium | Schedule recurring tasks |
+| CronDelete | medium | Remove scheduled tasks |
+| CronList | low | List all scheduled tasks |
+| **Planning** | | |
 | EnterPlanMode | low | Enter structured planning mode |
 | ExitPlanMode | low | Exit planning mode |
+| **Code Intelligence** | | |
+| Diagnostics | low | LSP-based code diagnostics |
 | NotebookEdit | medium | Edit Jupyter notebooks |
+| **Memory & Discovery** | | |
+| Memory | low | Save/list/search persistent memories |
+| Skill | low | Invoke a skill from .oh/skills/ |
+| ToolSearch | low | Find tools by description |
+| **Git Worktrees** | | |
+| EnterWorktree | medium | Create isolated git worktree |
+| ExitWorktree | medium | Remove a git worktree |
+| **Process** | | |
+| KillProcess | high | Stop processes by PID or name |
 
-Low-risk read-only tools auto-approve. Medium and high risk tools require confirmation in `ask` mode. Use `--trust` to skip all prompts.
+Low-risk read-only tools auto-approve. Medium and high risk tools require confirmation in `ask` mode. Use `--trust` or `--auto` to skip prompts.
 
-## Slash Commands (30+)
+## Slash Commands (33)
 
 Type these during a chat session. Aliases: `/q` exit, `/h` help, `/c` commit, `/m` model, `/s` status.
 
@@ -457,6 +514,42 @@ Create `.oh/RULES.md` in any repo (or run `oh init`):
 ```
 
 Rules load automatically into every session.
+
+## How It Works
+
+```mermaid
+graph LR
+    User[User Input] --> REPL[REPL Loop]
+    REPL --> Query[Query Engine]
+    Query --> Provider[LLM Provider]
+    Provider --> LLM[Ollama / OpenAI / Anthropic]
+    LLM --> Tools[Tool Execution]
+    Tools --> Permissions{Permission Check}
+    Permissions -->|Approved| Execute[Run Tool]
+    Permissions -->|Blocked| Deny[Deny & Report]
+    Execute --> Response[Stream Response]
+    Response --> REPL
+```
+
+## FAQ
+
+**Does it work offline?**
+Yes. Use Ollama with a local model — no internet or API key needed.
+
+**How much does it cost?**
+Free. OpenHarness is MIT licensed. You bring your own API key (BYOK) for cloud models, or use Ollama for free.
+
+**Is it safe?**
+Yes. 7 permission modes control what tools can do. Bash commands are analyzed by an AST parser that blocks destructive patterns (`rm -rf`, `curl | bash`, etc.). Every file change is checkpointed and reversible with `/rewind`.
+
+**Can I use it in CI/CD?**
+Yes. Use `oh -p "prompt" --auto` for headless execution, or the built-in GitHub Action for PR reviews.
+
+**Does it support my language/framework?**
+Yes. OpenHarness is language-agnostic — it reads, writes, and executes code in any language. Syntax highlighting covers 20+ languages.
+
+**How does it compare to Claude Code?**
+~90% feature parity for CLI use cases. Main advantage: works with ANY LLM (not just Anthropic). See the [comparison table](#why-openharness) above.
 
 ## Install
 
