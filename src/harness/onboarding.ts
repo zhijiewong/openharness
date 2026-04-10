@@ -4,6 +4,8 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
+import { execSync } from "node:child_process";
+import { platform, release, hostname } from "node:os";
 
 export type ProjectContext = {
   root: string;
@@ -102,14 +104,69 @@ export function detectProject(root?: string): ProjectContext {
   return { root: projectRoot, language, framework, packageManager, testRunner, hasGit, gitBranch, hasReadme, description };
 }
 
-export function projectContextToPrompt(ctx: ProjectContext): string {
-  const parts: string[] = [`Working directory: ${ctx.root}`];
+export function projectContextToPrompt(ctx: ProjectContext, model?: string): string {
+  const parts: string[] = [];
+
+  // Working directory
+  parts.push(`Primary working directory: ${ctx.root}`);
+  parts.push(`Is a git repository: ${ctx.hasGit}`);
+
+  // Platform info
+  const plat = platform();
+  const shell = plat === "win32" ? "cmd.exe" : (process.env.SHELL ?? "/bin/bash");
+  parts.push(`Platform: ${plat}`);
+  parts.push(`Shell: ${shell}`);
+  parts.push(`OS Version: ${release()}`);
+
+  // Current date
+  const now = new Date();
+  parts.push(`Current date: ${now.toISOString().split("T")[0]}`);
+
+  // Model
+  if (model) parts.push(`Model: ${model}`);
+
+  // Project info
   if (ctx.language !== "unknown") {
     parts.push(`Language: ${ctx.language}${ctx.framework ? ` (${ctx.framework})` : ""}`);
   }
   if (ctx.packageManager) parts.push(`Package manager: ${ctx.packageManager}`);
   if (ctx.testRunner) parts.push(`Test command: ${ctx.testRunner}`);
-  if (ctx.hasGit) parts.push(`Git: yes${ctx.gitBranch ? ` (branch: ${ctx.gitBranch})` : ""}`);
   if (ctx.description) parts.push(`Project: ${ctx.description}`);
+
+  // Git status snapshot
+  if (ctx.hasGit) {
+    if (ctx.gitBranch) parts.push(`Current branch: ${ctx.gitBranch}`);
+
+    // Main/default branch detection
+    let mainBranch = "main";
+    try {
+      const refs = execSync("git branch -l main master", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
+      if (refs.includes("main")) mainBranch = "main";
+      else if (refs.includes("master")) mainBranch = "master";
+    } catch { /* ignore */ }
+    parts.push(`Main branch: ${mainBranch}`);
+
+    // Git user
+    try {
+      const user = execSync("git config user.name", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
+      if (user) parts.push(`Git user: ${user}`);
+    } catch { /* ignore */ }
+
+    // Git status (brief)
+    try {
+      const status = execSync("git status --porcelain", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
+      if (status) {
+        const lines = status.split("\n").slice(0, 20);
+        parts.push(`\nStatus:\n${lines.join("\n")}${status.split("\n").length > 20 ? "\n..." : ""}`);
+      }
+    } catch { /* ignore */ }
+
+    // Recent commits
+    try {
+      const log = execSync("git log --oneline -5", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
+      if (log) parts.push(`\nRecent commits:\n${log}`);
+    } catch { /* ignore */ }
+  }
+
   return "# Environment\n" + parts.map((p) => `- ${p}`).join("\n");
 }

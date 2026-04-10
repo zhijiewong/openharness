@@ -112,5 +112,10 @@ function zodToJsonSchema(schema: z.ZodType): unknown {
  * Find a tool by name from a list of tools.
  */
 export function findToolByName(tools: Tools, name: string): Tool | undefined {
-  return tools.find((t) => t.name === name);
+  // Exact match first
+  const exact = tools.find((t) => t.name === name);
+  if (exact) return exact;
+  // Case-insensitive fallback
+  const lower = name.toLowerCase();
+  return tools.find((t) => t.name.toLowerCase() === lower);
 }

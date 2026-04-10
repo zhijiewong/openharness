@@ -74,12 +74,16 @@ export class StreamingToolExecutor {
       this.permissionMode,
       tool.riskLevel,
       tool.isReadOnly(tracked.toolCall.arguments),
+      tool.name,
+      tracked.toolCall.arguments,
     );
 
     if (!perm.allowed && perm.reason === "needs-approval" && this.askUser) {
+      const { formatToolArgs } = await import("../utils/tool-summary.js");
+      const description = formatToolArgs(tool.name, tracked.toolCall.arguments as Record<string, unknown>);
       const allowed = await this.askUser(
         tool.name,
-        JSON.stringify(tracked.toolCall.arguments).slice(0, 200),
+        description,
         tool.riskLevel,
       );
       if (!allowed) {

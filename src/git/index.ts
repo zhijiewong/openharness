@@ -5,6 +5,7 @@
 
 import { execSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 /**
  * Check if we're in a git repository.
@@ -73,6 +74,7 @@ export function gitDiff(cwd?: string): string {
 export function gitCommit(message: string, cwd?: string): boolean {
   try {
     execSync("git add -A", { cwd, stdio: "pipe" });
+    // Respect git signing config — never use --no-gpg-sign
     spawnSync("git", ["commit", "-m", message, "--allow-empty"], { cwd, stdio: "pipe" });
     return true;
   } catch {
@@ -84,12 +86,28 @@ export function gitCommit(message: string, cwd?: string): boolean {
  * Auto-commit AI edits with a descriptive message.
  * Returns the commit hash or null on failure.
  */
+/**
+ * Check if repo is in a merge or rebase state.
+ */
+export function isInMergeOrRebase(cwd?: string): boolean {
+  const root = cwd ?? process.cwd();
+  try {
+    const gitDir = join(root, ".git");
+    return existsSync(join(gitDir, "MERGE_HEAD"))
+      || existsSync(join(gitDir, "rebase-merge"))
+      || existsSync(join(gitDir, "rebase-apply"));
+  } catch {
+    return false;
+  }
+}
+
 export function autoCommitAIEdits(
   toolName: string,
   files: string[],
   cwd?: string,
 ): string | null {
   if (!isGitRepo(cwd)) return null;
+  if (isInMergeOrRebase(cwd)) return null; // skip auto-commit during merge/rebase
 
   try {
     if (files.length > 0) {
@@ -110,12 +128,13 @@ export function autoCommitAIEdits(
     const staged = execSync("git diff --cached --name-only", { cwd, stdio: "pipe" }).toString().trim();
     if (!staged) return null;
 
-    // Generate commit message
+    // Generate commit message with Co-Authored-By trailer
     const fileList = files.length > 0
       ? (files.length <= 3 ? files.join(", ") : `${files.length} files`)
       : staged.split("\n").slice(0, 3).join(", ");
-    const message = `oh: ${toolName} ${fileList}`;
+    const message = `oh: ${toolName} ${fileList}\n\nCo-Authored-By: OpenHarness <noreply@openharness.dev>`;
 
+    // Respect git signing config — don't pass --no-gpg-sign
     spawnSync("git", ["commit", "-m", message], { cwd, stdio: "pipe" });
 
     // Return commit hash
@@ -166,6 +185,30 @@ export function createWorktree(cwd?: string): string | null {
     // Create a detached worktree from HEAD
     execSync(`git worktree add --detach "${worktreePath}"`, { cwd, stdio: 'pipe' });
     return worktreePath;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a worktree has uncommitted changes or new commits.
+ */
+export function hasWorktreeChanges(worktreePath: string): boolean {
+  if (hasUncommittedChanges(worktreePath)) return true;
+  try {
+    const diffStat = execSync("git diff HEAD --stat", { cwd: worktreePath, stdio: "pipe" }).toString().trim();
+    return diffStat.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get the git repository root directory, or null if not in a repo.
+ */
+export function gitRoot(cwd?: string): string | null {
+  try {
+    return execSync("git rev-parse --show-toplevel", { cwd, stdio: "pipe" }).toString().trim();
   } catch {
     return null;
   }

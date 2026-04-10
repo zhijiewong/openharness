@@ -31,6 +31,7 @@ export type HooksConfig = {
 export type ToolPermissionRule = {
   tool: string;       // tool name or glob pattern (e.g. "Bash", "File*")
   action: "allow" | "deny" | "ask";
+  pattern?: string;   // regex pattern to match against tool input (e.g. Bash command content)
 };
 
 export type OhConfig = {
@@ -54,17 +55,47 @@ function configPath(root?: string): string {
   return join(root ?? ".", ".oh", "config.yaml");
 }
 
+let _configCache: OhConfig | null | undefined;
+let _configCacheRoot: string | undefined;
+
+/** Clear cached config (call after writes or to force re-read) */
+export function invalidateConfigCache(): void {
+  _configCache = undefined;
+  _configCacheRoot = undefined;
+}
+
 export function readOhConfig(root?: string): OhConfig | null {
+  const effectiveRoot = root ?? ".";
+  if (_configCache !== undefined && _configCacheRoot === effectiveRoot) return _configCache;
+
   const p = configPath(root);
-  if (!existsSync(p)) return null;
+  if (!existsSync(p)) { _configCache = null; _configCacheRoot = effectiveRoot; return null; }
   try {
-    return parse(readFileSync(p, "utf-8")) as OhConfig;
+    const base = parse(readFileSync(p, "utf-8")) as OhConfig;
+
+    // Merge local overrides from config.local.yaml (gitignored personal settings)
+    const localPath = join(root ?? ".", ".oh", "config.local.yaml");
+    if (existsSync(localPath)) {
+      try {
+        const local = parse(readFileSync(localPath, "utf-8")) as Partial<OhConfig>;
+        if (local) {
+          const merged = { ...base, ...local } as OhConfig;
+          _configCache = merged; _configCacheRoot = effectiveRoot;
+          return merged;
+        }
+      } catch { /* ignore malformed local config */ }
+    }
+
+    _configCache = base; _configCacheRoot = effectiveRoot;
+    return base;
   } catch {
+    _configCache = null; _configCacheRoot = effectiveRoot;
     return null;
   }
 }
 
 export function writeOhConfig(cfg: OhConfig, root?: string): void {
+  invalidateConfigCache();
   const p = configPath(root);
   mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
 

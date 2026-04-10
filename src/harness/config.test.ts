@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { readOhConfig, writeOhConfig } from "./config.js";
 
 function tmp(): string {
@@ -92,4 +93,26 @@ test("writeOhConfig() overwrites existing config", () => {
   const cfg = readOhConfig(dir);
   assert.equal(cfg?.provider, "anthropic");
   assert.equal(cfg?.model, "claude-haiku-4-5");
+});
+
+// ── config.local.yaml merge ──
+
+test("readOhConfig() merges config.local.yaml overrides", () => {
+  const dir = tmp();
+  writeOhConfig({ provider: "openai", model: "gpt-4o", permissionMode: "ask" }, dir);
+  writeFileSync(join(dir, ".oh", "config.local.yaml"), "model: gpt-4o-mini\napiKey: local-key\n");
+  const cfg = readOhConfig(dir);
+  assert.ok(cfg !== null);
+  assert.equal(cfg.provider, "openai"); // not overridden
+  assert.equal(cfg.model, "gpt-4o-mini"); // overridden
+  assert.equal(cfg.apiKey, "local-key"); // added
+});
+
+test("readOhConfig() ignores malformed config.local.yaml", () => {
+  const dir = tmp();
+  writeOhConfig({ provider: "openai", model: "gpt-4o", permissionMode: "ask" }, dir);
+  writeFileSync(join(dir, ".oh", "config.local.yaml"), "{{{{invalid yaml");
+  const cfg = readOhConfig(dir);
+  assert.ok(cfg !== null);
+  assert.equal(cfg.model, "gpt-4o"); // base config unchanged
 });

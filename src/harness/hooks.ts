@@ -15,6 +15,13 @@ export type HookContext = {
   toolName?: string;
   toolArgs?: string;
   toolOutput?: string;
+  toolInputJson?: string;
+  sessionId?: string;
+  model?: string;
+  provider?: string;
+  permissionMode?: string;
+  cost?: string;
+  tokens?: string;
 };
 
 let cachedHooks: HooksConfig | null | undefined;
@@ -34,6 +41,13 @@ function buildEnv(event: HookEvent, ctx: HookContext): Record<string, string> {
   if (ctx.toolName) env.OH_TOOL_NAME = ctx.toolName;
   if (ctx.toolArgs) env.OH_TOOL_ARGS = ctx.toolArgs;
   if (ctx.toolOutput) env.OH_TOOL_OUTPUT = ctx.toolOutput;
+  if (ctx.toolInputJson) env.OH_TOOL_INPUT_JSON = ctx.toolInputJson;
+  if (ctx.sessionId) env.OH_SESSION_ID = ctx.sessionId;
+  if (ctx.model) env.OH_MODEL = ctx.model;
+  if (ctx.provider) env.OH_PROVIDER = ctx.provider;
+  if (ctx.permissionMode) env.OH_PERMISSION_MODE = ctx.permissionMode;
+  if (ctx.cost) env.OH_COST = ctx.cost;
+  if (ctx.tokens) env.OH_TOKENS = ctx.tokens;
   return env;
 }
 

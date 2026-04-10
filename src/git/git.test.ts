@@ -12,6 +12,8 @@ import {
   gitLog,
   gitUndo,
   autoCommitAIEdits,
+  gitRoot,
+  hasWorktreeChanges,
 } from "./index.js";
 
 function makeRepo(): string {
@@ -134,4 +136,44 @@ test("autoCommitAIEdits() returns null in non-git directory", () => {
   const dir = mkdtempSync(join(tmpdir(), "oh-no-git-"));
   const hash = autoCommitAIEdits("Edit", ["file.ts"], dir);
   assert.equal(hash, null);
+});
+
+// ── gitRoot ──
+
+test("gitRoot() returns repo root path", () => {
+  const dir = makeRepo();
+  const root = gitRoot(dir);
+  assert.ok(root !== null);
+  assert.ok(root.length > 0);
+});
+
+test("gitRoot() returns null outside git repo", () => {
+  const dir = mkdtempSync(join(tmpdir(), "oh-no-git-"));
+  assert.equal(gitRoot(dir), null);
+});
+
+// ── hasWorktreeChanges ──
+
+test("hasWorktreeChanges() false on clean repo", () => {
+  const dir = makeRepo();
+  initialCommit(dir);
+  assert.equal(hasWorktreeChanges(dir), false);
+});
+
+test("hasWorktreeChanges() true with uncommitted changes", () => {
+  const dir = makeRepo();
+  initialCommit(dir);
+  writeFileSync(join(dir, "dirty.txt"), "dirty");
+  assert.equal(hasWorktreeChanges(dir), true);
+});
+
+// ── autoCommitAIEdits Co-Authored-By ──
+
+test("autoCommitAIEdits() includes Co-Authored-By trailer", () => {
+  const dir = makeRepo();
+  initialCommit(dir);
+  writeFileSync(join(dir, "edit.ts"), "const x = 1;");
+  autoCommitAIEdits("Edit", ["edit.ts"], dir);
+  const fullMsg = execSync("git log -1 --pretty=%B", { cwd: dir, stdio: "pipe" }).toString();
+  assert.ok(fullMsg.includes("Co-Authored-By"));
 });

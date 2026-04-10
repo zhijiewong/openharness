@@ -21,6 +21,9 @@ import { WebSearchTool } from "./WebSearchTool/index.js";
 import { TaskCreateTool } from "./TaskCreateTool/index.js";
 import { TaskUpdateTool } from "./TaskUpdateTool/index.js";
 import { TaskListTool } from "./TaskListTool/index.js";
+import { TaskGetTool } from "./TaskGetTool/index.js";
+import { TaskStopTool } from "./TaskStopTool/index.js";
+import { TaskOutputTool } from "./TaskOutputTool/index.js";
 import { AskUserTool } from "./AskUserTool/index.js";
 import { SkillTool } from "./SkillTool/index.js";
 import { AgentTool } from "./AgentTool/index.js";
@@ -130,11 +133,11 @@ describe("tools-basic", () => {
       ctx(tmp),
     );
     const result = await TaskUpdateTool.call(
-      { taskId: 1, status: "done" },
+      { taskId: 1, status: "completed" },
       ctx(tmp),
     );
     assert.equal(result.isError, false);
-    assert.ok(result.output.includes("done"));
+    assert.ok(result.output.includes("completed"));
   });
 
   it("TaskListTool — lists tasks", async () => {
@@ -244,5 +247,224 @@ describe("tools-basic", () => {
     );
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("MockAlpha"));
+  });
+
+  // ── TaskGetTool ──
+
+  it("TaskGetTool — gets a task by ID", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "get me", description: "desc" }, ctx(tmp));
+    const result = await TaskGetTool.call({ taskId: 1 }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("get me"));
+    assert.ok(result.output.includes("pending"));
+  });
+
+  it("TaskGetTool — errors on missing task", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "x", description: "y" }, ctx(tmp));
+    const result = await TaskGetTool.call({ taskId: 99 }, ctx(tmp));
+    assert.equal(result.isError, true);
+    assert.ok(result.output.includes("not found"));
+  });
+
+  // ── TaskStopTool ──
+
+  it("TaskStopTool — cancels a pending task", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "cancel me", description: "d" }, ctx(tmp));
+    const result = await TaskStopTool.call({ taskId: 1, reason: "no longer needed" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("cancelled"));
+    // Verify it's actually cancelled
+    const get = await TaskGetTool.call({ taskId: 1 }, ctx(tmp));
+    assert.ok(get.output.includes("cancelled"));
+  });
+
+  it("TaskStopTool — no-op on already completed task", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "done", description: "d" }, ctx(tmp));
+    await TaskUpdateTool.call({ taskId: 1, status: "completed" }, ctx(tmp));
+    const result = await TaskStopTool.call({ taskId: 1 }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("already completed"));
+  });
+
+  // ── TaskOutputTool ──
+
+  it("TaskOutputTool — saves output to a task", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "output me", description: "d" }, ctx(tmp));
+    const result = await TaskOutputTool.call({ taskId: 1, output: "result data" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("saved"));
+    // Verify output is stored
+    const get = await TaskGetTool.call({ taskId: 1 }, ctx(tmp));
+    assert.ok(get.output.includes("result data"));
+  });
+
+  // ── TaskUpdate enhanced fields ──
+
+  it("TaskUpdateTool — deletes a task", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "delete me", description: "d" }, ctx(tmp));
+    const result = await TaskUpdateTool.call({ taskId: 1, status: "deleted" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("deleted"));
+    // Verify it's gone
+    const list = await TaskListTool.call({}, ctx(tmp));
+    assert.ok(!list.output.includes("delete me"));
+  });
+
+  it("TaskUpdateTool — sets blocks/blockedBy", async () => {
+    const tmp = makeTmpDir();
+    await TaskCreateTool.call({ subject: "first", description: "d" }, ctx(tmp));
+    await TaskCreateTool.call({ subject: "second", description: "d" }, ctx(tmp));
+    const result = await TaskUpdateTool.call({ taskId: 2, addBlockedBy: [1] }, ctx(tmp));
+    assert.equal(result.isError, false);
+  });
+
+  // ── TaskCreate with activeForm ──
+
+  it("TaskCreateTool — creates with activeForm", async () => {
+    const tmp = makeTmpDir();
+    const result = await TaskCreateTool.call(
+      { subject: "build it", description: "d", activeForm: "Building it" },
+      ctx(tmp),
+    );
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("Task #1"));
+  });
+
+  // ── GrepTool output modes ──
+
+  it("GrepTool — output_mode files_with_matches (default)", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "a.txt", "hello world");
+    writeFile(tmp, "b.txt", "goodbye world");
+    const result = await GrepTool.call({ pattern: "hello", path: tmp, output_mode: "files_with_matches" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("a.txt"));
+    assert.ok(!result.output.includes("b.txt"));
+  });
+
+  it("GrepTool — output_mode content shows matching lines", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "c.txt", "line one\nline two\nline three");
+    const result = await GrepTool.call({ pattern: "two", path: tmp, output_mode: "content" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("line two"));
+  });
+
+  it("GrepTool — output_mode count", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "d.txt", "aaa\naaa\nbbb");
+    const result = await GrepTool.call({ pattern: "aaa", path: tmp, output_mode: "count" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("2"));
+  });
+
+  it("GrepTool — type filter", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "code.ts", "const x = 1;");
+    writeFile(tmp, "style.css", "const y = 2;");
+    const result = await GrepTool.call({ pattern: "const", path: tmp, type: "ts" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("code.ts"));
+    assert.ok(!result.output.includes("style.css"));
+  });
+
+  it("GrepTool — case insensitive", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "e.txt", "Hello World");
+    const result = await GrepTool.call({ pattern: "hello", path: tmp, "-i": true }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("e.txt"));
+  });
+
+  it("GrepTool — head_limit", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "f1.txt", "match");
+    writeFile(tmp, "f2.txt", "match");
+    writeFile(tmp, "f3.txt", "match");
+    const result = await GrepTool.call({ pattern: "match", path: tmp, head_limit: 2 }, ctx(tmp));
+    assert.equal(result.isError, false);
+    const fileCount = result.output.split("\n").filter(l => l.trim()).length;
+    assert.ok(fileCount <= 2);
+  });
+
+  // ── LSTool depth ──
+
+  it("LSTool — depth 1 (default) shows only immediate contents", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "top.txt", "t");
+    writeFile(tmp, "sub/nested.txt", "n");
+    const result = await LSTool.call({ path: tmp }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("top.txt"));
+    assert.ok(result.output.includes("sub/"));
+    assert.ok(!result.output.includes("nested.txt"));
+  });
+
+  it("LSTool — depth 2 shows nested files", async () => {
+    const tmp = makeTmpDir();
+    writeFile(tmp, "top.txt", "t");
+    writeFile(tmp, "sub/nested.txt", "n");
+    const result = await LSTool.call({ path: tmp, depth: 2 }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("top.txt"));
+    assert.ok(result.output.includes("nested.txt"));
+  });
+
+  // ── FileReadTool — notebook ──
+
+  it("FileReadTool — reads Jupyter notebook cells", async () => {
+    const tmp = makeTmpDir();
+    const nb = {
+      cells: [
+        { cell_type: "code", source: ["print('hi')"], outputs: [{ text: ["hi\n"] }] },
+        { cell_type: "markdown", source: ["# Title"], outputs: [] },
+      ],
+      metadata: {},
+      nbformat: 4,
+      nbformat_minor: 2,
+    };
+    const fp = writeFile(tmp, "test.ipynb", JSON.stringify(nb));
+    const result = await FileReadTool.call({ file_path: fp }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("print('hi')"));
+    assert.ok(result.output.includes("# Title"));
+    assert.ok(result.output.includes("[Output]"));
+  });
+
+  // ── FileReadTool — image ──
+
+  it("FileReadTool — returns base64 for PNG files", async () => {
+    const tmp = makeTmpDir();
+    // Write a minimal PNG header
+    const { writeFileSync: wfs } = await import("node:fs");
+    const fp = join(tmp, "tiny.png");
+    wfs(fp, Buffer.from("89504e470d0a1a0a", "hex"));
+    const result = await FileReadTool.call({ file_path: fp }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.startsWith("__IMAGE__:image/png:"));
+  });
+
+  // ── FileWriteTool — overwrite detection ──
+
+  it("FileWriteTool — reports Created for new file", async () => {
+    const tmp = makeTmpDir();
+    const fp = join(tmp, "new.txt");
+    const result = await FileWriteTool.call({ file_path: fp, content: "new" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("Created"));
+  });
+
+  it("FileWriteTool — reports Overwrote for existing file", async () => {
+    const tmp = makeTmpDir();
+    const fp = writeFile(tmp, "existing.txt", "old");
+    const result = await FileWriteTool.call({ file_path: fp, content: "new" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("Overwrote"));
   });
 });

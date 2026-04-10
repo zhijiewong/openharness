@@ -40,8 +40,15 @@ describe('findToolByName', () => {
     assert.equal(found, undefined);
   });
 
-  it('is case-sensitive', () => {
+  it('falls back to case-insensitive match', () => {
     const found = findToolByName(tools, 'bash');
-    assert.equal(found, undefined);
+    assert.ok(found);
+    assert.equal(found.name, 'Bash');
+  });
+
+  it('prefers exact match over case-insensitive', () => {
+    const found = findToolByName(tools, 'Bash');
+    assert.ok(found);
+    assert.equal(found.name, 'Bash');
   });
 });

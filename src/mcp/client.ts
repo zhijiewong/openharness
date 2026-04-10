@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { safeEnv } from '../utils/safe-env.js';
 import { createInterface } from 'node:readline';
 import type { JsonRpcRequest, JsonRpcResponse, McpToolDef } from './types.js';
 import type { McpServerConfig } from '../harness/config.js';
@@ -42,16 +43,19 @@ export class McpClient {
     });
   }
 
+  /** Server-provided instructions (from capabilities during init) */
+  instructions: string | null = null;
+
   static async connect(cfg: McpServerConfig, timeoutMs = cfg.timeout ?? 5_000): Promise<McpClient> {
     const proc = spawn(cfg.command, cfg.args ?? [], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...(cfg.env ?? {}) },
+      env: safeEnv(cfg.env),
     });
 
     const client = new McpClient(cfg.name, proc, cfg, timeoutMs);
 
     // Initialize handshake
-    await Promise.race([
+    const initResponse = await Promise.race([
       client.call('initialize', {
         protocolVersion: '2024-11-05',
         clientInfo: { name: 'openharness', version: '0.2.1' },
@@ -61,6 +65,12 @@ export class McpClient {
         setTimeout(() => reject(new Error(`MCP '${cfg.name}' init timeout`)), timeoutMs)
       ),
     ]);
+
+    // Extract server instructions from init response
+    const serverInfo = (initResponse as any)?.result;
+    if (serverInfo?.instructions && typeof serverInfo.instructions === 'string') {
+      client.instructions = serverInfo.instructions;
+    }
 
     await client.call('notifications/initialized', {});
     client.ready = true;

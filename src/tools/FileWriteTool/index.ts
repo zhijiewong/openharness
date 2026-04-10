@@ -29,10 +29,24 @@ export const FileWriteTool: Tool<typeof inputSchema> = {
 
     try {
       await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, input.content, "utf-8");
+
+      // Try exclusive create first to detect overwrites
+      let existed = false;
+      try {
+        await fs.writeFile(filePath, input.content, { encoding: "utf-8", flag: "wx" });
+      } catch (wxErr: any) {
+        if (wxErr.code === "EEXIST") {
+          existed = true;
+          await fs.writeFile(filePath, input.content, "utf-8");
+        } else {
+          throw wxErr;
+        }
+      }
+
       const lineCount = input.content.split("\n").length;
+      const prefix = existed ? "Overwrote" : "Created";
       return {
-        output: `Wrote ${filePath} (${lineCount} lines).`,
+        output: `${prefix} ${filePath} (${lineCount} lines).`,
         isError: false,
       };
     } catch (err: any) {
@@ -41,8 +55,9 @@ export const FileWriteTool: Tool<typeof inputSchema> = {
   },
 
   prompt() {
-    return `Write content to a file, creating parent directories if needed. Parameters:
-- file_path (string, required): Absolute or relative path to the file.
-- content (string, required): The full content to write.`;
+    return `Write content to a file, creating parent directories if needed. This tool will overwrite existing files.
+- file_path (string, required): The absolute path to the file to write.
+- content (string, required): The full content to write to the file.
+IMPORTANT: Prefer the Edit tool for modifying existing files — it only sends the diff. Only use Write to create new files or for complete rewrites. If the file already exists, you MUST use Read first to understand its current contents.`;
   },
 };

@@ -18,9 +18,12 @@ export type Session = {
   provider: string;
   model: string;
   totalCost: number;
+  gitBranch?: string;
+  workingDir?: string;
+  tools?: string[];
 };
 
-export function createSession(provider: string, model: string): Session {
+export function createSession(provider: string, model: string, extras?: { gitBranch?: string; workingDir?: string; tools?: string[] }): Session {
   return {
     id: randomUUID().slice(0, 12),
     messages: [],
@@ -29,8 +32,13 @@ export function createSession(provider: string, model: string): Session {
     provider,
     model,
     totalCost: 0,
+    ...(extras?.gitBranch ? { gitBranch: extras.gitBranch } : {}),
+    ...(extras?.workingDir ? { workingDir: extras.workingDir } : {}),
+    ...(extras?.tools ? { tools: extras.tools } : {}),
   };
 }
+
+let _evicting = false;
 
 export function saveSession(session: Session, dir?: string): string {
   const sessionDir = dir ?? DEFAULT_SESSION_DIR;
@@ -38,8 +46,12 @@ export function saveSession(session: Session, dir?: string): string {
   const path = join(sessionDir, `${session.id}.json`);
   session.updatedAt = Date.now();
   writeFileSync(path, JSON.stringify(session, null, 2));
-  // Evict old sessions in the background (non-blocking)
-  try { evictOldSessions(sessionDir); } catch { /* ignore */ }
+  // Evict old sessions (with lock to prevent concurrent eviction)
+  if (!_evicting) {
+    _evicting = true;
+    try { evictOldSessions(sessionDir); } catch { /* ignore */ }
+    _evicting = false;
+  }
   return path;
 }
 

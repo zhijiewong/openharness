@@ -59,6 +59,10 @@ function defaultKeybindings(): Keybinding[] {
     { key: 'ctrl+d', action: '/diff' },
     { key: 'ctrl+l', action: '/clear' },
     { key: 'ctrl+u', action: '/undo' },
+    { key: 'ctrl+s', action: '/status' },
+    { key: 'ctrl+k ctrl+c', action: '/cost' },
+    { key: 'ctrl+k ctrl+f', action: '/fast' },
+    { key: 'ctrl+k ctrl+l', action: '/log' },
   ];
 }
 

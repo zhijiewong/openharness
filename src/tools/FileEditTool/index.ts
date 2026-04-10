@@ -74,9 +74,9 @@ export const FileEditTool: Tool<typeof inputSchema> = {
 
   prompt() {
     return `Perform exact string replacement in a file. Parameters:
-- file_path (string, required): Path to the file to edit.
-- old_string (string, required): The exact text to find and replace.
-- new_string (string, required): The replacement text.
-- replace_all (boolean, optional): Replace all occurrences (default false). If false, old_string must be unique.`;
+- file_path (string, required): The absolute path to the file to modify.
+- old_string (string, required): The exact text to replace. Must match the file content exactly, including indentation.
+- new_string (string, required): The replacement text (must be different from old_string).
+- replace_all (boolean, optional, default false): Replace all occurrences. If false, old_string must be unique in the file — if it appears multiple times, the edit will FAIL. Provide more surrounding context to make it unique, or use replace_all to change every instance. Use replace_all for renaming variables/functions across a file.`;
   },
 };

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-256.png" alt="openHarness logo" width="128" />
+</p>
+
 # OpenHarness
 
 ```

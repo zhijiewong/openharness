@@ -33,6 +33,8 @@ export type SubmitResult = {
   newModel?: string;
   /** Whether vim mode was toggled */
   vimToggled?: boolean;
+  /** Whether fast mode was toggled */
+  fastModeToggled?: boolean;
 };
 
 /**
@@ -79,6 +81,9 @@ export async function handleUserInput(
       if (result.compactedMessages) messages = result.compactedMessages;
       if (result.output) messages = [...messages, createInfoMessage(result.output)];
 
+      if (result.toggleFastMode) {
+        return { handled: true, messages, fastModeToggled: true };
+      }
       if (result.handled && !result.prependToPrompt) {
         return {
           handled: true,
