@@ -25,3 +25,4 @@ Thumbs.db
 ~/.oh/
 dist/
 .worktrees/
+.claude/settings.local.json
