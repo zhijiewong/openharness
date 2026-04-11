@@ -10,6 +10,35 @@ import { defaultEstimateTokens } from "../providers/base.js";
 
 const DEFAULT_KEEP_LAST = 10;
 
+/**
+ * Semantic importance scoring for messages.
+ * Higher score = more important to keep during compression.
+ */
+export function scoreMessage(msg: Message, index: number, total: number): number {
+  if (msg.meta?.pinned) return Infinity;
+
+  let score = 0;
+
+  // Role weight: user intent > tool decisions > assistant text
+  if (msg.role === 'user') score += 30;
+  else if (msg.role === 'assistant' && msg.toolCalls?.length) score += 20;
+  else if (msg.role === 'assistant') score += 10;
+  else if (msg.role === 'system') score += 25; // system messages are usually important
+  else if (msg.role === 'tool') score += 5;
+
+  // Recency bonus: recent messages get +0 to +20
+  const recencyFactor = index / total;
+  score += recencyFactor * 20;
+
+  // Content length (longer = more substantive, but cap benefit)
+  score += Math.min(msg.content.length / 200, 5);
+
+  // Tool calls indicate decision points
+  if (msg.toolCalls?.length) score += msg.toolCalls.length * 3;
+
+  return score;
+}
+
 export function makeTokenEstimator(provider: Provider): (text: string) => number {
   if (provider.estimateTokens) return provider.estimateTokens.bind(provider);
   return (text: string) => defaultEstimateTokens(text, provider.name);
@@ -67,13 +96,22 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
     }
   }
 
-  // AutoCompact Phase 2: Drop oldest non-system, non-pinned messages
+  // AutoCompact Phase 2: Drop lowest-importance messages first (importance-aware)
   while (estimateMessagesTokens(result) > targetTokens && result.length > keepLast + 1) {
-    const firstDroppable = result.findIndex((m) =>
-      m.role !== "system" && !m.meta?.pinned
-    );
-    if (firstDroppable === -1 || firstDroppable >= result.length - keepLast) break;
-    result.splice(firstDroppable, 1);
+    // Score all droppable messages and remove the lowest-scored
+    let lowestScore = Infinity;
+    let lowestIdx = -1;
+    for (let i = 0; i < result.length - keepLast; i++) {
+      const msg = result[i]!;
+      if (msg.role === 'system' || msg.meta?.pinned) continue;
+      const score = scoreMessage(msg, i, result.length);
+      if (score < lowestScore) {
+        lowestScore = score;
+        lowestIdx = i;
+      }
+    }
+    if (lowestIdx === -1) break;
+    result.splice(lowestIdx, 1);
   }
 
   // Phase 3: Remove orphaned tool results

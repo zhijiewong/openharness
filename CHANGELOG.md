@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 (2026-04-11)
+
+### Added
+- **A2A HTTP Server**: POST /a2a endpoint on remote server for cross-process agent task delegation, discovery, and status queries
+- **API Security Layer**: Bearer token auth, per-IP rate limiting (60/min default), tool allowlist for remote callers, X-Request-ID headers
+- **Multi-Model Router**: Task-aware model selection — fast model for exploration, powerful for code review, balanced as default. Configurable via `modelRouter` in config.yaml
+- **Semantic Compression**: Context window optimization with importance scoring — removes lowest-value messages first instead of oldest-first. Keeps user intent and tool decisions over assistant commentary
+- **Opt-in Telemetry**: Local JSONL event logging for tool usage, errors, session stats. Default OFF. `/doctor` can show aggregate stats
+
+### Changed
+- Remote server now publishes A2A agent card on startup (auto-discovered by `/agents`)
+- CORS headers include Authorization for token auth
+- Context compression drops messages by importance score instead of chronological order
+
 ## 1.0.0 (2026-04-11)
 
 ### openHarness reaches v1.0

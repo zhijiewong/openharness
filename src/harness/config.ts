@@ -62,6 +62,23 @@ export type OhConfig = {
   memory?: {
     consolidateOnExit?: boolean;  // default true
   };
+  /** Multi-model router — use different models for different task types */
+  modelRouter?: {
+    fast?: string;        // fast/cheap model for exploration (e.g., "ollama/qwen2.5:7b")
+    balanced?: string;    // balanced model for general use (e.g., "gpt-4o-mini")
+    powerful?: string;    // strongest model for final output (e.g., "claude-sonnet-4-6")
+  };
+  /** Opt-in telemetry (default: off) */
+  telemetry?: {
+    enabled?: boolean;     // default false
+    endpoint?: string;     // where to POST events (optional)
+  };
+  /** Remote server security settings */
+  remote?: {
+    tokens?: string[];           // allowed bearer tokens (empty = open access)
+    rateLimit?: number;          // max requests/minute per IP (default 60)
+    allowedTools?: string[];     // tool whitelist for remote callers
+  };
 };
 
 function yamlScalar(value: string): string {
