@@ -27,6 +27,13 @@ const EDIT_SAFE_TOOLS = new Set([
   "ImageRead", "NotebookEdit",
 ]);
 
+/** Parse a tool specifier like "Bash(npm run *)" into tool name + pattern */
+function parseToolSpecifier(specifier: string): { toolName: string; argPattern?: string } {
+  const match = specifier.match(/^(\w+)\((.+)\)$/);
+  if (match) return { toolName: match[1]!, argPattern: match[2]! };
+  return { toolName: specifier };
+}
+
 /** Match a tool name against a pattern (supports trailing * for prefix matching) */
 function matchToolPattern(pattern: string, toolName: string): boolean {
   if (pattern.endsWith("*")) {
@@ -35,23 +42,59 @@ function matchToolPattern(pattern: string, toolName: string): boolean {
   return pattern === toolName;
 }
 
+/**
+ * Match an argument pattern against a value using glob-style matching.
+ * Supports: * (any chars), ** (any path segments)
+ */
+function matchArgGlob(pattern: string, value: string): boolean {
+  // Convert glob to regex: * → [^/]*, ** → .*, escape other regex chars
+  const regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // escape regex chars (except * and ?)
+    .replace(/\*\*/g, '{{DOUBLESTAR}}')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\{\{DOUBLESTAR\}\}/g, '.*');
+  try {
+    return new RegExp(`^${regexStr}$`).test(value);
+  } catch {
+    return false;
+  }
+}
+
 /** Find the first matching tool permission rule */
 function findToolRule(rules: ToolPermissionRule[] | undefined, toolName: string, toolInput?: unknown): ToolPermissionRule | undefined {
   if (!rules || rules.length === 0) return undefined;
   return rules.find(r => {
-    if (!matchToolPattern(r.tool, toolName)) return false;
-    // If rule has a pattern, match against Bash command content only
+    const { toolName: specToolName, argPattern } = parseToolSpecifier(r.tool);
+
+    // Check tool name match (with prefix * support)
+    if (!matchToolPattern(specToolName, toolName)) return false;
+
+    // If rule has an inline argument pattern (e.g., "Bash(npm run *)")
+    if (argPattern && toolInput) {
+      const input = toolInput as Record<string, unknown>;
+
+      // For Bash: match against command string
+      if (toolName === 'Bash' && typeof input.command === 'string') {
+        return matchArgGlob(argPattern, input.command);
+      }
+
+      // For file tools: match against file_path
+      if (['Edit', 'Write', 'Read'].includes(toolName) && typeof input.file_path === 'string') {
+        return matchArgGlob(argPattern, input.file_path);
+      }
+
+      return false; // Has pattern but no matching field
+    }
+
+    // Legacy: separate pattern field (regex) for Bash commands
     if (r.pattern && toolInput && toolName === "Bash") {
       const command = (toolInput as Record<string, unknown>)?.command;
       if (typeof command === "string") {
-        try {
-          return new RegExp(r.pattern).test(command);
-        } catch {
-          return false;
-        }
+        try { return new RegExp(r.pattern).test(command); } catch { return false; }
       }
       return false;
     }
+
     return true;
   });
 }
