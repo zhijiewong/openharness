@@ -43,7 +43,26 @@ const PERMISSION_MODES = [
   { key: "deny",  label: "deny  — read-only, block write/run tools" },
 ];
 
-type Step = "provider" | "apikey" | "baseurl" | "testing" | "model" | "permission" | "gotchi" | "done";
+/** Auto-detect provider from environment variables */
+function detectProviderFromEnv(): number {
+  if (process.env.ANTHROPIC_API_KEY) return PROVIDERS.findIndex(p => p.key === "anthropic");
+  if (process.env.OPENAI_API_KEY) return PROVIDERS.findIndex(p => p.key === "openai");
+  if (process.env.OPENROUTER_API_KEY) return PROVIDERS.findIndex(p => p.key === "openrouter");
+  return 0; // Default to Ollama
+}
+
+/** Get the detected API key for a provider */
+function getEnvApiKey(providerKey: string): string {
+  const envMap: Record<string, string> = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+  };
+  const envVar = envMap[providerKey];
+  return envVar ? (process.env[envVar] ?? '') : '';
+}
+
+type Step = "provider" | "apikey" | "baseurl" | "testing" | "model" | "permission" | "mcp" | "gotchi" | "done";
 
 // ── Component ──
 
@@ -52,8 +71,9 @@ interface Props {
 }
 
 export default function InitWizard({ onDone }: Props) {
+  const detectedIdx = detectProviderFromEnv();
   const [step, setStep] = useState<Step>("provider");
-  const [providerIdx, setProviderIdx] = useState(0);
+  const [providerIdx, setProviderIdx] = useState(detectedIdx);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
@@ -64,6 +84,9 @@ export default function InitWizard({ onDone }: Props) {
   const [permIdx, setPermIdx] = useState(0);
   const [hatchGotchi, setHatchGotchi] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
+  const [suggestedMcp, setSuggestedMcp] = useState<string[]>([]);
+  const [selectedMcp, setSelectedMcp] = useState<Set<string>>(new Set());
+  const [mcpIdx, setMcpIdx] = useState(0);
 
   const provider = PROVIDERS[providerIdx]!;
 
@@ -76,9 +99,16 @@ export default function InitWizard({ onDone }: Props) {
       if (key.return) {
         setBaseUrl(provider.defaultBaseUrl ?? "");
         setModel(provider.defaultModel);
+        // Auto-fill API key from environment if available
+        const envKey = getEnvApiKey(provider.key);
+        if (envKey) setApiKey(envKey);
+
         if (!provider.needsApiKey) {
-          // Skip API key, go straight to testing
           runTest(provider, "", provider.defaultBaseUrl ?? "");
+          setStep("testing");
+        } else if (envKey) {
+          // Have env API key — skip manual entry, go to testing
+          runTest(provider, envKey, provider.defaultBaseUrl ?? "");
           setStep("testing");
         } else {
           setStep("apikey");
@@ -89,7 +119,31 @@ export default function InitWizard({ onDone }: Props) {
     if (step === "permission") {
       if (key.upArrow) setPermIdx(i => Math.max(0, i - 1));
       if (key.downArrow) setPermIdx(i => Math.min(PERMISSION_MODES.length - 1, i + 1));
+      if (key.return) {
+        // Suggest popular MCP servers
+        setSuggestedMcp(['github', 'memory', 'fetch', 'sequential-thinking', 'brave-search']);
+        setMcpIdx(0);
+        setSelectedMcp(new Set());
+        setStep("mcp");
+      }
+    }
+
+    if (step === "mcp") {
+      if (key.upArrow) setMcpIdx(i => Math.max(0, i - 1));
+      if (key.downArrow) setMcpIdx(i => Math.min(suggestedMcp.length - 1, i + 1));
+      if (input === " ") {
+        // Toggle selection
+        const name = suggestedMcp[mcpIdx];
+        if (name) {
+          setSelectedMcp(prev => {
+            const next = new Set(prev);
+            if (next.has(name)) next.delete(name); else next.add(name);
+            return next;
+          });
+        }
+      }
       if (key.return) setStep("gotchi");
+      if (input === "s" || input === "S") setStep("gotchi"); // Skip
     }
 
     if (step === "model" && availableModels.length > 0) {
@@ -138,16 +192,35 @@ export default function InitWizard({ onDone }: Props) {
 
   const writeFinal = useCallback(() => {
     const selectedModel = availableModels.length > 0 ? (availableModels[modelIdx] ?? model) : model;
+
+    // Build MCP server configs from selected registry entries
+    let mcpServers: any[] | undefined;
+    if (selectedMcp.size > 0) {
+      try {
+        const { MCP_REGISTRY } = require('../mcp/registry.js');
+        mcpServers = [...selectedMcp]
+          .map(name => MCP_REGISTRY.find((e: any) => e.name === name))
+          .filter(Boolean)
+          .map((e: any) => ({
+            name: e.name,
+            command: 'npx',
+            args: ['-y', e.package, ...(e.args ?? [])],
+            ...(e.envVars?.length ? { env: Object.fromEntries(e.envVars.map((v: string) => [v, `YOUR_${v}`])) } : {}),
+          }));
+      } catch { /* ignore */ }
+    }
+
     writeOhConfig({
       provider: provider.key,
       model: selectedModel || provider.defaultModel,
       permissionMode: PERMISSION_MODES[permIdx]!.key as any,
       ...(apiKey ? { apiKey } : {}),
       ...(baseUrl ? { baseUrl } : {}),
+      ...(mcpServers?.length ? { mcpServers } : {}),
     });
     setStep("done");
     setTimeout(() => onDone?.(), 1500);
-  }, [provider, model, availableModels, modelIdx, permIdx, apiKey, baseUrl]);
+  }, [provider, model, availableModels, modelIdx, permIdx, apiKey, baseUrl, selectedMcp]);
 
   // ── Render ──
 
@@ -172,7 +245,7 @@ export default function InitWizard({ onDone }: Props) {
 
       {step === "provider" && (
         <Box flexDirection="column">
-          <Text>Select provider:</Text>
+          <Text>Select provider:{detectedIdx > 0 ? <Text dimColor> (auto-detected from env)</Text> : ''}</Text>
           {PROVIDERS.map((p, i) => (
             <Text key={p.key} color={i === providerIdx ? "cyan" : undefined}>
               {i === providerIdx ? "▶ " : "  "}{p.label}
@@ -310,6 +383,22 @@ export default function InitWizard({ onDone }: Props) {
           ))}
           <Text> </Text>
           <Text dimColor>↑↓ navigate  Enter select</Text>
+        </Box>
+      )}
+
+      {step === "mcp" && (
+        <Box flexDirection="column">
+          <Text>Add MCP servers? <Text dimColor>(Space to toggle, Enter to confirm, S to skip)</Text></Text>
+          <Text> </Text>
+          {suggestedMcp.map((name, i) => (
+            <Text key={name} color={i === mcpIdx ? "cyan" : undefined}>
+              {i === mcpIdx ? "▶ " : "  "}
+              {selectedMcp.has(name) ? "[✓] " : "[ ] "}
+              {name}
+            </Text>
+          ))}
+          <Text> </Text>
+          <Text dimColor>↑↓ navigate  Space toggle  Enter confirm  S skip</Text>
         </Box>
       )}
 

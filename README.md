@@ -611,6 +611,49 @@ Create `.oh/RULES.md` in any repo (or run `oh init`):
 
 Rules load automatically into every session.
 
+## Skills & Plugins
+
+### Skills
+
+Skills are markdown files with YAML frontmatter that add reusable behaviors:
+
+```markdown
+---
+name: deploy
+description: Deploy the application to production
+trigger: deploy
+tools: [Bash, Read]
+---
+
+Run the deploy script with health checks...
+```
+
+**Locations** (searched in order):
+1. `.oh/skills/` — project-level skills
+2. `~/.oh/skills/` — global skills (available in all projects)
+
+Skills auto-trigger when the user's message contains the trigger keyword, or can be invoked explicitly with `/skill deploy`.
+
+### Plugins
+
+Plugins are npm packages that bundle skills, hooks, and MCP servers:
+
+```json
+{
+  "name": "my-openharness-plugin",
+  "version": "1.0.0",
+  "skills": ["skills/deploy.md", "skills/review.md"],
+  "hooks": {
+    "sessionStart": "scripts/setup.sh"
+  },
+  "mcpServers": [
+    { "name": "my-api", "command": "npx", "args": ["-y", "@my-org/mcp-server"] }
+  ]
+}
+```
+
+Save as `openharness-plugin.json` in your npm package root. Install with `npm install`, and openHarness discovers it automatically from `node_modules/`.
+
 ## How It Works
 
 ```mermaid
