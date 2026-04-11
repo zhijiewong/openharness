@@ -95,6 +95,33 @@ export function parseScheduleMs(schedule: string): number | null {
   return null;
 }
 
+// ── Result Persistence ──
+
+const HISTORY_DIR = join(CRON_DIR, 'history');
+
+/** Save a cron execution result to history */
+export function saveCronResult(result: CronResult): void {
+  mkdirSync(HISTORY_DIR, { recursive: true });
+  const filename = `${result.cronId}-${result.timestamp}.json`;
+  writeFileSync(join(HISTORY_DIR, filename), JSON.stringify(result, null, 2));
+}
+
+/** Get execution history for a cron (most recent first) */
+export function getCronHistory(cronId: string, limit = 10): CronResult[] {
+  if (!existsSync(HISTORY_DIR)) return [];
+  return readdirSync(HISTORY_DIR)
+    .filter(f => f.startsWith(`${cronId}-`) && f.endsWith('.json'))
+    .sort()
+    .reverse()
+    .slice(0, limit)
+    .map(f => {
+      try {
+        return JSON.parse(readFileSync(join(HISTORY_DIR, f), 'utf-8')) as CronResult;
+      } catch { return null; }
+    })
+    .filter((r): r is CronResult => r !== null);
+}
+
 /**
  * Check which crons are due to run based on their schedule and lastRun.
  */

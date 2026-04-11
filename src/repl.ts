@@ -73,6 +73,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   const { initCheckpoints } = await import('./harness/checkpoints.js');
   initCheckpoints(session.id);
 
+  // Start background cron executor
+  const { CronExecutor } = await import('./services/CronExecutor.js');
+  const cronExecutor = new CronExecutor(
+    config.provider, config.tools, config.systemPrompt,
+    config.permissionMode, config.model,
+  );
+  cronExecutor.start();
+
   const cost = new CostTracker();
   let cachedConfig = readOhConfig();
 
@@ -849,6 +857,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
+    cronExecutor.stop();
     renderer.stop();
     session.messages = messages;
     session.totalCost = cost.totalCost;

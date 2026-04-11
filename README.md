@@ -391,6 +391,58 @@ Every file modification is automatically checkpointed before execution. If somet
 
 Checkpoints are stored in `.oh/checkpoints/` and cover FileWrite, FileEdit, and Bash commands that modify files.
 
+## Verification Loops
+
+After every file edit (Edit, Write, MultiEdit), openHarness automatically runs language-appropriate lint/typecheck commands and feeds the results back into the agent context. This is the single highest-impact harness engineering pattern — research shows 2-3x quality improvement from automated feedback.
+
+**Auto-detection** — if your project has `tsconfig.json`, `.eslintrc*`, `pyproject.toml`, `go.mod`, or `Cargo.toml`, verification rules are detected automatically. No configuration needed.
+
+**Custom rules** via `.oh/config.yaml`:
+
+```yaml
+verification:
+  enabled: true       # default: true (auto-detect)
+  mode: warn          # 'warn' appends to output, 'block' marks as error
+  rules:
+    - extensions: [".ts", ".tsx"]
+      lint: "npx tsc --noEmit 2>&1 | head -20"
+      timeout: 15000
+    - extensions: [".py"]
+      lint: "ruff check {file} 2>&1 | head -10"
+```
+
+The agent sees `[Verification passed]` or `[Verification FAILED]` with the linter output after each edit, enabling self-correction.
+
+## Memory Consolidation
+
+On session exit, openHarness automatically prunes stale memories using temporal decay:
+
+- Memories not accessed in 30+ days lose 0.1 relevance per 30-day period
+- Memories below 0.1 relevance are permanently deleted
+- Updated relevance scores are persisted to memory files
+
+This keeps the memory system lean and relevant. Configure in `.oh/config.yaml`:
+
+```yaml
+memory:
+  consolidateOnExit: true   # default: true
+```
+
+## Scheduled Tasks (Cron)
+
+Create recurring tasks that run automatically in the background:
+
+```
+# Via slash commands
+/cron list                    # show all scheduled tasks
+/cron create "check-tests"    # create a new task (interactive)
+/cron delete <id>             # remove a task
+```
+
+**Schedule syntax:** `every 5m`, `every 2h`, `every 1d`
+
+The cron executor checks every 60 seconds for due tasks and runs them via sub-queries. Results are stored in `~/.oh/crons/history/`.
+
 ## Agent Roles
 
 Dispatch specialized sub-agents for focused tasks:
@@ -399,16 +451,22 @@ Dispatch specialized sub-agents for focused tasks:
 /roles            # list all available roles
 ```
 
-| Role | Description |
-|------|-------------|
-| `code-reviewer` | Find bugs, security issues, style problems |
-| `test-writer` | Generate unit and integration tests |
-| `docs-writer` | Write documentation and comments |
-| `debugger` | Systematic bug investigation |
-| `refactorer` | Simplify code without changing behavior |
-| `security-auditor` | OWASP, injection, secrets, CVE scanning |
+| Role | Description | Tools |
+|------|-------------|-------|
+| `code-reviewer` | Find bugs, security issues, style problems | Read-only |
+| `test-writer` | Generate unit and integration tests | Read + Write |
+| `docs-writer` | Write documentation and comments | Read + Write + Edit |
+| `debugger` | Systematic bug investigation | Read-only + Bash |
+| `refactorer` | Simplify code without changing behavior | All file tools + Bash |
+| `security-auditor` | OWASP, injection, secrets, CVE scanning | Read-only + Bash |
+| `evaluator` | Evaluate code quality and run tests (read-only) | Read-only + Bash + Diagnostics |
 
-The LLM can dispatch these via `Agent({ subagent_type: 'code-reviewer', prompt: '...' })`.
+Each role restricts the sub-agent to only its suggested tools. You can also pass `allowed_tools` explicitly:
+
+```
+Agent({ subagent_type: 'evaluator', prompt: 'Run all tests and report results' })
+Agent({ allowed_tools: ['Read', 'Grep'], prompt: 'Search for all TODO comments' })
+```
 
 ## Headless Mode
 
