@@ -42,7 +42,7 @@ AI coding agent in your terminal. Works with any LLM -- free local models or clo
 
 ---
 
-<video src="https://github.com/user-attachments/assets/1ca98086-5d36-4c79-ad58-5bccd32adbf5" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/1ca98086-5d36-4c79-ad58-5bccd32adbf5" autoplay loop muted playsinline width="100%"></video>
 
 *OpenHarness reading files, running commands, and editing code — powered by a local Ollama model.*
 
