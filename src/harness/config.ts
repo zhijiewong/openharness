@@ -4,6 +4,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { parse, stringify } from "yaml";
 import type { PermissionMode } from "../types/permissions.js";
 
@@ -80,34 +81,61 @@ export function invalidateConfigCache(): void {
   _configCacheRoot = undefined;
 }
 
+/** Path to global config: ~/.oh/config.yaml */
+function globalConfigPath(): string {
+  return join(homedir(), '.oh', 'config.yaml');
+}
+
+/** Read global config as fallback defaults */
+function readGlobalConfig(): Partial<OhConfig> | null {
+  const p = globalConfigPath();
+  if (!existsSync(p)) return null;
+  try {
+    return parse(readFileSync(p, 'utf-8')) as Partial<OhConfig>;
+  } catch { return null; }
+}
+
 export function readOhConfig(root?: string): OhConfig | null {
   const effectiveRoot = root ?? ".";
   if (_configCache !== undefined && _configCacheRoot === effectiveRoot) return _configCache;
 
   const p = configPath(root);
-  if (!existsSync(p)) { _configCache = null; _configCacheRoot = effectiveRoot; return null; }
-  try {
-    const base = parse(readFileSync(p, "utf-8")) as OhConfig;
 
-    // Merge local overrides from config.local.yaml (gitignored personal settings)
-    const localPath = join(root ?? ".", ".oh", "config.local.yaml");
-    if (existsSync(localPath)) {
-      try {
-        const local = parse(readFileSync(localPath, "utf-8")) as Partial<OhConfig>;
-        if (local) {
-          const merged = { ...base, ...local } as OhConfig;
-          _configCache = merged; _configCacheRoot = effectiveRoot;
-          return merged;
-        }
-      } catch { /* ignore malformed local config */ }
-    }
+  // Layer 1: Global defaults from ~/.oh/config.yaml
+  const globalCfg = readGlobalConfig();
 
-    _configCache = base; _configCacheRoot = effectiveRoot;
-    return base;
-  } catch {
+  // Layer 2: Project config from .oh/config.yaml
+  let projectCfg: OhConfig | null = null;
+  if (existsSync(p)) {
+    try {
+      projectCfg = parse(readFileSync(p, "utf-8")) as OhConfig;
+    } catch { /* ignore malformed project config */ }
+  }
+
+  // If neither exists, no config
+  if (!globalCfg && !projectCfg) {
     _configCache = null; _configCacheRoot = effectiveRoot;
     return null;
   }
+
+  // Merge: global → project (project overrides global)
+  const base = { ...globalCfg, ...projectCfg } as OhConfig;
+
+  // Layer 3: Local overrides from .oh/config.local.yaml (gitignored personal settings)
+  const localPath = join(root ?? ".", ".oh", "config.local.yaml");
+  if (existsSync(localPath)) {
+    try {
+      const local = parse(readFileSync(localPath, "utf-8")) as Partial<OhConfig>;
+      if (local) {
+        const merged = { ...base, ...local } as OhConfig;
+        _configCache = merged; _configCacheRoot = effectiveRoot;
+        return merged;
+      }
+    } catch { /* ignore malformed local config */ }
+  }
+
+  _configCache = base; _configCacheRoot = effectiveRoot;
+  return base;
 }
 
 export function writeOhConfig(cfg: OhConfig, root?: string): void {

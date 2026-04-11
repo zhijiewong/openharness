@@ -561,6 +561,31 @@ oh --model llamacpp/my-model
 oh models                    # list available models
 ```
 
+## Configuration Hierarchy
+
+Config is loaded in layers (later overrides earlier):
+
+1. **Global** `~/.oh/config.yaml` — default provider, model, theme for all projects
+2. **Project** `.oh/config.yaml` — project-specific settings
+3. **Local** `.oh/config.local.yaml` — personal overrides (gitignored)
+
+Set your default provider once globally:
+
+```yaml
+# ~/.oh/config.yaml
+provider: ollama
+model: llama3
+permissionMode: ask
+theme: dark
+```
+
+Then per-project configs only need what's different:
+
+```yaml
+# .oh/config.yaml
+model: codellama   # override just the model
+```
+
 ## Project Rules
 
 Create `.oh/RULES.md` in any repo (or run `oh init`):
