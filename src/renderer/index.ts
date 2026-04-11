@@ -117,6 +117,7 @@ export class TerminalRenderer {
     if (!this.started) return;
     this.started = false;
     if (this.animationTimer) { clearInterval(this.animationTimer); this.animationTimer = null; }
+    if (this.renderTimer) { clearTimeout(this.renderTimer); this.renderTimer = null; }
     if (this.resizeHandler) { process.stdout.off('resize', this.resizeHandler); this.resizeHandler = null; }
     if (this.stopInput) { this.stopInput(); this.stopInput = null; }
     for (const t of this.notifyTimers) clearTimeout(t);
@@ -366,13 +367,38 @@ export class TerminalRenderer {
 
   // ── Rendering ──
 
+  private renderTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastRenderTime = 0;
+  private static readonly FRAME_MS = 16; // ~60fps
+
+  /**
+   * Schedule a render at ~60fps. Multiple calls within a frame are batched.
+   * This prevents excessive re-renders during fast token streaming.
+   */
   private scheduleRender(): void {
     if (this.renderPending || !this.started) return;
     this.renderPending = true;
-    queueMicrotask(() => {
-      this.renderPending = false;
-      if (this.started) this.render();
-    });
+
+    const now = Date.now();
+    const elapsed = now - this.lastRenderTime;
+
+    if (elapsed >= TerminalRenderer.FRAME_MS) {
+      // Enough time has passed — render on next microtask (no delay)
+      queueMicrotask(() => {
+        this.renderPending = false;
+        this.lastRenderTime = Date.now();
+        if (this.started) this.render();
+      });
+    } else {
+      // Too soon — debounce to next frame boundary
+      const delay = TerminalRenderer.FRAME_MS - elapsed;
+      this.renderTimer = setTimeout(() => {
+        this.renderTimer = null;
+        this.renderPending = false;
+        this.lastRenderTime = Date.now();
+        if (this.started) this.render();
+      }, delay);
+    }
   }
 
   /** Apply lightweight markdown styling to a line for scrollback output */

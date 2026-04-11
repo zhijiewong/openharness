@@ -543,16 +543,61 @@ register("doctor", "Run diagnostic health checks", (_args, ctx) => {
   lines.push(`  Messages:      ${ctx.messages.length}`);
   lines.push(`  Cost:          $${ctx.totalCost.toFixed(4)}`);
 
-  // Disk space (basic check)
+  // Disk space & storage
   try {
-    const { statSync } = require("node:fs");
     const ohDir = join(homedir(), ".oh");
     if (existsSync(ohDir)) {
-      const sessions = readdirSync(join(ohDir, "sessions")).length;
-      lines.push(`  Sessions:      ${sessions} saved`);
-      if (sessions > 80) issues.push(`${sessions} saved sessions. Consider cleaning old ones.`);
+      const sessionsDir = join(ohDir, "sessions");
+      const sessCount = existsSync(sessionsDir) ? readdirSync(sessionsDir).filter(f => f.endsWith('.json')).length : 0;
+      lines.push(`  Sessions:      ${sessCount} saved`);
+      if (sessCount > 80) issues.push(`${sessCount} saved sessions. Consider cleaning old ones.`);
+
+      // Memory stats
+      const memDir = join(ohDir, "memory");
+      const memCount = existsSync(memDir) ? readdirSync(memDir).filter(f => f.endsWith('.md')).length : 0;
+      lines.push(`  Memories:      ${memCount} global`);
+
+      // Cron stats
+      const cronDir = join(ohDir, "crons");
+      const cronCount = existsSync(cronDir) ? readdirSync(cronDir).filter(f => f.endsWith('.json')).length : 0;
+      lines.push(`  Cron tasks:    ${cronCount}`);
     }
   } catch { /* ignore */ }
+
+  // Project-level stats
+  try {
+    const projMemDir = join(".oh", "memory");
+    const projMemCount = existsSync(projMemDir) ? readdirSync(projMemDir).filter(f => f.endsWith('.md')).length : 0;
+    if (projMemCount > 0) lines.push(`  Project mems:  ${projMemCount}`);
+
+    const skillsDir = join(".oh", "skills");
+    const skillCount = existsSync(skillsDir) ? readdirSync(skillsDir).filter(f => f.endsWith('.md')).length : 0;
+    if (skillCount > 0) lines.push(`  Skills:        ${skillCount}`);
+  } catch { /* ignore */ }
+
+  // Global config
+  const globalCfg = existsSync(join(homedir(), ".oh", "config.yaml"));
+  lines.push(`  Global config: ${globalCfg ? "~/.oh/config.yaml ✓" : "not set (optional)"}`);
+
+  // Verification config
+  try {
+    const { getVerificationConfig } = require('../harness/verification.js');
+    const vCfg = getVerificationConfig();
+    if (vCfg?.enabled) {
+      lines.push(`  Verification:  ✓ (${vCfg.rules.length} rules, mode: ${vCfg.mode})`);
+    } else {
+      lines.push(`  Verification:  off (no rules detected)`);
+    }
+  } catch { /* ignore */ }
+
+  // Tools
+  lines.push("");
+  lines.push(`  Tools:         ${ctx.messages.length > 0 ? 'ready' : 'loaded'}`);
+
+  // Node.js version
+  lines.push(`  Node.js:       ${process.version}`);
+  const [major] = process.version.slice(1).split('.').map(Number);
+  if (major && major < 18) issues.push(`Node.js ${process.version} is below minimum (18+). Upgrade Node.js.`);
 
   // Issues summary
   if (issues.length > 0) {
@@ -651,6 +696,58 @@ function setPinned(args: string, ctx: CommandContext, pinned: boolean): CommandR
 
 register("pin", "Pin a message (survives /compact)", (args, ctx) => setPinned(args, ctx, true));
 register("unpin", "Unpin a message", (args, ctx) => setPinned(args, ctx, false));
+
+register("plugins", "List installed plugins and discover new ones", (args) => {
+  const { discoverPlugins, discoverSkills } = require('../harness/plugins.js');
+
+  const query = args.trim();
+
+  if (query === 'search' || query.startsWith('search ')) {
+    // npm registry search
+    const keyword = query.replace(/^search\s*/, '').trim() || 'openharness-plugin';
+    return {
+      output: `To discover plugins, search npm:\n\n  npm search openharness-plugin${keyword !== 'openharness-plugin' ? ' ' + keyword : ''}\n\nInstall with:\n  npm install <package-name>\n\nPlugins are auto-discovered from node_modules/ if they contain openharness-plugin.json.`,
+      handled: true,
+    };
+  }
+
+  // List installed
+  const plugins = discoverPlugins();
+  const skills = discoverSkills();
+
+  const lines: string[] = [];
+
+  if (plugins.length > 0) {
+    lines.push(`Installed Plugins (${plugins.length}):`);
+    for (const p of plugins) {
+      lines.push(`  ${p.name}@${p.version} — ${p.description || 'no description'}`);
+      if (p.skills?.length) lines.push(`    Skills: ${p.skills.length}`);
+      if (p.mcpServers?.length) lines.push(`    MCP servers: ${p.mcpServers.map((s: any) => s.name).join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  if (skills.length > 0) {
+    lines.push(`Available Skills (${skills.length}):`);
+    const bySource: Record<string, typeof skills> = {};
+    for (const s of skills) {
+      (bySource[s.source] ??= []).push(s);
+    }
+    for (const [source, sourceSkills] of Object.entries(bySource)) {
+      lines.push(`  ${source}:`);
+      for (const s of sourceSkills) {
+        lines.push(`    ${s.name} — ${s.description}${s.trigger ? ` (trigger: "${s.trigger}")` : ''}`);
+      }
+    }
+  } else if (plugins.length === 0) {
+    lines.push('No plugins or skills installed.');
+    lines.push('');
+    lines.push('Create skills in .oh/skills/ or ~/.oh/skills/');
+    lines.push('Run /plugins search to find npm packages.');
+  }
+
+  return { output: lines.join('\n'), handled: true };
+});
 
 // ── Command Parser ──
 
