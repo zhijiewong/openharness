@@ -89,6 +89,14 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   );
   cronExecutor.start();
 
+  // A2A: publish agent card for cross-process discovery
+  const { createSessionCard, publishCard, unpublishCard } = await import('./services/a2a.js');
+  const agentCard = createSessionCard(session.id, {
+    provider: config.provider.name,
+    model: config.model,
+  });
+  publishCard(agentCard);
+
   const cost = new CostTracker();
   let cachedConfig = readOhConfig();
 
@@ -870,6 +878,7 @@ export async function startREPL(config: REPLConfig): Promise<void> {
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
+    unpublishCard(agentCard.id);
     cronExecutor.stop();
     renderer.stop();
     session.messages = messages;

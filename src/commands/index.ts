@@ -70,7 +70,7 @@ register("help", "Show available commands", () => {
     'Git': ['diff', 'undo', 'rewind', 'commit', 'log'],
     'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory', 'doctor', 'context', 'mcp', 'mcp-registry'],
     'Settings': ['theme', 'vim', 'companion', 'fast', 'keys'],
-    'AI': ['plan', 'review', 'roles'],
+    'AI': ['plan', 'review', 'roles', 'agents', 'plugins'],
     'Pet': ['cybergotchi'],
   };
   const lines: string[] = [];
@@ -406,6 +406,31 @@ register("roles", "List available agent specialization roles", () => {
     lines.push('');
   }
   lines.push("Usage: Agent({ subagent_type: 'code-reviewer', prompt: '...' })");
+  return { output: lines.join("\n"), handled: true };
+});
+
+register("agents", "Discover running openHarness agents on this machine", () => {
+  const { discoverAgents } = require('../services/a2a.js');
+  const agents = discoverAgents();
+
+  if (agents.length === 0) {
+    return { output: "No other openHarness agents running on this machine.\n\nOther oh sessions will appear here automatically via the A2A protocol.", handled: true };
+  }
+
+  const lines = [`Running Agents (${agents.length}):\n`];
+  for (const agent of agents) {
+    const age = Math.round((Date.now() - agent.registeredAt) / 60_000);
+    lines.push(`  ${agent.name}`);
+    lines.push(`    ID:       ${agent.id}`);
+    lines.push(`    Provider: ${agent.provider ?? 'unknown'} / ${agent.model ?? 'unknown'}`);
+    lines.push(`    Dir:      ${agent.workingDir ?? 'unknown'}`);
+    lines.push(`    Endpoint: ${agent.endpoint.type}${agent.endpoint.port ? ':' + agent.endpoint.port : ''}`);
+    lines.push(`    Uptime:   ${age}m`);
+    lines.push(`    Caps:     ${agent.capabilities.map((c: any) => c.name).join(', ')}`);
+    lines.push('');
+  }
+
+  lines.push("Send messages with: Agent({ prompt: 'ask the other agent...', allowed_tools: ['SendMessage'] })");
   return { output: lines.join("\n"), handled: true };
 });
 
