@@ -1,13 +1,39 @@
+# Source (dist/ has compiled output)
 src/
+tsconfig.json
+tsconfig*.json
+
+# Tests (source and compiled)
+**/*.test.ts
+**/*.test.js
+**/*.test.d.ts
+**/*.test.d.ts.map
+**/*.test.js.map
+**/test-helpers.*
+
+# Source maps (not needed for consumers)
+**/*.js.map
+**/*.d.ts.map
+
+# Dev directories
+.github/
 .claude/
 .oh/
 .git/
 .gitignore
-.pytest_cache/
+.worktrees/
+coverage/
+scripts/
+vscode-extension/
 python/
 packages/
-node_modules/
-tsconfig.json
-tsconfig*.json
-*.test.ts
 docs/
+node_modules/
+.pytest_cache/
+
+# Dev files
+demo.tape
+ttyd.exe
+vhs.exe
+*.tgz
+CONTRIBUTING.md
