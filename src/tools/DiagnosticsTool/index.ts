@@ -4,8 +4,8 @@ import { LspClient } from "../../lsp/client.js";
 
 const inputSchema = z.object({
   file_path: z.string().describe("Absolute path to the file to check"),
-  action: z.enum(["diagnostics", "definition", "references"]).default("diagnostics")
-    .describe("Action: diagnostics (errors/warnings), definition (go-to-def), references (find-refs)"),
+  action: z.enum(["diagnostics", "definition", "references", "hover"]).default("diagnostics")
+    .describe("Action: diagnostics (errors/warnings), definition (go-to-def), references (find-refs), hover (type info)"),
   line: z.number().optional().describe("Line number (0-indexed) for definition/references"),
   character: z.number().optional().describe("Column number (0-indexed) for definition/references"),
 });
@@ -19,6 +19,12 @@ function getLspCommand(filePath: string): { command: string; args: string[] } | 
   }
   if (filePath.endsWith('.py')) {
     return { command: 'pylsp', args: [] };
+  }
+  if (filePath.endsWith('.go')) {
+    return { command: 'gopls', args: ['serve'] };
+  }
+  if (filePath.endsWith('.rs')) {
+    return { command: 'rust-analyzer', args: [] };
   }
   return null;
 }
@@ -97,6 +103,27 @@ export const DiagnosticsTool: Tool<typeof inputSchema> = {
         return { output: `${refs.length} reference(s):\n${lines.join('\n')}`, isError: false };
       }
 
+      if (input.action === "hover") {
+        if (input.line === undefined || input.character === undefined) {
+          return { output: "line and character are required for hover.", isError: true };
+        }
+        await client.openFile(input.file_path);
+        // Hover uses textDocument/hover which returns MarkupContent
+        try {
+          const result = await (client as any).send('textDocument/hover', {
+            textDocument: { uri: `file://${input.file_path.replace(/\\/g, '/')}` },
+            position: { line: input.line, character: input.character },
+          });
+          if (!result || !result.contents) return { output: "No hover information.", isError: false };
+          const content = typeof result.contents === 'string'
+            ? result.contents
+            : result.contents.value ?? JSON.stringify(result.contents);
+          return { output: content, isError: false };
+        } catch {
+          return { output: "Hover not supported by this language server.", isError: false };
+        }
+      }
+
       return { output: `Unknown action: ${input.action}`, isError: true };
     } catch (err) {
       return {
@@ -107,14 +134,15 @@ export const DiagnosticsTool: Tool<typeof inputSchema> = {
   },
 
   prompt() {
-    return `Get code intelligence from the language server. Actions:
+    return `Get code intelligence from the language server. Supports TypeScript, JavaScript, Python, Go, and Rust. Actions:
 - diagnostics: Get errors and warnings for a file
-- definition: Go to definition of a symbol at a given position (requires line, character)
-- references: Find all references to a symbol at a given position (requires line, character)
+- definition: Go to definition of a symbol at a given position
+- references: Find all references to a symbol at a given position
+- hover: Get type information and documentation for a symbol
 Parameters:
 - file_path (string, required): Absolute path to the file
-- action (string): "diagnostics" | "definition" | "references" (default: diagnostics)
-- line (number, optional): 0-indexed line for definition/references
-- character (number, optional): 0-indexed column for definition/references`;
+- action (string): "diagnostics" | "definition" | "references" | "hover" (default: diagnostics)
+- line (number, optional): 0-indexed line for definition/references/hover
+- character (number, optional): 0-indexed column for definition/references/hover`;
   },
 };

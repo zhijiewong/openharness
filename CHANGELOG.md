@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0 (2026-04-11) — Full Claude Code Parity
+
+### Added
+- **12 Hook Events** (was 4): fileChanged, cwdChanged, subagentStart/Stop, preCompact/postCompact, configChange, notification
+- **HTTP + Prompt Hook Types**: hooks can now POST to URLs or use LLM yes/no checks, not just shell commands
+- **Path-Scoped Rules**: `.oh/rules/*.md` with `paths:` frontmatter for monorepo-aware instructions
+- **@file References**: `@README.md` in prompts injects file content (up to 10KB)
+- **Permission Specifiers**: `Bash(npm run *)`, `Edit(src/**/*.ts)` — glob-style argument matching in permission rules
+- **Interactive Rewind**: `/rewind` shows numbered checkpoint list; `/rewind <n>` restores to specific point
+- **PowerShell Tool**: Windows-native PowerShell execution (deferred, win32 only)
+- **Monitor Tool**: Watch background processes with optional regex filtering and output streaming
+- **--json-schema**: CLI flag for constrained structured output in headless mode
+- **LSP Enhancements**: Added hover action and support for Go (gopls) and Rust (rust-analyzer) language servers
+
+### Summary
+This release closes all 10 identified gaps with Claude Code, achieving full feature parity as an open-source alternative. 39 tools, 10+ agent roles, 677 tests.
+
 ## 1.3.0 (2026-04-11)
 
 ### Added
