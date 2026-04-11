@@ -18,8 +18,11 @@ export type McpServerConfig = {
 };
 
 export type HookDef = {
-  command: string;
-  match?: string; // tool name pattern for preToolUse/postToolUse
+  command?: string;      // shell command hook
+  http?: string;         // HTTP POST hook (URL)
+  prompt?: string;       // LLM prompt hook (yes/no question)
+  match?: string;        // tool name pattern filter
+  timeout?: number;      // timeout in ms (default 10000)
 };
 
 export type HooksConfig = {
@@ -27,6 +30,14 @@ export type HooksConfig = {
   sessionEnd?: HookDef[];
   preToolUse?: HookDef[];
   postToolUse?: HookDef[];
+  fileChanged?: HookDef[];
+  cwdChanged?: HookDef[];
+  subagentStart?: HookDef[];
+  subagentStop?: HookDef[];
+  preCompact?: HookDef[];
+  postCompact?: HookDef[];
+  configChange?: HookDef[];
+  notification?: HookDef[];
 };
 
 export type ToolPermissionRule = {
@@ -157,6 +168,8 @@ export function readOhConfig(root?: string): OhConfig | null {
 
 export function writeOhConfig(cfg: OhConfig, root?: string): void {
   invalidateConfigCache();
+  // Emit configChange hook (lazy import to avoid circular dependency)
+  try { require('./hooks.js').emitHook('configChange', {}); } catch { /* ignore */ }
   const p = configPath(root);
   mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
 

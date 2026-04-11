@@ -108,6 +108,14 @@ export async function executeSingleTool(
       toolOutput: result.output.slice(0, 1000),
     });
 
+    // Emit fileChanged hook for file-modifying tools
+    if (!result.isError && ['Edit', 'Write', 'MultiEdit'].includes(tool.name)) {
+      const filePaths = getAffectedFiles(tool.name, parsed.data as Record<string, unknown>);
+      for (const fp of filePaths) {
+        emitHook("fileChanged", { filePath: fp, toolName: tool.name });
+      }
+    }
+
     // Verification loop: auto-run lint/typecheck after file-modifying tools
     let verificationSuffix = '';
     if (!result.isError && ['Edit', 'Write', 'MultiEdit'].includes(tool.name)) {

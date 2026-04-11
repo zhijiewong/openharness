@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
 import { createWorktree, removeWorktree, hasWorktreeChanges, isGitRepo } from "../../git/index.js";
+import { emitHook } from "../../harness/hooks.js";
 
 const inputSchema = z.object({
   prompt: z.string(),
@@ -92,9 +93,12 @@ export const AgentTool: Tool<typeof inputSchema> = {
       abortSignal: context.abortSignal,
     };
 
+    const agentId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    emitHook("subagentStart", { agentId, toolName: input.subagent_type ?? 'general' });
+
     // Background execution: start agent and return immediately
     if (input.run_in_background) {
-      const bgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const bgId = agentId;
       const runAgent = async () => {
         let finalText = "";
         const originalCwd = process.cwd();
@@ -184,6 +188,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
       }
     }
 
+    emitHook("subagentStop", { agentId });
     return { output: finalText || "(sub-agent completed with no text output)", isError: false };
   },
 

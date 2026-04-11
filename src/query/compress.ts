@@ -7,6 +7,7 @@ import type { Message } from "../types/message.js";
 import type { Provider } from "../providers/base.js";
 import { createUserMessage } from "../types/message.js";
 import { defaultEstimateTokens } from "../providers/base.js";
+import { emitHook } from "../harness/hooks.js";
 
 const DEFAULT_KEEP_LAST = 10;
 
@@ -70,6 +71,8 @@ export function estimateMessagesTokens(
 export function compressMessages(messages: Message[], targetTokens: number): Message[] {
   if (messages.length <= 2) return messages;
 
+  emitHook("preCompact", {});
+
   const result = [...messages];
   const keepLast = DEFAULT_KEEP_LAST;
 
@@ -121,11 +124,14 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
       for (const tc of msg.toolCalls) validCallIds.add(tc.id);
     }
   }
-  return result.filter((msg) => {
+  const filtered = result.filter((msg) => {
     if (msg.role !== "tool") return true;
     return (msg.toolResults?.length ?? 0) > 0 &&
            msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
   });
+
+  emitHook("postCompact", {});
+  return filtered;
 }
 
 /**

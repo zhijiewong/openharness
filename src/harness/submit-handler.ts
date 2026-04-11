@@ -106,13 +106,31 @@ export async function handleUserInput(
   // Normal prompt — add user message
   messages = [...messages, createUserMessage(input)];
 
-  // Resolve @mentions
+  // Resolve @mentions — local files first, then MCP resources
   let resolvedInput = input;
-  const mentionPattern = /@(\w[\w.-]*)/g;
+  const mentionPattern = /@([\w][\w./-]*)/g;
   const mentions = [...input.matchAll(mentionPattern)].map(m => m[1]!);
   const companionName = ctx.companionConfig?.soul?.name?.toLowerCase();
+
   for (const mention of mentions) {
     if (companionName && mention.toLowerCase() === companionName) continue;
+
+    // Try local file first (supports paths like @src/main.ts, @README.md)
+    try {
+      const { existsSync, readFileSync } = await import('node:fs');
+      const { resolve } = await import('node:path');
+      const filePath = resolve(process.cwd(), mention);
+      if (existsSync(filePath)) {
+        const content = readFileSync(filePath, 'utf-8');
+        const truncated = content.length > 10_000
+          ? content.slice(0, 10_000) + '\n[...truncated]'
+          : content;
+        resolvedInput += `\n\n[File @${mention}]:\n${truncated}`;
+        continue;
+      }
+    } catch { /* ignore */ }
+
+    // Fall back to MCP resource
     try {
       const content = await resolveMcpMention(mention);
       if (content) resolvedInput += `\n\n[Resource @${mention}]:\n${content.slice(0, 5000)}`;

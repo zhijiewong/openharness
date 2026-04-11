@@ -70,12 +70,27 @@ export function loadRules(projectPath?: string): string[] {
     if (content) rules.push(content);
   }
 
-  // 4. Project rules/*.md
+  // 4. Project rules/*.md (with optional path-scoped filtering)
   const rulesDir = join(root, ".oh", "rules");
   if (existsSync(rulesDir)) {
     for (const file of readdirSync(rulesDir).filter((f) => f.endsWith(".md")).sort()) {
-      const content = readSafe(join(rulesDir, file));
-      if (content) rules.push(content);
+      const raw = readSafe(join(rulesDir, file));
+      if (!raw) continue;
+
+      // Check for paths frontmatter: only include if matching current context
+      const pathsMatch = raw.match(/^---\n[\s\S]*?^paths:\s*(.+)$/m);
+      if (pathsMatch) {
+        // Path-scoped rule — strip frontmatter and only include if glob matches
+        const pattern = pathsMatch[1]!.trim();
+        const fmEnd = raw.indexOf('---', raw.indexOf('---') + 3);
+        const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : raw;
+        if (content && matchesPathGlob(root, pattern)) {
+          rules.push(content);
+        }
+      } else {
+        // No paths restriction — always include
+        rules.push(raw);
+      }
     }
   }
 
@@ -119,4 +134,18 @@ function readSafe(path: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Check if any file in the project matches a glob pattern.
+ * Simple implementation: checks if the pattern directory exists.
+ * For `src/api/**`, checks if `src/api/` exists.
+ */
+function matchesPathGlob(root: string, pattern: string): boolean {
+  // Extract the directory portion before any wildcard
+  const dirPart = pattern.split('*')[0]!.replace(/\/+$/, '');
+  if (!dirPart) return true; // Pattern like "**/*.ts" matches everything
+
+  const fullDir = join(root, dirPart);
+  return existsSync(fullDir);
 }
