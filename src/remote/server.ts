@@ -247,7 +247,7 @@ export class RemoteServer {
 
           let output = "";
           for await (const event of query(String(message.payload.input), config)) {
-            if (event.type === "text_delta") output += (event as any).content;
+            if (event.type === "text_delta") output += event.content;
           }
 
           const response: A2AMessage = {

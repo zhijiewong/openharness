@@ -2,6 +2,8 @@
 
 Thanks for wanting to contribute! OpenHarness is built by the community. Here's how to get involved.
 
+Please note that this project follows a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
+
 ## Dev Setup
 
 1. **Clone the repo:**
@@ -64,8 +66,15 @@ CI runs on Ubuntu and Windows. All checks must pass.
 ## Code Style
 
 - **TypeScript strict mode** — `"strict": true` in tsconfig.json
+- **Linting/formatting** — run `npm run lint:fix` before committing (Biome)
 - Match existing patterns and conventions
 - Keep the same code structure and naming style
 - No new dependencies without discussion — ask first in the PR or an issue
+
+## Reporting Issues
+
+- **Bugs:** Use the [bug report template](https://github.com/zhijiewong/openharness/issues/new?template=bug_report.md)
+- **Features:** Use the [feature request template](https://github.com/zhijiewong/openharness/issues/new?template=feature_request.md)
+- **Security:** See [SECURITY.md](SECURITY.md) — do NOT use public issues
 
 That's it. Happy hacking!

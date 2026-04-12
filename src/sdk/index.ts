@@ -139,19 +139,19 @@ export class Agent {
       for await (const event of query(prompt, config)) {
         switch (event.type) {
           case "text_delta":
-            text += (event as any).content;
+            text += event.content;
             break;
           case "tool_call_end":
             toolCalls.push({
-              toolName: (event as any).toolName ?? "unknown",
-              output: (event as any).output ?? "",
-              isError: (event as any).isError ?? false,
+              toolName: event.callId,
+              output: event.output,
+              isError: event.isError,
             });
             break;
           case "cost_update":
-            cost += (event as any).cost ?? 0;
-            inputTokens += (event as any).inputTokens ?? 0;
-            outputTokens += (event as any).outputTokens ?? 0;
+            cost += event.cost;
+            inputTokens += event.inputTokens;
+            outputTokens += event.outputTokens;
             break;
           case "turn_complete":
             turns++;

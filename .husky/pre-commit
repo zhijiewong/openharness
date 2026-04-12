@@ -1,0 +1,1 @@
+npx biome check --no-errors-on-unmatched src/ && npx tsc --noEmit

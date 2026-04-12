@@ -36,11 +36,17 @@ export class CronExecutor {
     this._stopped = false;
     // Run first tick after a short delay (don't block startup)
     setTimeout(() => {
-      if (!this._stopped) this.tick().catch(() => {});
+      if (!this._stopped)
+        this.tick().catch(() => {
+          /* fire-and-forget: cron tick errors are non-fatal */
+        });
     }, 5_000);
     // Then check every 60 seconds
     this.intervalId = setInterval(() => {
-      if (!this._stopped) this.tick().catch(() => {});
+      if (!this._stopped)
+        this.tick().catch(() => {
+          /* fire-and-forget: cron tick errors are non-fatal */
+        });
     }, CHECK_INTERVAL_MS);
   }
 

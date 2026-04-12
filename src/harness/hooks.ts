@@ -191,7 +191,7 @@ export function emitHook(event: HookEvent, ctx: HookContext = {}): boolean {
   const hooks = getHooks();
   if (!hooks) return true;
 
-  const defs: HookDef[] = (hooks as any)[event] ?? [];
+  const defs: HookDef[] = hooks[event] ?? [];
   const env = buildEnv(event, ctx);
 
   if (event === "preToolUse") {
@@ -217,7 +217,7 @@ export function emitHook(event: HookEvent, ctx: HookContext = {}): boolean {
   for (const def of defs) {
     if (!matchesHook(def, ctx)) continue;
     executeHookDef(def, event, ctx).catch(() => {
-      /* ignore */
+      /* fire-and-forget: non-preToolUse hooks must not block the agent loop */
     });
   }
   return true;
@@ -231,7 +231,7 @@ export async function emitHookAsync(event: HookEvent, ctx: HookContext = {}): Pr
   const hooks = getHooks();
   if (!hooks) return true;
 
-  const defs: HookDef[] = (hooks as any)[event] ?? [];
+  const defs: HookDef[] = hooks[event] ?? [];
 
   for (const def of defs) {
     if (!matchesHook(def, ctx)) continue;

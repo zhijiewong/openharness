@@ -1,6 +1,6 @@
 {
   "name": "@zhijiewang/openharness",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Open-source terminal coding agent. Works with any LLM.",
   "type": "module",
   "bin": {
@@ -23,7 +23,7 @@
   "scripts": {
     "dev": "tsx src/main.tsx",
     "build": "tsc",
-    "prepare": "tsc",
+    "prepare": "husky",
     "prepublishOnly": "npm run build",
     "test": "node scripts/test.mjs",
     "test:coverage": "node scripts/coverage.mjs",
@@ -34,7 +34,6 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@types/marked": "^5.0.2",
     "chalk": "^5.4.1",
     "commander": "^13.0.0",
     "ink": "^5.2.0",
@@ -47,9 +46,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.11",
+    "@types/marked": "^5.0.2",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "c8": "^11.0.0",
+    "husky": "^9.1.7",
     "sharp": "^0.34.5",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"

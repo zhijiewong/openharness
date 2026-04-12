@@ -304,7 +304,7 @@ register("files", "List files in context", (_args, ctx) => {
     // Extract file paths from tool calls
     if (msg.toolCalls) {
       for (const tc of msg.toolCalls) {
-        const path = (tc.arguments as any)?.file_path ?? (tc.arguments as any)?.path;
+        const path = tc.arguments?.file_path ?? tc.arguments?.path;
         if (path) files.add(String(path));
       }
     }
