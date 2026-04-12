@@ -1,6 +1,6 @@
-import type { Provider } from '../providers/base.js';
-import type { CompanionBones } from './types.js';
-import { createUserMessage } from '../types/message.js';
+import type { Provider } from "../providers/base.js";
+import { createUserMessage } from "../types/message.js";
+import type { CompanionBones } from "./types.js";
 
 /**
  * Generate a name and personality description for a companion using the LLM.
@@ -17,7 +17,7 @@ export async function generatePersonality(
     const messages = [createUserMessage(prompt)];
     const response = await provider.complete(
       messages,
-      'You are a creative naming assistant. Respond only with the requested JSON.',
+      "You are a creative naming assistant. Respond only with the requested JSON.",
       undefined,
       model,
     );

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   url: z.string(),
@@ -105,7 +105,7 @@ export const WebFetchTool: Tool<typeof inputSchema> = {
       }
 
       if (text.length > MAX_OUTPUT) {
-        text = text.slice(0, MAX_OUTPUT) + "\n... [truncated]";
+        text = `${text.slice(0, MAX_OUTPUT)}\n... [truncated]`;
       }
 
       return { output: text, isError: false };

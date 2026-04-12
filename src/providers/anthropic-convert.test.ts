@@ -2,10 +2,10 @@
  * Tests for Anthropic provider message conversion and tool formatting.
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { createAssistantMessage, createToolResultMessage, createUserMessage } from "../types/message.js";
 import { AnthropicProvider } from "./anthropic.js";
-import { createUserMessage, createAssistantMessage, createToolResultMessage } from "../types/message.js";
 
 // Access private methods via prototype for testing
 const provider = new AnthropicProvider({ name: "anthropic", apiKey: "test" });
@@ -43,11 +43,13 @@ test("convertMessages() converts assistant with tool calls", () => {
   const base = createAssistantMessage("thinking...");
   const msg = {
     ...base,
-    toolCalls: [{
-      id: "tc1",
-      toolName: "Bash",
-      arguments: { command: "echo hi" },
-    }],
+    toolCalls: [
+      {
+        id: "tc1",
+        toolName: "Bash",
+        arguments: { command: "echo hi" },
+      },
+    ],
   };
   const result = convertMessages([msg]);
   assert.equal(result.length, 1);
@@ -77,14 +79,16 @@ test("convertTools() returns undefined for empty tools", () => {
 });
 
 test("convertTools() converts tool definitions", () => {
-  const tools = [{
-    type: "function" as const,
-    function: {
-      name: "Bash",
-      description: "Run a command",
-      parameters: { type: "object", properties: { command: { type: "string" } } },
+  const tools = [
+    {
+      type: "function" as const,
+      function: {
+        name: "Bash",
+        description: "Run a command",
+        parameters: { type: "object", properties: { command: { type: "string" } } },
+      },
     },
-  }];
+  ];
   const result = convertTools(tools);
   assert.ok(Array.isArray(result));
   assert.equal(result!.length, 1);
@@ -107,6 +111,6 @@ test("Anthropic listModels returns Claude models", () => {
   const p = new AnthropicProvider({ name: "anthropic", apiKey: "test" });
   const models = p.listModels();
   assert.ok(models.length > 0);
-  assert.ok(models.every(m => m.id.includes("claude")));
-  assert.ok(models.every(m => m.provider === "anthropic"));
+  assert.ok(models.every((m) => m.id.includes("claude")));
+  assert.ok(models.every((m) => m.provider === "anthropic"));
 });

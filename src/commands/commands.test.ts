@@ -1,6 +1,6 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { processSlashCommand, type CommandContext } from "./index.js";
+import test from "node:test";
+import { type CommandContext, processSlashCommand } from "./index.js";
 
 function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
   return {

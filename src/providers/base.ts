@@ -2,8 +2,8 @@
  * Base provider interface — every LLM provider implements this.
  */
 
-import type { Message } from "../types/message.js";
 import type { StreamEvent } from "../types/events.js";
+import type { Message } from "../types/message.js";
 
 export type ModelInfo = {
   id: string;
@@ -40,12 +40,7 @@ export interface Provider {
   ): AsyncGenerator<StreamEvent, void>;
 
   /** Non-streaming completion (convenience wrapper). */
-  complete(
-    messages: Message[],
-    systemPrompt: string,
-    tools?: APIToolDef[],
-    model?: string,
-  ): Promise<Message>;
+  complete(messages: Message[], systemPrompt: string, tools?: APIToolDef[], model?: string): Promise<Message>;
 
   /** List available models. */
   listModels(): ModelInfo[];

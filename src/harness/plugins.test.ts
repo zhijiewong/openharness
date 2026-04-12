@@ -1,13 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { makeTmpDir, writeFile } from "../test-helpers.js";
-import {
-  discoverSkills,
-  findSkill,
-  findTriggeredSkills,
-  skillsToPrompt,
-  type SkillMetadata,
-} from "./plugins.js";
+import { discoverSkills, findSkill, findTriggeredSkills, type SkillMetadata, skillsToPrompt } from "./plugins.js";
 
 const SKILL_CONTENT = `---
 name: deploy

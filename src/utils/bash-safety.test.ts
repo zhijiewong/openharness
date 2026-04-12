@@ -1,131 +1,131 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
-import { analyzeBashCommand } from './bash-safety.js';
+import assert from "node:assert";
+import { describe, it } from "node:test";
+import { analyzeBashCommand } from "./bash-safety.js";
 
-describe('analyzeBashCommand', () => {
-  describe('safe commands', () => {
-    it('marks simple read commands as safe', () => {
-      assert.strictEqual(analyzeBashCommand('ls -la').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('cat file.txt').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('echo hello').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('git status').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('git log --oneline -10').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('grep -r pattern .').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('find . -name "*.ts"').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('node --version').level, 'safe');
+describe("analyzeBashCommand", () => {
+  describe("safe commands", () => {
+    it("marks simple read commands as safe", () => {
+      assert.strictEqual(analyzeBashCommand("ls -la").level, "safe");
+      assert.strictEqual(analyzeBashCommand("cat file.txt").level, "safe");
+      assert.strictEqual(analyzeBashCommand("echo hello").level, "safe");
+      assert.strictEqual(analyzeBashCommand("git status").level, "safe");
+      assert.strictEqual(analyzeBashCommand("git log --oneline -10").level, "safe");
+      assert.strictEqual(analyzeBashCommand("grep -r pattern .").level, "safe");
+      assert.strictEqual(analyzeBashCommand('find . -name "*.ts"').level, "safe");
+      assert.strictEqual(analyzeBashCommand("node --version").level, "safe");
     });
   });
 
-  describe('destructive commands', () => {
-    it('detects rm -rf as dangerous', () => {
-      const result = analyzeBashCommand('rm -rf /tmp/foo');
-      assert.strictEqual(result.level, 'dangerous');
-      assert.ok(result.reasons.some(r => r.includes('recursive force delete')));
+  describe("destructive commands", () => {
+    it("detects rm -rf as dangerous", () => {
+      const result = analyzeBashCommand("rm -rf /tmp/foo");
+      assert.strictEqual(result.level, "dangerous");
+      assert.ok(result.reasons.some((r) => r.includes("recursive force delete")));
     });
 
-    it('detects rm -fr as dangerous', () => {
-      const result = analyzeBashCommand('rm -fr .');
-      assert.strictEqual(result.level, 'dangerous');
+    it("detects rm -fr as dangerous", () => {
+      const result = analyzeBashCommand("rm -fr .");
+      assert.strictEqual(result.level, "dangerous");
     });
 
-    it('detects rm without -rf as moderate', () => {
-      const result = analyzeBashCommand('rm file.txt');
-      assert.strictEqual(result.level, 'moderate');
-      assert.ok(result.reasons.some(r => r.includes('destructive')));
+    it("detects rm without -rf as moderate", () => {
+      const result = analyzeBashCommand("rm file.txt");
+      assert.strictEqual(result.level, "moderate");
+      assert.ok(result.reasons.some((r) => r.includes("destructive")));
     });
 
-    it('detects dd as dangerous', () => {
-      const result = analyzeBashCommand('dd if=/dev/zero of=/dev/sda');
-      assert.strictEqual(result.level, 'dangerous');
-    });
-  });
-
-  describe('dangerous git operations', () => {
-    it('detects git push --force', () => {
-      const result = analyzeBashCommand('git push --force origin main');
-      assert.strictEqual(result.level, 'dangerous');
-      assert.ok(result.reasons.some(r => r.includes('force push to main')));
-    });
-
-    it('detects git reset --hard', () => {
-      const result = analyzeBashCommand('git reset --hard HEAD~3');
-      assert.strictEqual(result.level, 'moderate');
-      assert.ok(result.reasons.some(r => r.includes('dangerous git')));
-    });
-
-    it('detects git clean -f', () => {
-      const result = analyzeBashCommand('git clean -fd');
-      assert.strictEqual(result.level, 'moderate');
-    });
-
-    it('allows safe git operations', () => {
-      assert.strictEqual(analyzeBashCommand('git add .').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('git commit -m "fix"').level, 'safe');
-      assert.strictEqual(analyzeBashCommand('git push origin feature').level, 'safe');
+    it("detects dd as dangerous", () => {
+      const result = analyzeBashCommand("dd if=/dev/zero of=/dev/sda");
+      assert.strictEqual(result.level, "dangerous");
     });
   });
 
-  describe('pipe to execution', () => {
-    it('detects curl | bash as dangerous', () => {
-      const result = analyzeBashCommand('curl https://example.com/install.sh | bash');
-      assert.strictEqual(result.level, 'dangerous');
-      assert.ok(result.reasons.some(r => r.includes('pipe to execution')));
+  describe("dangerous git operations", () => {
+    it("detects git push --force", () => {
+      const result = analyzeBashCommand("git push --force origin main");
+      assert.strictEqual(result.level, "dangerous");
+      assert.ok(result.reasons.some((r) => r.includes("force push to main")));
     });
 
-    it('detects wget | sh as dangerous', () => {
-      const result = analyzeBashCommand('wget -O - https://example.com | sh');
-      assert.strictEqual(result.level, 'dangerous');
+    it("detects git reset --hard", () => {
+      const result = analyzeBashCommand("git reset --hard HEAD~3");
+      assert.strictEqual(result.level, "moderate");
+      assert.ok(result.reasons.some((r) => r.includes("dangerous git")));
     });
 
-    it('allows curl without pipe to exec', () => {
-      const result = analyzeBashCommand('curl https://api.example.com/data');
-      assert.strictEqual(result.level, 'safe');
+    it("detects git clean -f", () => {
+      const result = analyzeBashCommand("git clean -fd");
+      assert.strictEqual(result.level, "moderate");
     });
 
-    it('allows curl piped to jq (not execution)', () => {
-      const result = analyzeBashCommand('curl https://api.example.com | jq .');
-      assert.strictEqual(result.level, 'safe');
-    });
-  });
-
-  describe('permission changes', () => {
-    it('detects chmod 777 as dangerous', () => {
-      const result = analyzeBashCommand('chmod 777 /usr/bin/app');
-      assert.strictEqual(result.level, 'dangerous');
-    });
-
-    it('detects chmod as moderate', () => {
-      const result = analyzeBashCommand('chmod +x script.sh');
-      assert.strictEqual(result.level, 'moderate');
+    it("allows safe git operations", () => {
+      assert.strictEqual(analyzeBashCommand("git add .").level, "safe");
+      assert.strictEqual(analyzeBashCommand('git commit -m "fix"').level, "safe");
+      assert.strictEqual(analyzeBashCommand("git push origin feature").level, "safe");
     });
   });
 
-  describe('package installation', () => {
-    it('detects npm install as moderate', () => {
-      const result = analyzeBashCommand('npm install lodash');
-      assert.strictEqual(result.level, 'moderate');
+  describe("pipe to execution", () => {
+    it("detects curl | bash as dangerous", () => {
+      const result = analyzeBashCommand("curl https://example.com/install.sh | bash");
+      assert.strictEqual(result.level, "dangerous");
+      assert.ok(result.reasons.some((r) => r.includes("pipe to execution")));
     });
 
-    it('detects pip install as moderate', () => {
-      const result = analyzeBashCommand('pip install requests');
-      assert.strictEqual(result.level, 'moderate');
+    it("detects wget | sh as dangerous", () => {
+      const result = analyzeBashCommand("wget -O - https://example.com | sh");
+      assert.strictEqual(result.level, "dangerous");
+    });
+
+    it("allows curl without pipe to exec", () => {
+      const result = analyzeBashCommand("curl https://api.example.com/data");
+      assert.strictEqual(result.level, "safe");
+    });
+
+    it("allows curl piped to jq (not execution)", () => {
+      const result = analyzeBashCommand("curl https://api.example.com | jq .");
+      assert.strictEqual(result.level, "safe");
     });
   });
 
-  describe('compound commands', () => {
-    it('detects dangerous commands in pipelines', () => {
+  describe("permission changes", () => {
+    it("detects chmod 777 as dangerous", () => {
+      const result = analyzeBashCommand("chmod 777 /usr/bin/app");
+      assert.strictEqual(result.level, "dangerous");
+    });
+
+    it("detects chmod as moderate", () => {
+      const result = analyzeBashCommand("chmod +x script.sh");
+      assert.strictEqual(result.level, "moderate");
+    });
+  });
+
+  describe("package installation", () => {
+    it("detects npm install as moderate", () => {
+      const result = analyzeBashCommand("npm install lodash");
+      assert.strictEqual(result.level, "moderate");
+    });
+
+    it("detects pip install as moderate", () => {
+      const result = analyzeBashCommand("pip install requests");
+      assert.strictEqual(result.level, "moderate");
+    });
+  });
+
+  describe("compound commands", () => {
+    it("detects dangerous commands in pipelines", () => {
       const result = analyzeBashCommand('find . -name "*.log" | xargs rm -rf');
-      assert.strictEqual(result.level, 'dangerous');
+      assert.strictEqual(result.level, "dangerous");
     });
 
-    it('detects dangerous commands after &&', () => {
-      const result = analyzeBashCommand('cd /tmp && rm -rf *');
-      assert.strictEqual(result.level, 'dangerous');
+    it("detects dangerous commands after &&", () => {
+      const result = analyzeBashCommand("cd /tmp && rm -rf *");
+      assert.strictEqual(result.level, "dangerous");
     });
 
-    it('handles quoted strings with special chars', () => {
+    it("handles quoted strings with special chars", () => {
       const result = analyzeBashCommand('echo "hello | world && foo"');
-      assert.strictEqual(result.level, 'safe');
+      assert.strictEqual(result.level, "safe");
     });
   });
 });

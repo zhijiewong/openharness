@@ -1,10 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 import type { Message } from "../types/message.js";
+import { useTheme } from "../utils/theme.js";
+import Markdown from "./Markdown.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
 import ToolCallDisplay from "./ToolCallDisplay.js";
-import Markdown from "./Markdown.js";
-import { useTheme } from "../utils/theme.js";
 
 type MessagesProps = {
   messages: Message[];
@@ -20,9 +20,7 @@ export default function Messages({ messages, toolCalls }: MessagesProps) {
         const showDivider = msg.role === "user" && i > 0;
         return (
           <React.Fragment key={msg.uuid}>
-            {showDivider && (
-              <Text color={theme.dim}>{"─".repeat(60)}</Text>
-            )}
+            {showDivider && <Text color={theme.dim}>{"─".repeat(60)}</Text>}
             <MessageRow message={msg} toolCalls={toolCalls} theme={theme} />
           </React.Fragment>
         );
@@ -77,18 +75,19 @@ function MessageRow({
     if (message.meta?.isInfo) {
       return (
         <Box marginY={0}>
-          <Text dimColor>{"  "}{message.content}</Text>
+          <Text dimColor>
+            {"  "}
+            {message.content}
+          </Text>
         </Box>
       );
     }
     return (
-      <Box
-        borderStyle="round"
-        borderColor={theme.error}
-        paddingX={1}
-        marginY={0}
-      >
-        <Text color={theme.error}>{"✗ "}{message.content}</Text>
+      <Box borderStyle="round" borderColor={theme.error} paddingX={1} marginY={0}>
+        <Text color={theme.error}>
+          {"✗ "}
+          {message.content}
+        </Text>
       </Box>
     );
   }

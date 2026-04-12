@@ -1,5 +1,4 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from "ink";
 
 interface Props {
   speech: string;
@@ -8,9 +7,9 @@ interface Props {
 }
 
 function wrapText(text: string, width: number): string[] {
-  const words = text.split(' ');
+  const words = text.split(" ");
   const lines: string[] = [];
-  let current = '';
+  let current = "";
   for (const word of words) {
     if (current.length + word.length + (current ? 1 : 0) <= width) {
       current = current ? `${current} ${word}` : word;
@@ -25,16 +24,20 @@ function wrapText(text: string, width: number): string[] {
 
 export default function CybergotchiBubble({ speech, name, maxWidth = 18 }: Props) {
   const lines = wrapText(speech, maxWidth);
-  const boxWidth = Math.min(maxWidth, Math.max(...lines.map(l => l.length)));
+  const boxWidth = Math.min(maxWidth, Math.max(...lines.map((l) => l.length)));
 
   return (
     <Box flexDirection="column">
       <Text dimColor>{name}:</Text>
-      <Text color="white">{'╭' + '─'.repeat(boxWidth + 2) + '╮'}</Text>
+      <Text color="white">{`╭${"─".repeat(boxWidth + 2)}╮`}</Text>
       {lines.map((line, i) => (
-        <Text key={i} color="white">{'│ '}{line.padEnd(boxWidth)}{' │'}</Text>
+        <Text key={i} color="white">
+          {"│ "}
+          {line.padEnd(boxWidth)}
+          {" │"}
+        </Text>
       ))}
-      <Text color="white">{'╰' + '─'.repeat(boxWidth + 2) + '╯'}</Text>
+      <Text color="white">{`╰${"─".repeat(boxWidth + 2)}╯`}</Text>
     </Box>
   );
 }

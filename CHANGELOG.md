@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.0 (2026-04-12) — Gap Closer
+
+### Added
+- **ScheduleWakeup Tool**: Self-paced autonomous agent loops with cache-aware timing (5-min TTL breakpoints). `suggestDelay()` utility for optimal delay calculation. `consumeWakeup()`/`cancelWakeup()` API for REPL integration.
+- **`/loop` Command**: Run prompts repeatedly with fixed intervals (`/loop 5m /review`) or dynamic self-pacing via ScheduleWakeup.
+- **Plan File Persistence**: `EnterPlanMode` creates unique plan files at `.oh/plans/<adjective-verb-noun>.md`. Plans persist across sessions.
+- **ExitPlanMode `allowedPrompts`**: Pre-authorize specific actions (e.g., `{tool: "Bash", prompt: "run tests"}`) when exiting plan mode.
+- **Agent Continuation Registry**: Background agents tracked in `AgentMessageBus`. `SendMessage` can target background agents by ID to query status and queue follow-up messages.
+- **MEMORY.md Index**: Auto-generated index file with one-liner pointers to all memories. Refreshed on save and consolidation.
+- **New Memory Types**: `user`, `feedback`, `reference` (Claude Code compatible) alongside legacy `convention`, `preference`, `debugging`.
+- **Agent `isolation` Parameter**: Accept both `isolation: "worktree"` (Claude Code style) and `isolated: boolean` for API compatibility.
+- **`/init` Command**: Initialize project with `.oh/RULES.md` and `.oh/config.yaml` templates.
+- **`/permissions` Command**: View current permission mode or switch modes interactively.
+- **`/allowed-tools` Command**: View configured tool permission rules from `.oh/config.yaml`.
+- **Checkpoint Tests**: 9 tests covering snapshot, rewind, file extraction, and edge cases.
+
+### Changed
+- Default memory type changed from `convention` to `user`
+- `/plan` command now instructs use of EnterPlanMode/ExitPlanMode tool workflow
+- Memory detection prompt updated to use new type taxonomy
+- `/help` categories updated with new commands
+
+### Summary
+Closes 10 of 14 identified gaps with Claude Code. 749 tests (was 716). New features: autonomous loops, persistent plans, agent continuation, memory indexing, and 3 new slash commands.
+
 ## 2.0.0 (2026-04-12) — Beyond Parity
 
 ### Added

@@ -1,8 +1,7 @@
-import { z } from 'zod';
-import type { Tool, ToolResult, ToolContext } from '../Tool.js';
-import type { McpClient } from './client.js';
-import type { McpToolDef } from './types.js';
-import { McpTool } from './McpTool.js';
+import { z } from "zod";
+import type { Tool, ToolContext, ToolResult } from "../Tool.js";
+import type { McpClient } from "./client.js";
+import { McpTool } from "./McpTool.js";
 
 /**
  * A deferred MCP tool that only stores its name at startup.
@@ -37,8 +36,12 @@ export class DeferredMcpTool implements Tool<z.ZodType> {
     this.inputSchema = z.record(z.unknown());
   }
 
-  isReadOnly(_input: unknown): boolean { return false; }
-  isConcurrencySafe(_input: unknown): boolean { return false; }
+  isReadOnly(_input: unknown): boolean {
+    return false;
+  }
+  isConcurrencySafe(_input: unknown): boolean {
+    return false;
+  }
 
   /** Resolve the full tool definition from the MCP server */
   private async resolve(): Promise<McpTool | null> {
@@ -48,7 +51,7 @@ export class DeferredMcpTool implements Tool<z.ZodType> {
     this.resolvePromise = (async () => {
       try {
         const defs = await this.client.listTools();
-        const def = defs.find(d => d.name === this.toolName);
+        const def = defs.find((d) => d.name === this.toolName);
         if (def) {
           this.resolved = new McpTool(this.client, def, this._riskLevel);
           return this.resolved;

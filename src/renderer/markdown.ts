@@ -5,9 +5,8 @@
  * No external dependencies — uses simple regex parsing.
  */
 
-import type { Style } from './cells.js';
-import type { CellGrid } from './cells.js';
-import { getTheme } from '../utils/theme-data.js';
+import { getTheme } from "../utils/theme-data.js";
+import type { CellGrid, Style } from "./cells.js";
 
 const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
@@ -31,7 +30,9 @@ let S_HEADING: Style, S_CODE: Style, S_CODE_FENCE: Style, S_BULLET: Style;
 let S_KW: Style, S_STRING: Style, S_COMMENT: Style, S_NUMBER: Style, S_TYPE: Style;
 let _mdStylesInit = false;
 
-export function resetMdStyleCache() { _mdStylesInit = false; }
+export function resetMdStyleCache() {
+  _mdStylesInit = false;
+}
 
 function ensureMdStyles() {
   if (_mdStylesInit) return;
@@ -55,7 +56,7 @@ type Segment = { text: string; style: Style };
  * Uses the same logic as renderMarkdown but without writing to a grid.
  */
 export function measureMarkdown(text: string, width: number): number {
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   let rows = 0;
   let i = 0;
 
@@ -63,11 +64,11 @@ export function measureMarkdown(text: string, width: number): number {
     const line = lines[i]!;
 
     // Code block
-    if (line.trimStart().startsWith('```')) {
+    if (line.trimStart().startsWith("```")) {
       rows++; // opening fence
       i++;
       while (i < lines.length) {
-        if (lines[i]!.trimStart().startsWith('```')) {
+        if (lines[i]!.trimStart().startsWith("```")) {
           rows++; // closing fence
           i++;
           break;
@@ -79,10 +80,10 @@ export function measureMarkdown(text: string, width: number): number {
     }
 
     // Table detection
-    if (line.includes('|') && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
+    if (line.includes("|") && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
       rows += 2; // header + separator
       i += 2; // skip header and separator
-      while (i < lines.length && lines[i]!.includes('|')) {
+      while (i < lines.length && lines[i]!.includes("|")) {
         rows++;
         i++;
       }
@@ -91,7 +92,7 @@ export function measureMarkdown(text: string, width: number): number {
 
     // Empty line or any other line = 1 row (simplified, ignoring wrapping for measurement)
     // For inline content, estimate wrapping
-    const contentLen = line.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1').length;
+    const contentLen = line.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`(.+?)`/g, "$1").length;
     rows += Math.max(1, Math.ceil((contentLen || 1) / (width - 2)));
     i++;
   }
@@ -114,7 +115,7 @@ export function renderMarkdown(
 ): number {
   ensureMdStyles();
   const wrapWidth = width;
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   let r = row;
   let i = 0;
   const rowLimit = maxRow ?? grid.height;
@@ -124,9 +125,9 @@ export function renderMarkdown(
     const line = lines[i]!;
 
     // Code block (fenced)
-    if (line.trimStart().startsWith('```')) {
+    if (line.trimStart().startsWith("```")) {
       const lang = line.trimStart().slice(3).trim();
-      const fenceLabel = '```' + (lang ? ` ${lang}` : '');
+      const fenceLabel = `\`\`\`${lang ? ` ${lang}` : ""}`;
       grid.writeText(r, col, fenceLabel, S_CODE_FENCE);
       r++;
       i++;
@@ -138,12 +139,12 @@ export function renderMarkdown(
       while (i < lines.length) {
         if (r >= rowLimit) break;
         const codeLine = lines[i]!;
-        if (codeLine.trimStart().startsWith('```')) {
+        if (codeLine.trimStart().startsWith("```")) {
           if (skippedLines > 0) {
             grid.writeText(r, col + 2, `… ${skippedLines} more lines (Ctrl+K to expand)`, S_CODE_FENCE);
             r++;
           }
-          grid.writeText(r, col, '```', S_CODE_FENCE);
+          grid.writeText(r, col, "```", S_CODE_FENCE);
           r++;
           i++;
           break;
@@ -170,7 +171,7 @@ export function renderMarkdown(
     // Heading
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
-      const prefix = headingMatch[1]! + ' ';
+      const prefix = `${headingMatch[1]!} `;
       const content = headingMatch[2]!;
       grid.writeText(r, col, prefix, S_HEADING);
       r += writeInlineMarkdown(grid, r, col + prefix.length, content, wrapWidth, S_HEADING);
@@ -182,7 +183,7 @@ export function renderMarkdown(
     if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line)) {
       const hrLen = Math.min(40, wrapWidth - col);
       for (let c = 0; c < hrLen; c++) {
-        grid.setCell(r, col + c, '─', S_HR);
+        grid.setCell(r, col + c, "─", S_HR);
       }
       r++;
       i++;
@@ -192,7 +193,7 @@ export function renderMarkdown(
     // Blockquote
     const bqMatch = line.match(/^>\s*(.*)$/);
     if (bqMatch) {
-      grid.writeText(r, col, '│ ', S_BLOCKQUOTE);
+      grid.writeText(r, col, "│ ", S_BLOCKQUOTE);
       r += writeInlineMarkdown(grid, r, col + 2, bqMatch[1]!, wrapWidth, S_BLOCKQUOTE);
       i++;
       continue;
@@ -202,7 +203,7 @@ export function renderMarkdown(
     const ulMatch = line.match(/^(\s*)([-*+])\s+(.+)$/);
     if (ulMatch) {
       const indent = Math.min(ulMatch[1]!.length, 8);
-      grid.writeText(r, col + indent, '• ', S_BULLET);
+      grid.writeText(r, col + indent, "• ", S_BULLET);
       r += writeInlineMarkdown(grid, r, col + indent + 2, ulMatch[3]!, wrapWidth, S_TEXT);
       i++;
       continue;
@@ -212,7 +213,7 @@ export function renderMarkdown(
     const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
     if (olMatch) {
       const indent = Math.min(olMatch[1]!.length, 8);
-      const num = olMatch[2]! + '. ';
+      const num = `${olMatch[2]!}. `;
       grid.writeText(r, col + indent, num, S_BULLET);
       r += writeInlineMarkdown(grid, r, col + indent + num.length, olMatch[3]!, wrapWidth, S_TEXT);
       i++;
@@ -220,16 +221,16 @@ export function renderMarkdown(
     }
 
     // Table detection: line with | separators
-    if (line.includes('|') && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
+    if (line.includes("|") && i + 1 < lines.length && TABLE_SEPARATOR_RE.test(lines[i + 1]!)) {
       r = renderTable(grid, r, col, lines, i, wrapWidth);
       // Skip past the table: advance past header + separator first, then data rows
       i += 2; // header + separator
-      while (i < lines.length && lines[i]!.includes('|')) i++;
+      while (i < lines.length && lines[i]!.includes("|")) i++;
       continue;
     }
 
     // Empty line
-    if (line.trim() === '') {
+    if (line.trim() === "") {
       r++;
       i++;
       continue;
@@ -284,7 +285,7 @@ function parseInline(text: string, baseStyle: Style): Segment[] {
     // Link: [text](url)
     const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
-      segments.push({ text: linkMatch[1]!, style: { ...baseStyle, underline: true, fg: 'cyan' } });
+      segments.push({ text: linkMatch[1]!, style: { ...baseStyle, underline: true, fg: "cyan" } });
       segments.push({ text: ` (${linkMatch[2]!})`, style: { ...baseStyle, dim: true } });
       remaining = remaining.slice(linkMatch[0]!.length);
       continue;
@@ -315,13 +316,7 @@ function parseInline(text: string, baseStyle: Style): Segment[] {
 }
 
 /** Write styled segments to grid with word wrapping. Returns rows consumed. */
-function writeSegments(
-  grid: CellGrid,
-  row: number,
-  startCol: number,
-  segments: Segment[],
-  wrapWidth: number,
-): number {
+function writeSegments(grid: CellGrid, row: number, startCol: number, segments: Segment[], wrapWidth: number): number {
   let r = row;
   let c = startCol;
 
@@ -342,8 +337,13 @@ function writeSegments(
 
 /** Write a single table row's cells into the grid */
 function writeTableCells(
-  grid: CellGrid, r: number, col: number, cells: string[],
-  colWidths: number[], style: Style, wrapWidth: number,
+  grid: CellGrid,
+  r: number,
+  col: number,
+  cells: string[],
+  colWidths: number[],
+  style: Style,
+  wrapWidth: number,
 ): void {
   let c = col;
   for (let j = 0; j < cells.length && j < colWidths.length; j++) {
@@ -351,7 +351,7 @@ function writeTableCells(
     grid.writeText(r, c, cell, style);
     c += colWidths[j]! + 3;
     if (j < cells.length - 1 && c - 3 < wrapWidth) {
-      grid.writeText(r, c - 3, ' │ ', S_TABLE_BORDER);
+      grid.writeText(r, c - 3, " │ ", S_TABLE_BORDER);
     }
   }
 }
@@ -372,10 +372,10 @@ function renderTable(
   const separatorIdx = startIdx + 1;
 
   // Calculate column widths
-  const colWidths = headerCells.map(c => c.length);
+  const colWidths = headerCells.map((c) => c.length);
   const dataRows: string[][] = [];
   for (let i = separatorIdx + 1; i < lines.length; i++) {
-    if (!lines[i]!.includes('|')) break;
+    if (!lines[i]!.includes("|")) break;
     const cells = parseTableRow(lines[i]!);
     dataRows.push(cells);
     for (let j = 0; j < cells.length; j++) {
@@ -396,11 +396,11 @@ function renderTable(
     let c = col;
     for (let j = 0; j < colWidths.length; j++) {
       for (let k = 0; k < colWidths[j]!; k++) {
-        if (c + k < wrapWidth) grid.setCell(r, c + k, '─', S_TABLE_BORDER);
+        if (c + k < wrapWidth) grid.setCell(r, c + k, "─", S_TABLE_BORDER);
       }
       c += colWidths[j]! + 3;
       if (j < colWidths.length - 1 && c - 3 < wrapWidth) {
-        grid.writeText(r, c - 3, '─┼─', S_TABLE_BORDER);
+        grid.writeText(r, c - 3, "─┼─", S_TABLE_BORDER);
       }
     }
     r++;
@@ -419,60 +419,171 @@ function renderTable(
 /** Parse a markdown table row into cells */
 function parseTableRow(line: string): string[] {
   return line
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map(c => c.trim());
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
 }
 
 // ── Syntax highlighting ──
 
 // Languages that should get keyword/string/comment coloring
 export const HIGHLIGHT_LANGS = new Set([
-  'js', 'javascript', 'ts', 'typescript', 'jsx', 'tsx',
-  'py', 'python', 'rb', 'ruby', 'rs', 'rust', 'go', 'golang',
-  'java', 'c', 'cpp', 'c++', 'cs', 'csharp', 'swift', 'kotlin',
-  'sh', 'bash', 'shell', 'zsh', 'fish',
-  'sql', 'yaml', 'yml', 'json', 'toml', 'xml', 'html', 'css',
-  'php', 'lua', 'r', 'scala', 'dart', 'zig', 'nim', 'elixir',
+  "js",
+  "javascript",
+  "ts",
+  "typescript",
+  "jsx",
+  "tsx",
+  "py",
+  "python",
+  "rb",
+  "ruby",
+  "rs",
+  "rust",
+  "go",
+  "golang",
+  "java",
+  "c",
+  "cpp",
+  "c++",
+  "cs",
+  "csharp",
+  "swift",
+  "kotlin",
+  "sh",
+  "bash",
+  "shell",
+  "zsh",
+  "fish",
+  "sql",
+  "yaml",
+  "yml",
+  "json",
+  "toml",
+  "xml",
+  "html",
+  "css",
+  "php",
+  "lua",
+  "r",
+  "scala",
+  "dart",
+  "zig",
+  "nim",
+  "elixir",
 ]);
 
 // Keywords — only unambiguous programming keywords (no common English words)
 const KEYWORDS = new Set([
   // JS/TS
-  'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do',
-  'switch', 'case', 'break', 'continue', 'new', 'this', 'class', 'extends', 'import',
-  'export', 'from', 'default', 'async', 'await', 'try', 'catch', 'finally', 'throw',
-  'typeof', 'instanceof', 'of', 'yield', 'delete', 'void', 'super',
+  "const",
+  "let",
+  "var",
+  "function",
+  "return",
+  "if",
+  "else",
+  "for",
+  "while",
+  "do",
+  "switch",
+  "case",
+  "break",
+  "continue",
+  "new",
+  "this",
+  "class",
+  "extends",
+  "import",
+  "export",
+  "from",
+  "default",
+  "async",
+  "await",
+  "try",
+  "catch",
+  "finally",
+  "throw",
+  "typeof",
+  "instanceof",
+  "of",
+  "yield",
+  "delete",
+  "void",
+  "super",
   // Python
-  'def', 'elif', 'except', 'raise', 'pass', 'lambda',
-  'True', 'False', 'None', 'self',
+  "def",
+  "elif",
+  "except",
+  "raise",
+  "pass",
+  "lambda",
+  "True",
+  "False",
+  "None",
+  "self",
   // Rust/Go/general
-  'fn', 'mut', 'pub', 'impl', 'struct', 'enum', 'match', 'use', 'mod',
-  'func', 'interface', 'package', 'defer', 'select', 'chan',
+  "fn",
+  "mut",
+  "pub",
+  "impl",
+  "struct",
+  "enum",
+  "match",
+  "use",
+  "mod",
+  "func",
+  "interface",
+  "package",
+  "defer",
+  "select",
+  "chan",
 ]);
 
 const TYPE_KEYWORDS = new Set([
-  'string', 'number', 'boolean', 'void', 'null', 'undefined', 'any', 'never',
-  'object', 'symbol', 'bigint', 'int', 'float', 'bool', 'str', 'i32', 'i64',
-  'u32', 'u64', 'f32', 'f64', 'usize', 'isize', 'String', 'Vec', 'Option',
-  'Result', 'Array', 'Map', 'Set', 'Promise', 'Record',
+  "string",
+  "number",
+  "boolean",
+  "void",
+  "null",
+  "undefined",
+  "any",
+  "never",
+  "object",
+  "symbol",
+  "bigint",
+  "int",
+  "float",
+  "bool",
+  "str",
+  "i32",
+  "i64",
+  "u32",
+  "u64",
+  "f32",
+  "f64",
+  "usize",
+  "isize",
+  "String",
+  "Vec",
+  "Option",
+  "Result",
+  "Array",
+  "Map",
+  "Set",
+  "Promise",
+  "Record",
 ]);
 
 /** Render a line of code with basic syntax highlighting */
-export function renderHighlightedCode(
-  grid: CellGrid,
-  row: number,
-  col: number,
-  line: string,
-  lang: string,
-): void {
+export function renderHighlightedCode(grid: CellGrid, row: number, col: number, line: string, _lang: string): void {
   let c = col;
   let i = 0;
 
   while (i < line.length && c < grid.width) {
     // Line comments: // or # (# only when at line start or after whitespace)
-    if (line[i] === '/' && line[i + 1] === '/') {
+    if (line[i] === "/" && line[i + 1] === "/") {
       const rest = line.slice(i);
       for (let j = 0; j < rest.length && c < grid.width; j++) {
         grid.setCell(row, c, rest[j]!, S_COMMENT);
@@ -480,7 +591,7 @@ export function renderHighlightedCode(
       }
       return;
     }
-    if (line[i] === '#' && (line.slice(0, i).trim() === '' || line[i - 1] === ' ')) {
+    if (line[i] === "#" && (line.slice(0, i).trim() === "" || line[i - 1] === " ")) {
       const rest = line.slice(i);
       for (let j = 0; j < rest.length && c < grid.width; j++) {
         grid.setCell(row, c, rest[j]!, S_COMMENT);
@@ -490,14 +601,20 @@ export function renderHighlightedCode(
     }
 
     // Strings: "..." or '...' or `...`
-    if (line[i] === '"' || line[i] === "'" || line[i] === '`') {
+    if (line[i] === '"' || line[i] === "'" || line[i] === "`") {
       const quote = line[i]!;
       grid.setCell(row, c, quote, S_STRING);
-      c++; i++;
+      c++;
+      i++;
       while (i < line.length && c < grid.width) {
         grid.setCell(row, c, line[i]!, S_STRING);
-        if (line[i] === quote && line[i - 1] !== '\\') { c++; i++; break; }
-        c++; i++;
+        if (line[i] === quote && line[i - 1] !== "\\") {
+          c++;
+          i++;
+          break;
+        }
+        c++;
+        i++;
       }
       continue;
     }
@@ -506,7 +623,8 @@ export function renderHighlightedCode(
     if (RE_DIGIT.test(line[i]!) && (i === 0 || RE_NUM_BOUNDARY.test(line[i - 1]!))) {
       while (i < line.length && c < grid.width && RE_NUM_CHAR.test(line[i]!)) {
         grid.setCell(row, c, line[i]!, S_NUMBER);
-        c++; i++;
+        c++;
+        i++;
       }
       continue;
     }
@@ -526,6 +644,7 @@ export function renderHighlightedCode(
 
     // Everything else
     grid.setCell(row, c, line[i]!, S_CODE);
-    c++; i++;
+    c++;
+    i++;
   }
 }

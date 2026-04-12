@@ -4,8 +4,8 @@
  */
 
 import type { z } from "zod";
-import type { PermissionMode, RiskLevel } from "./types/permissions.js";
 import type { Provider } from "./providers/base.js";
+import type { PermissionMode, RiskLevel } from "./types/permissions.js";
 
 export type ToolResult = {
   output: string;
@@ -102,8 +102,7 @@ function zodToJsonSchema(schema: z.ZodType): unknown {
   if (def?.typeName === "ZodString") return { type: "string" };
   if (def?.typeName === "ZodNumber") return { type: "number" };
   if (def?.typeName === "ZodBoolean") return { type: "boolean" };
-  if (def?.typeName === "ZodArray")
-    return { type: "array", items: zodToJsonSchema(def.type) };
+  if (def?.typeName === "ZodArray") return { type: "array", items: zodToJsonSchema(def.type) };
 
   return { type: "string" }; // fallback
 }

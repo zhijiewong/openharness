@@ -8,25 +8,30 @@
  * - types.ts — shared types
  */
 
+import { DeferredTool } from "../DeferredTool.js";
+import { getContextWindow } from "../harness/cost.js";
+import { StreamingToolExecutor } from "../services/StreamingToolExecutor.js";
 import type { ToolContext } from "../Tool.js";
 import { toolToAPIFormat } from "../Tool.js";
-import { DeferredTool } from "../DeferredTool.js";
-import { ContextManager } from "./context-manager.js";
 import type { StreamEvent } from "../types/events.js";
 import type { ToolCall } from "../types/message.js";
-import { createAssistantMessage, createUserMessage } from "../types/message.js";
-import { StreamingToolExecutor } from "../services/StreamingToolExecutor.js";
-import { getContextWindow } from "../harness/cost.js";
-import { createToolResultMessage } from "../types/message.js";
-
-import type { QueryConfig, QueryLoopState } from "./types.js";
-import { makeTokenEstimator, estimateMessagesTokens, compressMessages, summarizeConversation } from "./compress.js";
+import { createAssistantMessage, createToolResultMessage, createUserMessage } from "../types/message.js";
+import { compressMessages, estimateMessagesTokens, makeTokenEstimator, summarizeConversation } from "./compress.js";
+import { ContextManager } from "./context-manager.js";
+import {
+  isNetworkError,
+  isOverloadError,
+  isPromptTooLongError,
+  isRateLimitError,
+  MAX_CONSECUTIVE_ERRORS,
+  MAX_RATE_LIMIT_RETRIES,
+} from "./errors.js";
 import { executeToolCalls } from "./tools.js";
-import { isRateLimitError, isOverloadError, isPromptTooLongError, isNetworkError, MAX_CONSECUTIVE_ERRORS, MAX_RATE_LIMIT_RETRIES } from "./errors.js";
+import type { QueryConfig, QueryLoopState } from "./types.js";
 
+export { compressMessages } from "./compress.js";
 // Re-export types and compression for external consumers
 export type { QueryConfig, QueryLoopState } from "./types.js";
-export { compressMessages } from "./compress.js";
 
 const DEFAULT_MAX_TURNS = 50;
 
@@ -50,24 +55,22 @@ export async function* query(
   const contextManager = new ContextManager(undefined, config.model);
 
   // Check provider capabilities
-  const modelInfo = config.provider.getModelInfo?.(config.model ?? '');
+  const modelInfo = config.provider.getModelInfo?.(config.model ?? "");
   const toolsSupported = !modelInfo || modelInfo.supportsTools;
   const apiTools = toolsSupported ? config.tools.map(toolToAPIFormat) : undefined;
 
-  let toolPrompts = toolsSupported
-    ? config.tools.map((t) => t.prompt()).join("\n\n")
-    : "";
+  let toolPrompts = toolsSupported ? config.tools.map((t) => t.prompt()).join("\n\n") : "";
 
   // Hint about deferred tools available via ToolSearch
   if (toolsSupported) {
-    const deferredCount = config.tools.filter(t => t instanceof DeferredTool && !t.activated).length;
+    const deferredCount = config.tools.filter((t) => t instanceof DeferredTool && !t.activated).length;
     if (deferredCount > 0) {
       toolPrompts += `\n\n[${deferredCount} additional tools available — use ToolSearch to discover them]`;
     }
   }
 
   const fullSystemPrompt = toolPrompts
-    ? config.systemPrompt + "\n\n# Available Tools\n\n" + toolPrompts
+    ? `${config.systemPrompt}\n\n# Available Tools\n\n${toolPrompts}`
     : config.systemPrompt;
 
   const state: QueryLoopState = {
@@ -103,10 +106,15 @@ export async function* query(
       if (afterBasic > contextWindow * 0.7 && state.messages.length > 4) {
         try {
           state.messages = await summarizeConversation(
-            config.provider, state.messages, config.model, Math.floor(contextWindow * 0.5),
+            config.provider,
+            state.messages,
+            config.model,
+            Math.floor(contextWindow * 0.5),
           );
           yield { type: "error", message: "Context compressed with LLM summarization." };
-        } catch { /* continue with basic compression */ }
+        } catch {
+          /* continue with basic compression */
+        }
       }
     }
 
@@ -116,13 +124,15 @@ export async function* query(
     let streamError: Error | null = null;
 
     const streamingExecutor = new StreamingToolExecutor(
-      config.tools, toolContext, config.permissionMode, config.askUser, config.abortSignal,
+      config.tools,
+      toolContext,
+      config.permissionMode,
+      config.askUser,
+      config.abortSignal,
     );
 
     try {
-      for await (const event of config.provider.stream(
-        state.messages, fullSystemPrompt, apiTools, config.model,
-      )) {
+      for await (const event of config.provider.stream(state.messages, fullSystemPrompt, apiTools, config.model)) {
         if (config.abortSignal?.aborted) break;
 
         switch (event.type) {
@@ -163,7 +173,10 @@ export async function* query(
 
       // Circuit breaker
       if (state.consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        yield { type: "error", message: `Too many consecutive errors (${state.consecutiveErrors}): ${streamError.message}` };
+        yield {
+          type: "error",
+          message: `Too many consecutive errors (${state.consecutiveErrors}): ${streamError.message}`,
+        };
         yield { type: "turn_complete", reason: "error" };
         return;
       }
@@ -173,13 +186,16 @@ export async function* query(
         const attempt = state.consecutiveErrors;
         const isOverload = isOverloadError(streamError);
         if (attempt <= MAX_RATE_LIMIT_RETRIES) {
-          const baseRetry = Math.pow(2, attempt) * (isOverload ? 2 : 1);
+          const baseRetry = 2 ** attempt * (isOverload ? 2 : 1);
           const retryIn = baseRetry * (0.5 + Math.random());
           yield { type: "rate_limited", retryIn: Math.round(retryIn), attempt };
           await new Promise((r) => setTimeout(r, retryIn * 1000));
           continue;
         }
-        yield { type: "error", message: `${isOverload ? "Server overloaded" : "Rate limit exceeded"} after ${MAX_RATE_LIMIT_RETRIES} retries.` };
+        yield {
+          type: "error",
+          message: `${isOverload ? "Server overloaded" : "Rate limit exceeded"} after ${MAX_RATE_LIMIT_RETRIES} retries.`,
+        };
         yield { type: "turn_complete", reason: "error" };
         return;
       }
@@ -199,7 +215,7 @@ export async function* query(
 
       if (isNetworkError(streamError)) {
         state.transition = "retry_network";
-        const delay = 1000 * Math.pow(2, state.consecutiveErrors - 1);
+        const delay = 1000 * 2 ** (state.consecutiveErrors - 1);
         yield { type: "error", message: `Network error, retrying in ${delay / 1000}s...` };
         await new Promise((r) => setTimeout(r, delay));
         continue;
@@ -216,13 +232,14 @@ export async function* query(
     }
 
     if (assistantContent === "" && toolCalls.length === 0) {
-      yield { type: "error", message: "No response received. Check that your model server is running and the model name is correct." };
+      yield {
+        type: "error",
+        message: "No response received. Check that your model server is running and the model name is correct.",
+      };
       return;
     }
 
-    state.messages.push(
-      createAssistantMessage(assistantContent, toolCalls.length > 0 ? toolCalls : undefined),
-    );
+    state.messages.push(createAssistantMessage(assistantContent, toolCalls.length > 0 ? toolCalls : undefined));
 
     if (toolCalls.length === 0) {
       yield { type: "turn_complete", reason: "completed" };
@@ -232,10 +249,10 @@ export async function* query(
     // Collect streaming tool results
     await streamingExecutor.waitForAll();
     const completedResults = [...streamingExecutor.getCompletedResults()];
-    const executedIds = new Set(completedResults.map(r => r.toolCall.id));
+    const executedIds = new Set(completedResults.map((r) => r.toolCall.id));
 
     for (const { callId, chunk } of streamingExecutor.outputChunks) {
-      yield { type: 'tool_output_delta', callId, chunk };
+      yield { type: "tool_output_delta", callId, chunk };
     }
 
     for (const { toolCall: tc, result } of completedResults) {
@@ -246,7 +263,7 @@ export async function* query(
     }
 
     // Execute remaining tools not started during streaming
-    const remaining = toolCalls.filter(tc => !executedIds.has(tc.id));
+    const remaining = toolCalls.filter((tc) => !executedIds.has(tc.id));
     if (remaining.length > 0) {
       yield* executeToolCalls(remaining, config.tools, toolContext, config.permissionMode, config.askUser, state);
     }

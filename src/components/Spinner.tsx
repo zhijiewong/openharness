@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import { useTheme } from "../utils/theme.js";
+import { useEffect, useState } from "react";
 import { formatTokenCount } from "../utils/format.js";
+import { useTheme } from "../utils/theme.js";
 
 type Props = { model?: string; tokens?: number };
 
@@ -20,10 +20,8 @@ export default function Spinner({ model, tokens }: Props) {
   }, []);
 
   const text = `Thinking${model ? ` (${model})` : ""}`;
-  const baseColor =
-    elapsed > 60 ? theme.error : elapsed > 30 ? theme.stall : theme.primary;
-  const shimmerColor =
-    elapsed > 60 ? theme.stallShimmer : elapsed > 30 ? theme.warning : theme.primaryShimmer;
+  const baseColor = elapsed > 60 ? theme.error : elapsed > 30 ? theme.stall : theme.primary;
+  const shimmerColor = elapsed > 60 ? theme.stallShimmer : elapsed > 30 ? theme.warning : theme.primaryShimmer;
   const shimmerPos = frame % (text.length + 6);
 
   return (

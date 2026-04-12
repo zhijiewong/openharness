@@ -2,10 +2,10 @@
  * LlamaCpp provider — local LLM inference via llama-server OpenAI-compatible REST API.
  */
 
-import type { Message, ToolCall } from "../types/message.js";
 import type { StreamEvent, ToolCallComplete } from "../types/events.js";
+import type { Message, ToolCall } from "../types/message.js";
 import { createAssistantMessage } from "../types/message.js";
-import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
+import type { APIToolDef, ModelInfo, Provider, ProviderConfig } from "./base.js";
 
 export class LlamaCppProvider implements Provider {
   readonly name = "llamacpp";
@@ -13,16 +13,11 @@ export class LlamaCppProvider implements Provider {
   private defaultModel: string;
 
   constructor(config: ProviderConfig) {
-    this.baseUrl = (config.baseUrl ?? "http://localhost:8080")
-      .replace(/\/$/, "")
-      .replace(/\/v1$/, "");
+    this.baseUrl = (config.baseUrl ?? "http://localhost:8080").replace(/\/$/, "").replace(/\/v1$/, "");
     this.defaultModel = config.defaultModel ?? "";
   }
 
-  private convertMessages(
-    messages: Message[],
-    systemPrompt: string,
-  ): unknown[] {
+  private convertMessages(messages: Message[], systemPrompt: string): unknown[] {
     const converted: unknown[] = [];
     if (systemPrompt) {
       converted.push({ role: "system", content: systemPrompt });
@@ -190,12 +185,7 @@ export class LlamaCppProvider implements Provider {
     }
   }
 
-  async complete(
-    messages: Message[],
-    systemPrompt: string,
-    tools?: APIToolDef[],
-    model?: string,
-  ): Promise<Message> {
+  async complete(messages: Message[], systemPrompt: string, tools?: APIToolDef[], model?: string): Promise<Message> {
     const m = model ?? this.defaultModel;
     const body: Record<string, unknown> = {
       model: m,
@@ -267,6 +257,9 @@ export class LlamaCppProvider implements Provider {
 
 function safeParse(json: string | undefined): Record<string, unknown> {
   if (!json) return {};
-  try { return JSON.parse(json); }
-  catch { return {}; }
+  try {
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
 }

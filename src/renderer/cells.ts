@@ -3,7 +3,7 @@
  */
 
 export type Style = {
-  fg: string | null;   // color name: "red", "cyan", etc. null = default
+  fg: string | null; // color name: "red", "cyan", etc. null = default
   bg: string | null;
   bold: boolean;
   dim: boolean;
@@ -16,15 +16,17 @@ export type Cell = {
 };
 
 export const EMPTY_STYLE: Style = { fg: null, bg: null, bold: false, dim: false, underline: false };
-export const EMPTY_CELL: Cell = { char: ' ', style: { ...EMPTY_STYLE } };
+export const EMPTY_CELL: Cell = { char: " ", style: { ...EMPTY_STYLE } };
 
 export function cellsEqual(a: Cell, b: Cell): boolean {
-  return a.char === b.char &&
+  return (
+    a.char === b.char &&
     a.style.fg === b.style.fg &&
     a.style.bg === b.style.bg &&
     a.style.bold === b.style.bold &&
     a.style.dim === b.style.dim &&
-    a.style.underline === b.style.underline;
+    a.style.underline === b.style.underline
+  );
 }
 
 export class CellGrid {
@@ -39,7 +41,7 @@ export class CellGrid {
     for (let r = 0; r < height; r++) {
       const row: Cell[] = [];
       for (let c = 0; c < width; c++) {
-        row.push({ char: ' ', style: { ...EMPTY_STYLE } });
+        row.push({ char: " ", style: { ...EMPTY_STYLE } });
       }
       this.cells.push(row);
     }
@@ -49,7 +51,7 @@ export class CellGrid {
     for (let r = 0; r < this.height; r++) {
       for (let c = 0; c < this.width; c++) {
         const cell = this.cells[r]![c]!;
-        cell.char = ' ';
+        cell.char = " ";
         cell.style.fg = null;
         cell.style.bg = null;
         cell.style.bold = false;
@@ -81,7 +83,7 @@ export class CellGrid {
     let c = col;
     for (let i = 0; i < text.length; i++) {
       const ch = text[i]!;
-      if (ch === '\n') {
+      if (ch === "\n") {
         r++;
         c = col;
         continue;
@@ -103,11 +105,11 @@ export class CellGrid {
    */
   writeWrapped(row: number, col: number, text: string, style: Style, wrapWidth: number, maxRow?: number): number {
     const limit = maxRow ?? this.height;
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     let r = row;
     for (const line of lines) {
       if (r >= limit) break;
-      const words = line.split(' ');
+      const words = line.split(" ");
       let c = col;
       for (const word of words) {
         if (word.length === 0) continue;
@@ -119,7 +121,7 @@ export class CellGrid {
         }
         // Add space before word (unless at start of line)
         if (c > col) {
-          this.setCell(r, c, ' ', style);
+          this.setCell(r, c, " ", style);
           c++;
         }
         // Write word character by character (may still wrap if word > wrapWidth)

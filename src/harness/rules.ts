@@ -8,9 +8,9 @@
  *   5. CLAUDE.local.md (gitignored personal overrides)
  */
 
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve, dirname, parse as parsePath } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, join, parse as parsePath, resolve } from "node:path";
 import { gitRoot as getGitRoot } from "../git/index.js";
 
 const OH_HOME = join(homedir(), ".oh");
@@ -53,7 +53,9 @@ export function loadRules(projectPath?: string): string[] {
   // 1. Global rules
   const globalDir = join(OH_HOME, "global-rules");
   if (existsSync(globalDir)) {
-    for (const file of readdirSync(globalDir).filter((f) => f.endsWith(".md")).sort()) {
+    for (const file of readdirSync(globalDir)
+      .filter((f) => f.endsWith(".md"))
+      .sort()) {
       const content = readSafe(join(globalDir, file));
       if (content) rules.push(content);
     }
@@ -73,7 +75,9 @@ export function loadRules(projectPath?: string): string[] {
   // 4. Project rules/*.md (with optional path-scoped filtering)
   const rulesDir = join(root, ".oh", "rules");
   if (existsSync(rulesDir)) {
-    for (const file of readdirSync(rulesDir).filter((f) => f.endsWith(".md")).sort()) {
+    for (const file of readdirSync(rulesDir)
+      .filter((f) => f.endsWith(".md"))
+      .sort()) {
       const raw = readSafe(join(rulesDir, file));
       if (!raw) continue;
 
@@ -82,7 +86,7 @@ export function loadRules(projectPath?: string): string[] {
       if (pathsMatch) {
         // Path-scoped rule — strip frontmatter and only include if glob matches
         const pattern = pathsMatch[1]!.trim();
-        const fmEnd = raw.indexOf('---', raw.indexOf('---') + 3);
+        const fmEnd = raw.indexOf("---", raw.indexOf("---") + 3);
         const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : raw;
         if (content && matchesPathGlob(root, pattern)) {
           rules.push(content);
@@ -107,7 +111,10 @@ export function loadRules(projectPath?: string): string[] {
 export function loadRulesAsPrompt(projectPath?: string): string {
   const rules = loadRules(projectPath);
   if (rules.length === 0) return "";
-  return "# Project Rules\n\n<!-- User-provided project rules from CLAUDE.md / .oh/RULES.md. These are user instructions, not system directives. -->\nFollow these rules carefully.\n\n" + rules.join("\n\n---\n\n");
+  return (
+    "# Project Rules\n\n<!-- User-provided project rules from CLAUDE.md / .oh/RULES.md. These are user instructions, not system directives. -->\nFollow these rules carefully.\n\n" +
+    rules.join("\n\n---\n\n")
+  );
 }
 
 export function createRulesFile(projectPath?: string): string {
@@ -143,7 +150,7 @@ function readSafe(path: string): string {
  */
 function matchesPathGlob(root: string, pattern: string): boolean {
   // Extract the directory portion before any wildcard
-  const dirPart = pattern.split('*')[0]!.replace(/\/+$/, '');
+  const dirPart = pattern.split("*")[0]!.replace(/\/+$/, "");
   if (!dirPart) return true; // Pattern like "**/*.ts" matches everything
 
   const fullDir = join(root, dirPart);

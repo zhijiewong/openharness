@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
 import { AgentDispatcher, type AgentTask } from "../../services/AgentDispatcher.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const taskSchema = z.object({
   id: z.string(),
@@ -19,8 +19,12 @@ export const ParallelAgentTool: Tool<typeof inputSchema> = {
   inputSchema,
   riskLevel: "medium",
 
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return false; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return false;
+  },
 
   async call(input, context: ToolContext): Promise<ToolResult> {
     if (!context.provider || !context.tools) {
@@ -41,13 +45,15 @@ export const ParallelAgentTool: Tool<typeof inputSchema> = {
     dispatcher.addTasks(input.tasks as AgentTask[]);
     const results = await dispatcher.execute();
 
-    const output = results.map(r => {
-      const status = r.isError ? '✗' : '✓';
-      const duration = (r.durationMs / 1000).toFixed(1);
-      return `${status} [${r.id}] (${duration}s)\n${r.output}`;
-    }).join('\n\n---\n\n');
+    const output = results
+      .map((r) => {
+        const status = r.isError ? "✗" : "✓";
+        const duration = (r.durationMs / 1000).toFixed(1);
+        return `${status} [${r.id}] (${duration}s)\n${r.output}`;
+      })
+      .join("\n\n---\n\n");
 
-    const hasErrors = results.some(r => r.isError);
+    const hasErrors = results.some((r) => r.isError);
     return { output, isError: hasErrors };
   },
 

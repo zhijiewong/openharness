@@ -14,10 +14,10 @@
  *   console.log(result.text);
  */
 
-import type { StreamEvent } from '../types/events.js';
-import type { Provider } from '../providers/base.js';
-import type { Tools } from '../Tool.js';
-import type { PermissionMode } from '../types/permissions.js';
+import type { Provider } from "../providers/base.js";
+import type { Tools } from "../Tool.js";
+import type { StreamEvent } from "../types/events.js";
+import type { PermissionMode } from "../types/permissions.js";
 
 // ── Types ──
 
@@ -31,7 +31,7 @@ export type AgentConfig = {
   /** Custom base URL */
   baseUrl?: string;
   /** Tools to include: 'all', 'read-only', or array of tool names */
-  tools?: 'all' | 'read-only' | string[];
+  tools?: "all" | "read-only" | string[];
   /** Permission mode (default: 'trust') */
   permissionMode?: PermissionMode;
   /** Custom system prompt */
@@ -67,7 +67,7 @@ export class Agent {
 
   constructor(config: AgentConfig) {
     this.config = {
-      permissionMode: 'trust',
+      permissionMode: "trust",
       maxTurns: 20,
       ...config,
     };
@@ -79,9 +79,8 @@ export class Agent {
   }
 
   private async _doInit(): Promise<void> {
-
-    const { createProvider } = await import('../providers/index.js');
-    const { getAllTools } = await import('../tools.js');
+    const { createProvider } = await import("../providers/index.js");
+    const { getAllTools } = await import("../tools.js");
 
     const overrides: any = {};
     if (this.config.apiKey) overrides.apiKey = this.config.apiKey;
@@ -95,12 +94,12 @@ export class Agent {
 
     // Filter tools
     let tools = getAllTools();
-    if (this.config.tools === 'read-only') {
-      const readOnlyNames = new Set(['Read', 'Glob', 'Grep', 'LS', 'ImageRead', 'WebSearch', 'WebFetch']);
-      tools = tools.filter(t => readOnlyNames.has(t.name));
+    if (this.config.tools === "read-only") {
+      const readOnlyNames = new Set(["Read", "Glob", "Grep", "LS", "ImageRead", "WebSearch", "WebFetch"]);
+      tools = tools.filter((t) => readOnlyNames.has(t.name));
     } else if (Array.isArray(this.config.tools)) {
-      const allowed = new Set(this.config.tools.map(n => n.toLowerCase()));
-      tools = tools.filter(t => allowed.has(t.name.toLowerCase()));
+      const allowed = new Set(this.config.tools.map((n) => n.toLowerCase()));
+      tools = tools.filter((t) => allowed.has(t.name.toLowerCase()));
     }
     this.tools = tools;
   }
@@ -109,24 +108,28 @@ export class Agent {
   async run(prompt: string): Promise<AgentResult> {
     await this.init();
 
-    const { query } = await import('../query.js');
+    const { query } = await import("../query.js");
 
     const originalCwd = process.cwd();
     if (this.config.cwd) {
-      try { process.chdir(this.config.cwd); } catch { /* ignore */ }
+      try {
+        process.chdir(this.config.cwd);
+      } catch {
+        /* ignore */
+      }
     }
 
     const config = {
       provider: this.provider!,
       tools: this.tools!,
-      systemPrompt: this.config.systemPrompt ?? 'You are a helpful coding agent.',
+      systemPrompt: this.config.systemPrompt ?? "You are a helpful coding agent.",
       permissionMode: this.config.permissionMode!,
       model: this.config.model,
       maxTurns: this.config.maxTurns,
     };
 
-    let text = '';
-    const toolCalls: AgentResult['toolCalls'] = [];
+    let text = "";
+    const toolCalls: AgentResult["toolCalls"] = [];
     let cost = 0;
     let inputTokens = 0;
     let outputTokens = 0;
@@ -135,29 +138,33 @@ export class Agent {
     try {
       for await (const event of query(prompt, config)) {
         switch (event.type) {
-          case 'text_delta':
+          case "text_delta":
             text += (event as any).content;
             break;
-          case 'tool_call_end':
+          case "tool_call_end":
             toolCalls.push({
-              toolName: (event as any).toolName ?? 'unknown',
-              output: (event as any).output ?? '',
+              toolName: (event as any).toolName ?? "unknown",
+              output: (event as any).output ?? "",
               isError: (event as any).isError ?? false,
             });
             break;
-          case 'cost_update':
+          case "cost_update":
             cost += (event as any).cost ?? 0;
             inputTokens += (event as any).inputTokens ?? 0;
             outputTokens += (event as any).outputTokens ?? 0;
             break;
-          case 'turn_complete':
+          case "turn_complete":
             turns++;
             break;
         }
       }
     } finally {
       if (this.config.cwd) {
-        try { process.chdir(originalCwd); } catch { /* ignore */ }
+        try {
+          process.chdir(originalCwd);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -168,16 +175,20 @@ export class Agent {
   async *stream(prompt: string): AsyncGenerator<StreamEvent, void> {
     await this.init();
 
-    const { query } = await import('../query.js');
+    const { query } = await import("../query.js");
 
     if (this.config.cwd) {
-      try { process.chdir(this.config.cwd); } catch { /* ignore */ }
+      try {
+        process.chdir(this.config.cwd);
+      } catch {
+        /* ignore */
+      }
     }
 
     const config = {
       provider: this.provider!,
       tools: this.tools!,
-      systemPrompt: this.config.systemPrompt ?? 'You are a helpful coding agent.',
+      systemPrompt: this.config.systemPrompt ?? "You are a helpful coding agent.",
       permissionMode: this.config.permissionMode!,
       model: this.config.model,
       maxTurns: this.config.maxTurns,
@@ -202,5 +213,5 @@ export function createAgent(config: AgentConfig): Agent {
 }
 
 // Re-export types
-export type { StreamEvent } from '../types/events.js';
-export type { PermissionMode } from '../types/permissions.js';
+export type { StreamEvent } from "../types/events.js";
+export type { PermissionMode } from "../types/permissions.js";

@@ -15,16 +15,18 @@ export type PermissionResult = {
   readonly riskLevel: RiskLevel;
 };
 
-export type AskUserFn = (
-  toolName: string,
-  description: string,
-  riskLevel?: RiskLevel,
-) => Promise<boolean>;
+export type AskUserFn = (toolName: string, description: string, riskLevel?: RiskLevel) => Promise<boolean>;
 
 /** Tools auto-approved in acceptEdits mode */
 const EDIT_SAFE_TOOLS = new Set([
-  "FileRead", "FileWrite", "FileEdit", "Glob", "Grep", "LS",
-  "ImageRead", "NotebookEdit",
+  "FileRead",
+  "FileWrite",
+  "FileEdit",
+  "Glob",
+  "Grep",
+  "LS",
+  "ImageRead",
+  "NotebookEdit",
 ]);
 
 /** Parse a tool specifier like "Bash(npm run *)" into tool name + pattern */
@@ -49,10 +51,10 @@ function matchToolPattern(pattern: string, toolName: string): boolean {
 function matchArgGlob(pattern: string, value: string): boolean {
   // Convert glob to regex: * → [^/]*, ** → .*, escape other regex chars
   const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // escape regex chars (except * and ?)
-    .replace(/\*\*/g, '{{DOUBLESTAR}}')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\{\{DOUBLESTAR\}\}/g, '.*');
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape regex chars (except * and ?)
+    .replace(/\*\*/g, "{{DOUBLESTAR}}")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\{\{DOUBLESTAR\}\}/g, ".*");
   try {
     return new RegExp(`^${regexStr}$`).test(value);
   } catch {
@@ -61,9 +63,13 @@ function matchArgGlob(pattern: string, value: string): boolean {
 }
 
 /** Find the first matching tool permission rule */
-function findToolRule(rules: ToolPermissionRule[] | undefined, toolName: string, toolInput?: unknown): ToolPermissionRule | undefined {
+function findToolRule(
+  rules: ToolPermissionRule[] | undefined,
+  toolName: string,
+  toolInput?: unknown,
+): ToolPermissionRule | undefined {
   if (!rules || rules.length === 0) return undefined;
-  return rules.find(r => {
+  return rules.find((r) => {
     const { toolName: specToolName, argPattern } = parseToolSpecifier(r.tool);
 
     // Check tool name match (with prefix * support)
@@ -74,12 +80,12 @@ function findToolRule(rules: ToolPermissionRule[] | undefined, toolName: string,
       const input = toolInput as Record<string, unknown>;
 
       // For Bash: match against command string
-      if (toolName === 'Bash' && typeof input.command === 'string') {
+      if (toolName === "Bash" && typeof input.command === "string") {
         return matchArgGlob(argPattern, input.command);
       }
 
       // For file tools: match against file_path
-      if (['Edit', 'Write', 'Read'].includes(toolName) && typeof input.file_path === 'string') {
+      if (["Edit", "Write", "Read"].includes(toolName) && typeof input.file_path === "string") {
         return matchArgGlob(argPattern, input.file_path);
       }
 
@@ -90,7 +96,11 @@ function findToolRule(rules: ToolPermissionRule[] | undefined, toolName: string,
     if (r.pattern && toolInput && toolName === "Bash") {
       const command = (toolInput as Record<string, unknown>)?.command;
       if (typeof command === "string") {
-        try { return new RegExp(r.pattern).test(command); } catch { return false; }
+        try {
+          return new RegExp(r.pattern).test(command);
+        } catch {
+          return false;
+        }
       }
       return false;
     }

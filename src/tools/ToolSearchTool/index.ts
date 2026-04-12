@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { DeferredMcpTool } from "../../mcp/DeferredMcpTool.js";
 import { DeferredTool } from "../../DeferredTool.js";
+import { DeferredMcpTool } from "../../mcp/DeferredMcpTool.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   query: z.string().describe("Tool name or keyword to search for"),
@@ -14,8 +14,12 @@ export const ToolSearchTool: Tool<typeof inputSchema> = {
   inputSchema,
   riskLevel: "low",
 
-  isReadOnly() { return true; },
-  isConcurrencySafe() { return true; },
+  isReadOnly() {
+    return true;
+  },
+  isConcurrencySafe() {
+    return true;
+  },
 
   async call(input, context: ToolContext): Promise<ToolResult> {
     const allTools = context.tools ?? [];
@@ -24,10 +28,7 @@ export const ToolSearchTool: Tool<typeof inputSchema> = {
 
     // Search by name or description
     const matches = allTools
-      .filter(t =>
-        t.name.toLowerCase().includes(query) ||
-        t.description.toLowerCase().includes(query),
-      )
+      .filter((t) => t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query))
       .slice(0, max);
 
     if (matches.length === 0) {
@@ -54,7 +55,7 @@ export const ToolSearchTool: Tool<typeof inputSchema> = {
       }
     }
 
-    return { output: results.join('\n\n'), isError: false };
+    return { output: results.join("\n\n"), isError: false };
   },
 
   prompt() {

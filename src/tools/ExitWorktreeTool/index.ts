@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { removeWorktree, hasWorktreeChanges } from "../../git/index.js";
+import { hasWorktreeChanges, removeWorktree } from "../../git/index.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   path: z.string().describe("Path to the worktree to remove"),
@@ -12,8 +12,12 @@ export const ExitWorktreeTool: Tool<typeof inputSchema> = {
   description: "Remove a git worktree. Warns if there are uncommitted changes unless force is true.",
   inputSchema,
   riskLevel: "medium",
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return false; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return false;
+  },
 
   async call(input): Promise<ToolResult> {
     if (!input.force && hasWorktreeChanges(input.path)) {
@@ -26,7 +30,10 @@ export const ExitWorktreeTool: Tool<typeof inputSchema> = {
       removeWorktree(input.path);
       return { output: `Worktree removed: ${input.path}`, isError: false };
     } catch (err) {
-      return { output: `Failed to remove worktree: ${err instanceof Error ? err.message : String(err)}`, isError: true };
+      return {
+        output: `Failed to remove worktree: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
     }
   },
 

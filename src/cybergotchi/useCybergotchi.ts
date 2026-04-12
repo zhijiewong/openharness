@@ -1,17 +1,17 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { CompanionConfig, CompanionRuntime, CompanionState, CompanionBones, Emotion } from './types.js';
-import { loadCompanionConfig, saveCompanionConfig } from './config.js';
-import { roll } from './bones.js';
-import { cybergotchiEvents } from './events.js';
-import type { CybergotchiEvent } from './events.js';
-import { getSpeech } from './speech.js';
-import { getSpecies } from './species.js';
-import { decayNeeds, applyEvent } from './needs.js';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { roll } from "./bones.js";
+import { loadCompanionConfig, saveCompanionConfig } from "./config.js";
+import type { CybergotchiEvent } from "./events.js";
+import { cybergotchiEvents } from "./events.js";
+import { applyEvent, decayNeeds } from "./needs.js";
+import { getSpecies } from "./species.js";
+import { getSpeech } from "./speech.js";
+import type { CompanionBones, CompanionConfig, CompanionRuntime, CompanionState, Emotion } from "./types.js";
 
 const TICK_MS = 500;
-const SPEECH_TTL_TICKS = 10;   // 5 seconds
+const SPEECH_TTL_TICKS = 10; // 5 seconds
 const IDLE_INTERVAL_TICKS = 120; // 60 seconds
-const SAVE_INTERVAL_TICKS = 60;  // 30 seconds — persist needs decay periodically
+const SAVE_INTERVAL_TICKS = 60; // 30 seconds — persist needs decay periodically
 
 interface UseCompanionResult {
   config: CompanionConfig | null;
@@ -25,9 +25,9 @@ interface UseCompanionResult {
 /** Derive emotion from current needs */
 function emotionFromNeeds(config: CompanionConfig): Emotion {
   const { hunger, energy, happiness } = config.needs;
-  if (hunger < 20 || happiness < 20) return 'alarm';
-  if (happiness > 60 && hunger > 50 && energy > 50) return 'happy';
-  return 'idle';
+  if (hunger < 20 || happiness < 20) return "alarm";
+  if (happiness > 60 && hunger > 50 && energy > 50) return "happy";
+  return "idle";
 }
 
 export function useCybergotchi(paused?: boolean): UseCompanionResult {
@@ -36,12 +36,10 @@ export function useCybergotchi(paused?: boolean): UseCompanionResult {
   const isSetupNeeded = config === null;
 
   // Compute bones from seed (deterministic, recomputed each session)
-  const bonesRef = useRef<CompanionBones | null>(
-    config ? roll(config.seed) : null,
-  );
+  const bonesRef = useRef<CompanionBones | null>(config ? roll(config.seed) : null);
 
   const [state, setState] = useState<CompanionState>({
-    emotion: 'idle',
+    emotion: "idle",
     frame: 0,
     speech: null,
     speechTtl: 0,
@@ -63,8 +61,10 @@ export function useCybergotchi(paused?: boolean): UseCompanionResult {
     const handler = (event: CybergotchiEvent) => {
       eventQueue.current.push(event);
     };
-    cybergotchiEvents.on('cybergotchi', handler);
-    return () => { cybergotchiEvents.off('cybergotchi', handler); };
+    cybergotchiEvents.on("cybergotchi", handler);
+    return () => {
+      cybergotchiEvents.off("cybergotchi", handler);
+    };
   }, []);
 
   // Animation + needs tick
@@ -92,7 +92,7 @@ export function useCybergotchi(paused?: boolean): UseCompanionResult {
       const bones = bonesRef.current;
       if (!bones) return;
 
-      setState(prev => {
+      setState((prev) => {
         let { frame, speech, speechTtl } = prev;
         let emotion: Emotion = emotionFromNeeds(cfg);
 
@@ -118,7 +118,7 @@ export function useCybergotchi(paused?: boolean): UseCompanionResult {
           idleTicksRef.current += 1;
           if (idleTicksRef.current >= IDLE_INTERVAL_TICKS) {
             idleTicksRef.current = 0;
-            speech = getSpeech('idle', bones.baseStats);
+            speech = getSpeech("idle", bones.baseStats);
             speechTtl = SPEECH_TTL_TICKS;
           }
         }
@@ -132,17 +132,20 @@ export function useCybergotchi(paused?: boolean): UseCompanionResult {
     }, TICK_MS);
 
     return () => clearInterval(tick);
-  }, [config]);
+  }, [config, paused]);
 
-  const runtime: CompanionRuntime | null = config && bonesRef.current ? {
-    bones: bonesRef.current,
-    soul: config.soul,
-    needs: config.needs,
-    needsUpdatedAt: config.needsUpdatedAt,
-    currentStreak: config.currentStreak,
-    lifetime: config.lifetime,
-    evolutionStage: config.evolutionStage,
-  } : null;
+  const runtime: CompanionRuntime | null =
+    config && bonesRef.current
+      ? {
+          bones: bonesRef.current,
+          soul: config.soul,
+          needs: config.needs,
+          needsUpdatedAt: config.needsUpdatedAt,
+          currentStreak: config.currentStreak,
+          lifetime: config.lifetime,
+          evolutionStage: config.evolutionStage,
+        }
+      : null;
 
   return { config, bones: bonesRef.current, runtime, state, isSetupNeeded, reload };
 }

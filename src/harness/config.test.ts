@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import test from "node:test";
 import { readOhConfig, writeOhConfig } from "./config.js";
 
 function tmp(): string {
-  return mkdtempSync(tmpdir() + "/oh-cfg-test-");
+  return mkdtempSync(`${tmpdir()}/oh-cfg-test-`);
 }
 
 test("readOhConfig() returns null when no config exists", () => {
@@ -34,19 +34,22 @@ test("writeOhConfig() creates .oh/ directory if missing", () => {
 test("readOhConfig() returns null on unreadable config", () => {
   const dir = tmp();
   // Don't create the .oh dir — file doesn't exist
-  assert.equal(readOhConfig(dir + "/nonexistent"), null);
+  assert.equal(readOhConfig(`${dir}/nonexistent`), null);
 });
 
 test("writeOhConfig() preserves optional fields", () => {
   const dir = tmp();
-  writeOhConfig({
-    provider: "openrouter",
-    model: "openai/gpt-4o",
-    permissionMode: "deny",
-    apiKey: "sk-test",
-    baseUrl: "https://openrouter.ai/api/v1",
-    mcpServers: [{ name: "fs", command: "npx", args: ["-y", "@mcp/server-fs"] }],
-  }, dir);
+  writeOhConfig(
+    {
+      provider: "openrouter",
+      model: "openai/gpt-4o",
+      permissionMode: "deny",
+      apiKey: "sk-test",
+      baseUrl: "https://openrouter.ai/api/v1",
+      mcpServers: [{ name: "fs", command: "npx", args: ["-y", "@mcp/server-fs"] }],
+    },
+    dir,
+  );
   const cfg = readOhConfig(dir);
   assert.ok(cfg !== null);
   assert.equal(cfg.apiKey, "sk-test");
@@ -57,12 +60,15 @@ test("writeOhConfig() preserves optional fields", () => {
 
 test("writeOhConfig() llamacpp roundtrip", () => {
   const dir = tmp();
-  writeOhConfig({
-    provider: "llamacpp",
-    model: "llama3-local",
-    permissionMode: "ask",
-    baseUrl: "http://localhost:8080",
-  }, dir);
+  writeOhConfig(
+    {
+      provider: "llamacpp",
+      model: "llama3-local",
+      permissionMode: "ask",
+      baseUrl: "http://localhost:8080",
+    },
+    dir,
+  );
   const cfg = readOhConfig(dir);
   assert.ok(cfg !== null);
   assert.equal(cfg.provider, "llamacpp");
@@ -73,12 +79,15 @@ test("writeOhConfig() llamacpp roundtrip", () => {
 
 test("writeOhConfig() llamacpp model with colon roundtrips correctly", () => {
   const dir = tmp();
-  writeOhConfig({
-    provider: "llamacpp",
-    model: "my:model",
-    permissionMode: "trust",
-    apiKey: "secret#key",
-  }, dir);
+  writeOhConfig(
+    {
+      provider: "llamacpp",
+      model: "my:model",
+      permissionMode: "trust",
+      apiKey: "secret#key",
+    },
+    dir,
+  );
   const cfg = readOhConfig(dir);
   assert.ok(cfg !== null);
   assert.equal(cfg.model, "my:model");

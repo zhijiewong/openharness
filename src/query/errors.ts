@@ -12,7 +12,9 @@ export function isRateLimitError(err: Error): boolean {
 
 export function isOverloadError(err: Error): boolean {
   const msg = err.message.toLowerCase();
-  return msg.includes("503") || msg.includes("overloaded") || msg.includes("service unavailable") || msg.includes("529");
+  return (
+    msg.includes("503") || msg.includes("overloaded") || msg.includes("service unavailable") || msg.includes("529")
+  );
 }
 
 export function isPromptTooLongError(err: Error): boolean {

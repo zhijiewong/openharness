@@ -8,26 +8,40 @@
  * without user intervention.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, unlinkSync } from 'node:fs';
-import { join, basename, resolve, sep } from 'node:path';
-import { homedir } from 'node:os';
-import type { Message } from '../types/message.js';
-import type { Provider } from '../providers/base.js';
-import { createUserMessage } from '../types/message.js';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve, sep } from "node:path";
+import type { Provider } from "../providers/base.js";
+import type { Message } from "../types/message.js";
+import { createUserMessage } from "../types/message.js";
 
-const PROJECT_MEMORY_DIR = join('.oh', 'memory');
-const GLOBAL_MEMORY_DIR = join(homedir(), '.oh', 'memory');
+const PROJECT_MEMORY_DIR = join(".oh", "memory");
+const GLOBAL_MEMORY_DIR = join(homedir(), ".oh", "memory");
+
+/**
+ * Memory types — supports both legacy and Claude Code-compatible names.
+ * Legacy: convention, preference, project, debugging
+ * New:    user, feedback, project, reference
+ */
+export type MemoryType =
+  | "convention"
+  | "preference"
+  | "project"
+  | "debugging" // legacy
+  | "user"
+  | "feedback"
+  | "reference"; // new (project shared)
 
 export type MemoryEntry = {
   name: string;
-  type: 'convention' | 'preference' | 'project' | 'debugging';
+  type: MemoryType;
   description: string;
   content: string;
   filePath: string;
-  relevance?: number;     // 0-1 relevance score (default 0.5)
-  lastAccessed?: number;  // timestamp of last access
-  createdAt?: number;     // timestamp of creation
-  accessCount?: number;   // how many times accessed
+  relevance?: number; // 0-1 relevance score (default 0.5)
+  lastAccessed?: number; // timestamp of last access
+  createdAt?: number; // timestamp of creation
+  accessCount?: number; // how many times accessed
 };
 
 /** Load all memories from project and global dirs */
@@ -36,13 +50,15 @@ export function loadMemories(): MemoryEntry[] {
 
   for (const dir of [PROJECT_MEMORY_DIR, GLOBAL_MEMORY_DIR]) {
     if (!existsSync(dir)) continue;
-    for (const file of readdirSync(dir).filter(f => f.endsWith('.md'))) {
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
       try {
         const filePath = join(dir, file);
-        const raw = readFileSync(filePath, 'utf-8');
+        const raw = readFileSync(filePath, "utf-8");
         const entry = parseMemory(raw, filePath);
         if (entry) entries.push(entry);
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 
@@ -57,8 +73,8 @@ function parseMemory(raw: string, filePath: string): MemoryEntry | null {
   if (!nameMatch) return null;
 
   // Content is everything after the frontmatter closing ---
-  const fmEnd = raw.indexOf('---', raw.indexOf('---') + 3);
-  const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : '';
+  const fmEnd = raw.indexOf("---", raw.indexOf("---") + 3);
+  const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : "";
 
   const relevanceMatch = raw.match(/^relevance:\s*([0-9.]+)$/m);
   const lastAccessedMatch = raw.match(/^lastAccessed:\s*(\d+)$/m);
@@ -67,30 +83,28 @@ function parseMemory(raw: string, filePath: string): MemoryEntry | null {
 
   return {
     name: nameMatch[1]!.trim(),
-    type: (typeMatch?.[1]?.trim() ?? 'convention') as MemoryEntry['type'],
-    description: descMatch?.[1]?.trim() ?? '',
+    type: (typeMatch?.[1]?.trim() ?? "user") as MemoryType,
+    description: descMatch?.[1]?.trim() ?? "",
     content,
     filePath,
     relevance: relevanceMatch ? parseFloat(relevanceMatch[1]!) : 0.5,
-    lastAccessed: lastAccessedMatch ? parseInt(lastAccessedMatch[1]!) : undefined,
-    createdAt: createdAtMatch ? parseInt(createdAtMatch[1]!) : undefined,
-    accessCount: accessCountMatch ? parseInt(accessCountMatch[1]!) : 0,
+    lastAccessed: lastAccessedMatch ? parseInt(lastAccessedMatch[1]!, 10) : undefined,
+    createdAt: createdAtMatch ? parseInt(createdAtMatch[1]!, 10) : undefined,
+    accessCount: accessCountMatch ? parseInt(accessCountMatch[1]!, 10) : 0,
   };
 }
 
 /** Build a system prompt section from loaded memories */
 export function memoriesToPrompt(memories: MemoryEntry[]): string {
-  if (memories.length === 0) return '';
-  const lines = memories.map(m =>
-    `- **${m.name}** (${m.type}): ${m.content.slice(0, 200)}`
-  );
-  return `# Remembered Context\n${lines.join('\n')}`;
+  if (memories.length === 0) return "";
+  const lines = memories.map((m) => `- **${m.name}** (${m.type}): ${m.content.slice(0, 200)}`);
+  return `# Remembered Context\n${lines.join("\n")}`;
 }
 
 /** Save a memory entry to the project memory directory */
 export function saveMemory(
   name: string,
-  type: MemoryEntry['type'],
+  type: MemoryType,
   description: string,
   content: string,
   global = false,
@@ -98,7 +112,10 @@ export function saveMemory(
   const dir = global ? GLOBAL_MEMORY_DIR : PROJECT_MEMORY_DIR;
   mkdirSync(dir, { recursive: true });
 
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 50);
   const filePath = join(dir, `${slug}.md`);
 
   const now = Date.now();
@@ -116,13 +133,53 @@ ${content}
 `;
 
   writeFileSync(filePath, md);
+  updateMemoryIndex(dir);
   return filePath;
+}
+
+/**
+ * Update or create MEMORY.md index file in the given memory directory.
+ * The index is always loaded into context, providing instant awareness of all stored memories.
+ * Each entry is a one-liner pointer to the individual memory file (~200 line cap).
+ */
+export function updateMemoryIndex(dir: string = PROJECT_MEMORY_DIR): void {
+  if (!existsSync(dir)) return;
+
+  const files = readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md");
+  const entries: Array<{ name: string; file: string; description: string }> = [];
+
+  for (const file of files) {
+    try {
+      const raw = readFileSync(join(dir, file), "utf-8");
+      const nameMatch = raw.match(/^name:\s*(.+)$/m);
+      const descMatch = raw.match(/^description:\s*(.+)$/m);
+      if (nameMatch) {
+        entries.push({
+          name: nameMatch[1]!.trim(),
+          file,
+          description: descMatch?.[1]?.trim() ?? "",
+        });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+
+  const lines = ["# Memory Index", ""];
+  for (const e of entries) {
+    // Keep each line under ~150 chars for readability
+    const hook = e.description.length > 100 ? `${e.description.slice(0, 97)}...` : e.description;
+    lines.push(`- [${e.name}](${e.file}) — ${hook}`);
+  }
+  lines.push("");
+
+  writeFileSync(join(dir, "MEMORY.md"), lines.join("\n"));
 }
 
 /** Mark a memory as accessed — updates lastAccessed and accessCount in the file */
 export function touchMemory(entry: MemoryEntry): void {
   try {
-    let raw = readFileSync(entry.filePath, 'utf-8');
+    let raw = readFileSync(entry.filePath, "utf-8");
     const now = Date.now();
     const newCount = (entry.accessCount ?? 0) + 1;
 
@@ -141,20 +198,24 @@ export function touchMemory(entry: MemoryEntry): void {
     writeFileSync(entry.filePath, raw);
     entry.lastAccessed = now;
     entry.accessCount = newCount;
-  } catch { /* ignore write errors */ }
+  } catch {
+    /* ignore write errors */
+  }
 }
 
 /** Boost a memory's relevance score (capped at 1.0) */
 export function boostRelevance(entry: MemoryEntry, amount = 0.1): void {
   const newRelevance = Math.min(1.0, (entry.relevance ?? 0.5) + amount);
   try {
-    let raw = readFileSync(entry.filePath, 'utf-8');
+    let raw = readFileSync(entry.filePath, "utf-8");
     if (raw.match(/^relevance:/m)) {
       raw = raw.replace(/^relevance:\s*[0-9.]+$/m, `relevance: ${newRelevance.toFixed(2)}`);
     }
     writeFileSync(entry.filePath, raw);
     entry.relevance = newRelevance;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -194,7 +255,9 @@ export function loadActiveMemories(): MemoryEntry[] {
   const all = loadMemories();
   const { active } = decayAndPrune(all);
   // Sort by relevance (highest first), then by access count
-  return active.sort((a, b) => (b.relevance ?? 0.5) - (a.relevance ?? 0.5) || (b.accessCount ?? 0) - (a.accessCount ?? 0));
+  return active.sort(
+    (a, b) => (b.relevance ?? 0.5) - (a.relevance ?? 0.5) || (b.accessCount ?? 0) - (a.accessCount ?? 0),
+  );
 }
 
 // ── Dream Consolidation ──
@@ -203,12 +266,17 @@ export function loadActiveMemories(): MemoryEntry[] {
 /** Delete memory files that have been pruned (relevance < 0.1) */
 export function deletePrunedMemories(pruned: MemoryEntry[]): number {
   // Guard: only delete files within known memory directories
-  const allowedDirs = [PROJECT_MEMORY_DIR, GLOBAL_MEMORY_DIR].map(d => resolve(d));
+  const allowedDirs = [PROJECT_MEMORY_DIR, GLOBAL_MEMORY_DIR].map((d) => resolve(d));
   let count = 0;
   for (const m of pruned) {
     const resolved = resolve(m.filePath);
-    if (!allowedDirs.some(d => resolved.startsWith(d + sep))) continue;
-    try { unlinkSync(m.filePath); count++; } catch { /* ignore */ }
+    if (!allowedDirs.some((d) => resolved.startsWith(d + sep))) continue;
+    try {
+      unlinkSync(m.filePath);
+      count++;
+    } catch {
+      /* ignore */
+    }
   }
   return count;
 }
@@ -216,12 +284,14 @@ export function deletePrunedMemories(pruned: MemoryEntry[]): number {
 /** Write back decayed relevance score to file frontmatter */
 function persistDecayedRelevance(entry: MemoryEntry): void {
   try {
-    let raw = readFileSync(entry.filePath, 'utf-8');
+    let raw = readFileSync(entry.filePath, "utf-8");
     if (raw.match(/^relevance:/m)) {
       raw = raw.replace(/^relevance:\s*[0-9.]+$/m, `relevance: ${(entry.relevance ?? 0.5).toFixed(2)}`);
       writeFileSync(entry.filePath, raw);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 export type ConsolidationResult = {
@@ -252,6 +322,10 @@ export function consolidateMemories(): ConsolidationResult {
     }
   }
 
+  // Refresh MEMORY.md index after pruning
+  updateMemoryIndex(PROJECT_MEMORY_DIR);
+  updateMemoryIndex(GLOBAL_MEMORY_DIR);
+
   return { total: all.length, pruned: prunedCount, decayed: decayedCount };
 }
 
@@ -263,23 +337,19 @@ export async function detectMemories(
   provider: Provider,
   recentMessages: Message[],
   model?: string,
-): Promise<Array<{ name: string; type: MemoryEntry['type']; description: string; content: string }>> {
+): Promise<Array<{ name: string; type: MemoryEntry["type"]; description: string; content: string }>> {
   // Only analyze if there are enough messages
   if (recentMessages.length < 4) return [];
 
   // Extract assistant messages from recent turns
-  const assistantMsgs = recentMessages
-    .filter(m => m.role === 'assistant' && m.content.length > 50)
-    .slice(-3);
+  const assistantMsgs = recentMessages.filter((m) => m.role === "assistant" && m.content.length > 50).slice(-3);
   if (assistantMsgs.length === 0) return [];
 
-  const contextText = assistantMsgs
-    .map(m => m.content.slice(0, 500))
-    .join('\n---\n');
+  const contextText = assistantMsgs.map((m) => m.content.slice(0, 500)).join("\n---\n");
 
   const prompt = `Analyze this conversation snippet. If there are reusable learnings (coding conventions, project patterns, user preferences, debugging insights), extract them. Respond ONLY with a JSON array of objects with {name, type, description, content} or [] if nothing worth remembering.
 
-Types: "convention" (code style/patterns), "preference" (user likes/dislikes), "project" (architecture/decisions), "debugging" (solutions to problems)
+Types: "user" (role/preferences), "feedback" (corrections/confirmations), "project" (goals/decisions), "reference" (external pointers)
 
 Keep each memory concise (1-2 sentences). Only extract non-obvious learnings.
 
@@ -288,7 +358,7 @@ ${contextText}`;
   try {
     const response = await provider.complete(
       [createUserMessage(prompt)],
-      'You are a memory extraction system. Respond ONLY with valid JSON.',
+      "You are a memory extraction system. Respond ONLY with valid JSON.",
       undefined,
       model,
     );
@@ -299,9 +369,7 @@ ${contextText}`;
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.filter(
-      (m: any) => m.name && m.type && m.content && typeof m.content === 'string',
-    );
+    return parsed.filter((m: any) => m.name && m.type && m.content && typeof m.content === "string");
   } catch {
     return [];
   }

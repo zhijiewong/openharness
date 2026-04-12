@@ -1,60 +1,60 @@
-export type Emotion = 'idle' | 'happy' | 'alarm';
+export type Emotion = "idle" | "happy" | "alarm";
 
-export type Stat = 'DEBUGGING' | 'PATIENCE' | 'CHAOS' | 'WISDOM' | 'SNARK';
+export type Stat = "DEBUGGING" | "PATIENCE" | "CHAOS" | "WISDOM" | "SNARK";
 
-export type HatKey = 'none' | 'cap' | 'crown' | 'beanie' | 'tophat' | 'halo';
+export type HatKey = "none" | "cap" | "crown" | "beanie" | "tophat" | "halo";
 
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
-export const EYE_STYLES: string[] = ['o o', '^ ^', '- -', '> <', '* *', '~ ~'];
+export const EYE_STYLES: string[] = ["o o", "^ ^", "- -", "> <", "* *", "~ ~"];
 
 export const HAT_ART: Record<HatKey, string | null> = {
-  none:   null,
-  cap:    '  [___]  ',
-  crown:  ' /\\|/\\  ',
-  beanie: ' (~~~~) ',
-  tophat: ' [=====]',
-  halo:   '  ( o ) ',
+  none: null,
+  cap: "  [___]  ",
+  crown: " /\\|/\\  ",
+  beanie: " (~~~~) ",
+  tophat: " [=====]",
+  halo: "  ( o ) ",
 };
 
 /** Rarity tiers with weights (must sum to 100) and stat floors */
 export const RARITY_TIERS: { rarity: Rarity; weight: number; statFloor: number }[] = [
-  { rarity: 'common',    weight: 60, statFloor: 5 },
-  { rarity: 'uncommon',  weight: 25, statFloor: 15 },
-  { rarity: 'rare',      weight: 10, statFloor: 25 },
-  { rarity: 'epic',      weight: 4,  statFloor: 35 },
-  { rarity: 'legendary', weight: 1,  statFloor: 50 },
+  { rarity: "common", weight: 60, statFloor: 5 },
+  { rarity: "uncommon", weight: 25, statFloor: 15 },
+  { rarity: "rare", weight: 10, statFloor: 25 },
+  { rarity: "epic", weight: 4, statFloor: 35 },
+  { rarity: "legendary", weight: 1, statFloor: 50 },
 ];
 
 /** Hats available per rarity tier and above */
 export const RARITY_HATS: Record<Rarity, HatKey[]> = {
-  common:    ['none'],
-  uncommon:  ['none', 'crown', 'cap'],
-  rare:      ['none', 'crown', 'cap', 'halo', 'beanie'],
-  epic:      ['none', 'crown', 'cap', 'halo', 'beanie', 'tophat'],
-  legendary: ['none', 'crown', 'cap', 'halo', 'beanie', 'tophat'],
+  common: ["none"],
+  uncommon: ["none", "crown", "cap"],
+  rare: ["none", "crown", "cap", "halo", "beanie"],
+  epic: ["none", "crown", "cap", "halo", "beanie", "tophat"],
+  legendary: ["none", "crown", "cap", "halo", "beanie", "tophat"],
 };
 
 /** Color for each rarity tier in terminal */
 export const RARITY_COLORS: Record<Rarity, string> = {
-  common:    'cyan',
-  uncommon:  'green',
-  rare:      'blue',
-  epic:      'magenta',
-  legendary: 'yellow',
+  common: "cyan",
+  uncommon: "green",
+  rare: "blue",
+  epic: "magenta",
+  legendary: "yellow",
 };
 
 export const RARITY_STARS: Record<Rarity, string> = {
-  common:    '★',
-  uncommon:  '★★',
-  rare:      '★★★',
-  epic:      '★★★★',
-  legendary: '★★★★★',
+  common: "★",
+  uncommon: "★★",
+  rare: "★★★",
+  epic: "★★★★",
+  legendary: "★★★★★",
 };
 
 export interface Needs {
-  hunger: number;    // 0–100
-  energy: number;    // 0–100
+  hunger: number; // 0–100
+  energy: number; // 0–100
   happiness: number; // 0–100
 }
 
@@ -131,8 +131,8 @@ export const DEFAULT_LIFETIME: LifetimeStats = {
 
 export const DEFAULT_STATS: Record<Stat, number> = {
   DEBUGGING: 50,
-  PATIENCE:  50,
-  CHAOS:     50,
-  WISDOM:    50,
-  SNARK:     50,
+  PATIENCE: 50,
+  CHAOS: 50,
+  WISDOM: 50,
+  SNARK: 50,
 };

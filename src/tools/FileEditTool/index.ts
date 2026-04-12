@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   file_path: z.string(),
@@ -56,9 +56,7 @@ export const FileEditTool: Tool<typeof inputSchema> = {
 
       await fs.writeFile(filePath, newContent, "utf-8");
 
-      const occurrences = input.replace_all
-        ? content.split(input.old_string).length - 1
-        : 1;
+      const occurrences = input.replace_all ? content.split(input.old_string).length - 1 : 1;
 
       return {
         output: `Edited ${filePath}: replaced ${occurrences} occurrence(s).\n--- old\n${input.old_string}\n+++ new\n${input.new_string}`,

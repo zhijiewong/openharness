@@ -1,22 +1,7 @@
-/**
- * Agent messaging — peer-to-peer communication between sub-agents.
- *
- * Provides a message bus for agents to send/receive messages, share state,
- * and coordinate work. Uses file-based locking for concurrent file access.
- *
- * Architecture (inspired by Claude Code Agent Teams):
- * - Each agent has a unique ID
- * - Messages are stored in a shared inbox (in-memory for same-process agents)
- * - File locking prevents concurrent edits to the same file
- */
-
-import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-
 export type AgentMessage = {
-  from: string;       // sender agent ID
-  to: string;         // recipient agent ID (or '*' for broadcast)
-  type: 'request' | 'response' | 'status' | 'error';
+  from: string; // sender agent ID
+  to: string; // recipient agent ID (or '*' for broadcast)
+  type: "request" | "response" | "status" | "error";
   content: string;
   timestamp: number;
   metadata?: Record<string, unknown>;
@@ -24,9 +9,24 @@ export type AgentMessage = {
 
 export type AgentInfo = {
   id: string;
-  role: string;        // e.g., 'code-reviewer', 'test-writer'
-  status: 'idle' | 'working' | 'done' | 'error';
+  role: string; // e.g., 'code-reviewer', 'test-writer'
+  status: "idle" | "working" | "done" | "error";
   currentTask?: string;
+};
+
+/**
+ * Background agent entry — tracks running/completed background agents
+ * so they can be continued via SendMessage.
+ */
+export type BackgroundAgent = {
+  id: string;
+  role: string;
+  status: "running" | "completed" | "error";
+  startedAt: number;
+  completedAt?: number;
+  result?: string;
+  /** Queue of messages sent to this agent while it was running */
+  pendingMessages: string[];
 };
 
 /**
@@ -36,10 +36,11 @@ export class AgentMessageBus {
   private inboxes = new Map<string, AgentMessage[]>();
   private agents = new Map<string, AgentInfo>();
   private fileLocks = new Map<string, string>(); // filePath → agentId
+  private backgroundAgents = new Map<string, BackgroundAgent>();
 
   /** Register an agent with the bus */
   registerAgent(id: string, role: string): void {
-    this.agents.set(id, { id, role, status: 'idle' });
+    this.agents.set(id, { id, role, status: "idle" });
     this.inboxes.set(id, []);
   }
 
@@ -54,10 +55,10 @@ export class AgentMessageBus {
   }
 
   /** Send a message to a specific agent or broadcast */
-  send(message: Omit<AgentMessage, 'timestamp'>): void {
+  send(message: Omit<AgentMessage, "timestamp">): void {
     const msg: AgentMessage = { ...message, timestamp: Date.now() };
 
-    if (msg.to === '*') {
+    if (msg.to === "*") {
       // Broadcast to all agents except sender
       for (const [id, inbox] of this.inboxes) {
         if (id !== msg.from) inbox.push(msg);
@@ -83,7 +84,7 @@ export class AgentMessageBus {
   }
 
   /** Update agent status */
-  updateStatus(agentId: string, status: AgentInfo['status'], currentTask?: string): void {
+  updateStatus(agentId: string, status: AgentInfo["status"], currentTask?: string): void {
     const agent = this.agents.get(agentId);
     if (agent) {
       agent.status = status;
@@ -99,6 +100,66 @@ export class AgentMessageBus {
   /** Get a specific agent's info */
   getAgent(id: string): AgentInfo | undefined {
     return this.agents.get(id);
+  }
+
+  // ── Background Agent Registry ──
+
+  /** Register a background agent for later continuation */
+  registerBackgroundAgent(id: string, role: string): void {
+    this.backgroundAgents.set(id, {
+      id,
+      role,
+      status: "running",
+      startedAt: Date.now(),
+      pendingMessages: [],
+    });
+  }
+
+  /** Mark a background agent as completed with its result */
+  completeBackgroundAgent(id: string, result: string): void {
+    const agent = this.backgroundAgents.get(id);
+    if (agent) {
+      agent.status = "completed";
+      agent.completedAt = Date.now();
+      agent.result = result;
+    }
+  }
+
+  /** Mark a background agent as errored */
+  errorBackgroundAgent(id: string, error: string): void {
+    const agent = this.backgroundAgents.get(id);
+    if (agent) {
+      agent.status = "error";
+      agent.completedAt = Date.now();
+      agent.result = error;
+    }
+  }
+
+  /** Queue a message for a background agent */
+  sendToBackgroundAgent(id: string, content: string): boolean {
+    const agent = this.backgroundAgents.get(id);
+    if (!agent) return false;
+    agent.pendingMessages.push(content);
+    return true;
+  }
+
+  /** Get a background agent's info */
+  getBackgroundAgent(id: string): BackgroundAgent | undefined {
+    return this.backgroundAgents.get(id);
+  }
+
+  /** List all background agents */
+  getBackgroundAgents(): BackgroundAgent[] {
+    return [...this.backgroundAgents.values()];
+  }
+
+  /** Drain pending messages for a background agent */
+  drainBackgroundMessages(id: string): string[] {
+    const agent = this.backgroundAgents.get(id);
+    if (!agent || agent.pendingMessages.length === 0) return [];
+    const msgs = [...agent.pendingMessages];
+    agent.pendingMessages.length = 0;
+    return msgs;
   }
 
   // ── File Locking ──

@@ -1,12 +1,17 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { createWorktree, removeWorktree, hasWorktreeChanges, isGitRepo } from "../../git/index.js";
+import { createWorktree, hasWorktreeChanges, isGitRepo, removeWorktree } from "../../git/index.js";
 import { emitHook } from "../../harness/hooks.js";
+import { getMessageBus } from "../../services/agent-messaging.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   prompt: z.string(),
   description: z.string().optional(),
-  isolated: z.boolean().optional(),
+  isolated: z.boolean().optional().describe("Whether to run in an isolated git worktree (default: true in git repos)"),
+  isolation: z
+    .enum(["worktree"])
+    .optional()
+    .describe("Isolation mode — 'worktree' creates a temporary git worktree (Claude Code compatible)"),
   run_in_background: z.boolean().optional(),
   model: z.string().optional(),
   subagent_type: z.string().optional(),
@@ -38,7 +43,9 @@ export const AgentTool: Tool<typeof inputSchema> = {
     const { query } = await import("../../query.js");
 
     // Worktree isolation: create isolated copy of repo if requested or if in git repo
-    const useWorktree = input.isolated !== false && isGitRepo(context.workingDir);
+    // Supports both `isolation: "worktree"` (Claude Code) and `isolated: boolean` (legacy)
+    const explicitWorktree = input.isolation === "worktree";
+    const useWorktree = (explicitWorktree || input.isolated !== false) && isGitRepo(context.workingDir);
     let worktreePath: string | null = null;
     let agentWorkingDir = context.workingDir;
 
@@ -54,18 +61,19 @@ export const AgentTool: Tool<typeof inputSchema> = {
     let role: import("../../agents/roles.js").AgentRole | undefined;
     if (input.subagent_type) {
       const builtinHints: Record<string, string> = {
-        explore: "You are an exploration agent. Search the codebase to answer questions. Use only read-only tools (Read, Grep, Glob, LS). Do not modify any files.",
+        explore:
+          "You are an exploration agent. Search the codebase to answer questions. Use only read-only tools (Read, Grep, Glob, LS). Do not modify any files.",
         plan: "You are a planning agent. Analyze the codebase and design implementation plans. Use only read-only tools. Return a detailed step-by-step plan.",
       };
       const hint = builtinHints[input.subagent_type.toLowerCase()];
       if (hint) {
-        systemPrompt = hint + "\n\n" + systemPrompt;
+        systemPrompt = `${hint}\n\n${systemPrompt}`;
       } else {
         // Check agent roles (code-reviewer, test-writer, debugger, evaluator, etc.)
         const { getRole } = await import("../../agents/roles.js");
         role = getRole(input.subagent_type.toLowerCase());
         if (role) {
-          systemPrompt = role.systemPromptSupplement + "\n\n" + systemPrompt;
+          systemPrompt = `${role.systemPromptSupplement}\n\n${systemPrompt}`;
         }
       }
     }
@@ -74,9 +82,9 @@ export const AgentTool: Tool<typeof inputSchema> = {
     let agentTools = context.tools;
     const allowList = input.allowed_tools ?? (role?.suggestedTools?.length ? role.suggestedTools : null);
     if (allowList) {
-      const allowSet = new Set(allowList.map(n => n.toLowerCase()));
-      allowSet.add('askuser'); // Always allow user communication
-      const filtered = context.tools.filter(t => allowSet.has(t.name.toLowerCase()));
+      const allowSet = new Set(allowList.map((n) => n.toLowerCase()));
+      allowSet.add("askuser"); // Always allow user communication
+      const filtered = context.tools.filter((t) => allowSet.has(t.name.toLowerCase()));
       if (filtered.length > 0) agentTools = filtered; // Fallback to all tools if filter produces empty set
     }
 
@@ -94,24 +102,35 @@ export const AgentTool: Tool<typeof inputSchema> = {
     };
 
     const agentId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    emitHook("subagentStart", { agentId, toolName: input.subagent_type ?? 'general' });
+    emitHook("subagentStart", { agentId, toolName: input.subagent_type ?? "general" });
 
     // Background execution: start agent and return immediately
     if (input.run_in_background) {
       const bgId = agentId;
+      const bus = getMessageBus();
+      bus.registerBackgroundAgent(bgId, input.subagent_type ?? "general");
+
       const runAgent = async () => {
         let finalText = "";
         const originalCwd = process.cwd();
         try {
           if (worktreePath) {
-            try { process.chdir(agentWorkingDir); } catch { /* ignore */ }
+            try {
+              process.chdir(agentWorkingDir);
+            } catch {
+              /* ignore */
+            }
           }
           for await (const event of query(input.prompt, config)) {
             if (event.type === "text_delta") finalText += event.content;
           }
         } finally {
           if (worktreePath) {
-            try { process.chdir(originalCwd); } catch { /* ignore */ }
+            try {
+              process.chdir(originalCwd);
+            } catch {
+              /* ignore */
+            }
           }
           // Clean up worktree only if no changes were made
           if (worktreePath) {
@@ -119,21 +138,27 @@ export const AgentTool: Tool<typeof inputSchema> = {
             if (!hasChanges) {
               removeWorktree(worktreePath, context.workingDir);
             } else if (context.onOutputChunk && context.callId) {
-              context.onOutputChunk(context.callId, `\n[background:${bgId} worktree preserved at ${worktreePath} — agent made changes]`);
+              context.onOutputChunk(
+                context.callId,
+                `\n[background:${bgId} worktree preserved at ${worktreePath} — agent made changes]`,
+              );
             }
           }
         }
+        bus.completeBackgroundAgent(bgId, finalText);
         if (context.onOutputChunk && context.callId) {
           context.onOutputChunk(context.callId, `\n[background:${bgId} completed]\n${finalText}`);
         }
       };
       runAgent().catch((err) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        bus.errorBackgroundAgent(bgId, errMsg);
         if (context.onOutputChunk && context.callId) {
-          context.onOutputChunk(context.callId, `\n[background:${bgId} failed: ${err instanceof Error ? err.message : String(err)}]`);
+          context.onOutputChunk(context.callId, `\n[background:${bgId} failed: ${errMsg}]`);
         }
       });
       return {
-        output: `Background agent started (id: ${bgId}). You will be notified when it completes.`,
+        output: `Background agent started (id: ${bgId}). You will be notified when it completes. Use SendMessage with to:'${bgId}' to send it messages.`,
         isError: false,
       };
     }
@@ -145,7 +170,11 @@ export const AgentTool: Tool<typeof inputSchema> = {
       // Override process.cwd for the sub-agent by setting workingDir in tool context
       const originalCwd = process.cwd();
       if (worktreePath) {
-        try { process.chdir(agentWorkingDir); } catch { /* ignore */ }
+        try {
+          process.chdir(agentWorkingDir);
+        } catch {
+          /* ignore */
+        }
       }
 
       try {
@@ -168,7 +197,11 @@ export const AgentTool: Tool<typeof inputSchema> = {
       } finally {
         // Restore original working directory
         if (worktreePath) {
-          try { process.chdir(originalCwd); } catch { /* ignore */ }
+          try {
+            process.chdir(originalCwd);
+          } catch {
+            /* ignore */
+          }
         }
       }
     } catch (err) {

@@ -1,24 +1,24 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
-import { CellGrid } from './cells.js';
-import { rasterize, type LayoutState, type ToolCallInfo } from './layout.js';
-import { measureMarkdown, renderMarkdown } from './markdown.js';
-import { setActiveTheme } from '../utils/theme-data.js';
+import assert from "node:assert";
+import { describe, it } from "node:test";
+import { setActiveTheme } from "../utils/theme-data.js";
+import { CellGrid } from "./cells.js";
+import { type LayoutState, rasterize, type ToolCallInfo } from "./layout.js";
+import { measureMarkdown, renderMarkdown } from "./markdown.js";
 
-setActiveTheme('dark');
+setActiveTheme("dark");
 
 function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
   return {
     messages: [],
-    streamingText: '',
-    thinkingText: '',
+    streamingText: "",
+    thinkingText: "",
     toolCalls: new Map(),
-    inputText: '',
+    inputText: "",
     inputCursor: 0,
     companionLines: null,
-    companionColor: 'cyan',
-    statusHints: 'exit to quit',
-    statusLine: 'model | 1.2K↑ 500↓ | $0.01',
+    companionColor: "cyan",
+    statusHints: "exit to quit",
+    statusLine: "model | 1.2K↑ 500↓ | $0.01",
     contextWarning: null,
     errorText: null,
     loading: false,
@@ -45,11 +45,11 @@ function makeState(overrides: Partial<LayoutState> = {}): LayoutState {
   };
 }
 
-describe('rasterize performance', () => {
-  it('renders 100 messages in under 50ms', () => {
+describe("rasterize performance", () => {
+  it("renders 100 messages in under 50ms", () => {
     const messages = Array.from({ length: 100 }, (_, i) => ({
-      role: i % 2 === 0 ? 'user' as const : 'assistant' as const,
-      content: `Message ${i}: ${'lorem ipsum dolor sit amet '.repeat(5)}`,
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `Message ${i}: ${"lorem ipsum dolor sit amet ".repeat(5)}`,
       uuid: `msg-${i}`,
       timestamp: Date.now(),
     }));
@@ -68,10 +68,10 @@ describe('rasterize performance', () => {
     assert.ok(perFrame < 50, `Expected < 50ms/frame, got ${perFrame.toFixed(2)}ms`);
   });
 
-  it('renders messages with markdown in under 100ms', () => {
+  it("renders messages with markdown in under 100ms", () => {
     const mdContent = `# Heading\n\nSome text with **bold** and \`code\`.\n\n\`\`\`typescript\nconst x = 1;\nconst y = "hello";\nfunction foo() {\n  return x + y;\n}\n\`\`\`\n\n- item one\n- item two\n- item three\n`;
     const messages = Array.from({ length: 50 }, (_, i) => ({
-      role: i % 2 === 0 ? 'user' as const : 'assistant' as const,
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
       content: i % 2 === 1 ? mdContent : `Question ${i}`,
       uuid: `msg-${i}`,
       timestamp: Date.now(),
@@ -91,14 +91,14 @@ describe('rasterize performance', () => {
     assert.ok(perFrame < 100, `Expected < 100ms/frame, got ${perFrame.toFixed(2)}ms`);
   });
 
-  it('measureMarkdown is consistent with renderMarkdown row count', () => {
+  it("measureMarkdown is consistent with renderMarkdown row count", () => {
     const testCases = [
-      'hello world',
-      '# Heading\nParagraph text.',
-      '```js\nconst x = 1;\n```',
-      '- one\n- two\n- three',
-      '| A | B |\n| --- | --- |\n| 1 | 2 |',
-      '> blockquote\n\n---\n\nMore text.',
+      "hello world",
+      "# Heading\nParagraph text.",
+      "```js\nconst x = 1;\n```",
+      "- one\n- two\n- three",
+      "| A | B |\n| --- | --- |\n| 1 | 2 |",
+      "> blockquote\n\n---\n\nMore text.",
     ];
 
     for (const md of testCases) {
@@ -111,15 +111,15 @@ describe('rasterize performance', () => {
     }
   });
 
-  it('rasterize with tool calls stays under 20ms', () => {
+  it("rasterize with tool calls stays under 20ms", () => {
     const toolCalls = new Map<string, ToolCallInfo>();
     for (let i = 0; i < 10; i++) {
       toolCalls.set(`tc-${i}`, {
         toolName: `Tool${i}`,
-        status: i < 5 ? 'done' : 'running',
+        status: i < 5 ? "done" : "running",
         args: `/path/to/file${i}.ts`,
         output: `Output line 1\nOutput line 2\nOutput line 3`,
-        liveOutput: i >= 5 ? ['live line 1', 'live line 2'] : undefined,
+        liveOutput: i >= 5 ? ["live line 1", "live line 2"] : undefined,
       });
     }
     const state = makeState({ toolCalls, loading: true, thinkingStartedAt: Date.now() });

@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import {
-  createUserMessage,
   createAssistantMessage,
-  createToolResultMessage,
   createInfoMessage,
   createPinnedMessage,
+  createToolResultMessage,
+  createUserMessage,
 } from "./message.js";
 
 test("createUserMessage has role 'user', uuid, and timestamp", () => {
@@ -23,9 +23,7 @@ test("createAssistantMessage has role 'assistant' and optional toolCalls", () =>
   assert.equal(plain.role, "assistant");
   assert.equal(plain.toolCalls, undefined);
 
-  const withTools = createAssistantMessage("hi", [
-    { id: "c1", toolName: "Read", arguments: { path: "/tmp" } },
-  ]);
+  const withTools = createAssistantMessage("hi", [{ id: "c1", toolName: "Read", arguments: { path: "/tmp" } }]);
   assert.equal(withTools.role, "assistant");
   assert.equal(withTools.toolCalls!.length, 1);
   assert.equal(withTools.toolCalls![0]!.toolName, "Read");

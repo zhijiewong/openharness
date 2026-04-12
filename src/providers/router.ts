@@ -9,12 +9,12 @@
  * Saves ~20% cost and ~30% latency by avoiding expensive models for simple tasks.
  */
 
-export type ModelTier = 'fast' | 'balanced' | 'powerful';
+export type ModelTier = "fast" | "balanced" | "powerful";
 
 export type RouterConfig = {
-  fast?: string;        // e.g., "ollama/qwen2.5:7b"
-  balanced?: string;    // e.g., "gpt-4o-mini"
-  powerful?: string;    // e.g., "claude-sonnet-4-6"
+  fast?: string; // e.g., "ollama/qwen2.5:7b"
+  balanced?: string; // e.g., "gpt-4o-mini"
+  powerful?: string; // e.g., "claude-sonnet-4-6"
 };
 
 export type RouteContext = {
@@ -51,32 +51,32 @@ export class ModelRouter {
   select(context: RouteContext): RouteResult {
     // High-context pressure → use fast model to minimize token cost
     if (context.contextUsage && context.contextUsage > 0.8) {
-      return this.route('fast', 'context pressure > 80%');
+      return this.route("fast", "context pressure > 80%");
     }
 
     // Roles that require deep reasoning → powerful
-    const powerfulRoles = ['code-reviewer', 'evaluator', 'architect', 'security-auditor'];
+    const powerfulRoles = ["code-reviewer", "evaluator", "architect", "security-auditor"];
     if (context.role && powerfulRoles.includes(context.role)) {
-      return this.route('powerful', `role: ${context.role}`);
+      return this.route("powerful", `role: ${context.role}`);
     }
 
     // Early exploration turns (1-2) → fast
     if (context.turn <= 2 && context.hadToolCalls) {
-      return this.route('fast', 'early exploration');
+      return this.route("fast", "early exploration");
     }
 
     // Tool-heavy turns (3+ tool calls) → fast (just dispatching)
     if (context.toolCallCount >= 3) {
-      return this.route('fast', 'tool-heavy turn');
+      return this.route("fast", "tool-heavy turn");
     }
 
     // Final response (no tool calls) → powerful for quality
     if (context.isFinalResponse) {
-      return this.route('powerful', 'final response');
+      return this.route("powerful", "final response");
     }
 
     // Default → balanced
-    return this.route('balanced', 'default');
+    return this.route("balanced", "default");
   }
 
   private route(tier: ModelTier, reason: string): RouteResult {

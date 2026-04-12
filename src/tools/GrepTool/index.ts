@@ -1,8 +1,8 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { walkDir, matchGlob } from "../../utils/fs.js";
+import type { Tool, ToolResult } from "../../Tool.js";
+import { matchGlob, walkDir } from "../../utils/fs.js";
 
 const inputSchema = z.object({
   pattern: z.string(),
@@ -72,7 +72,7 @@ export const GrepTool: Tool<typeof inputSchema> = {
     const caseInsensitive = input["-i"] ?? false;
     const showLineNumbers = input["-n"] !== false; // default true
 
-    const flags = "g" + (caseInsensitive ? "i" : "") + (input.multiline ? "ms" : "");
+    const flags = `g${caseInsensitive ? "i" : ""}${input.multiline ? "ms" : ""}`;
     let re: RegExp;
     try {
       re = new RegExp(input.pattern, flags);
@@ -87,10 +87,10 @@ export const GrepTool: Tool<typeof inputSchema> = {
       const allFiles = await walkDir(baseDir);
       let files = allFiles;
       if (input.glob) {
-        files = files.filter(f => matchGlob(path.relative(baseDir, f), input.glob!));
+        files = files.filter((f) => matchGlob(path.relative(baseDir, f), input.glob!));
       }
       if (typeExts) {
-        files = files.filter(f => typeExts.some(ext => f.endsWith(ext)));
+        files = files.filter((f) => typeExts.some((ext) => f.endsWith(ext)));
       }
 
       // Multiline matching: match against entire file content
@@ -125,11 +125,16 @@ export const GrepTool: Tool<typeof inputSchema> = {
                 totalCollected++;
               }
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
 
         if (outputMode === "count") {
-          return { output: fileCounts.map(fc => `${fc.file}:${fc.count}`).join("\n") || "No matches found.", isError: false };
+          return {
+            output: fileCounts.map((fc) => `${fc.file}:${fc.count}`).join("\n") || "No matches found.",
+            isError: false,
+          };
         } else if (outputMode === "files_with_matches") {
           return { output: matchedFiles.join("\n") || "No matches found.", isError: false };
         }
@@ -195,7 +200,7 @@ export const GrepTool: Tool<typeof inputSchema> = {
       }
 
       if (outputMode === "count") {
-        const output = fileCounts.map(fc => `${fc.file}:${fc.count}`).join("\n");
+        const output = fileCounts.map((fc) => `${fc.file}:${fc.count}`).join("\n");
         return { output: output || "No matches found.", isError: false };
       }
 

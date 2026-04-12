@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
 import { createWorktree, isGitRepo } from "../../git/index.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   branch: z.string().optional().describe("Branch name for the worktree (auto-generated if omitted)"),
@@ -8,13 +8,18 @@ const inputSchema = z.object({
 
 export const EnterWorktreeTool: Tool<typeof inputSchema> = {
   name: "EnterWorktree",
-  description: "Create an isolated git worktree for safe experimentation. Changes won't affect the main working directory.",
+  description:
+    "Create an isolated git worktree for safe experimentation. Changes won't affect the main working directory.",
   inputSchema,
   riskLevel: "medium",
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return false; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return false;
+  },
 
-  async call(input, context: ToolContext): Promise<ToolResult> {
+  async call(_input, context: ToolContext): Promise<ToolResult> {
     if (!isGitRepo(context.workingDir)) {
       return { output: "Not a git repository — worktrees require git.", isError: true };
     }

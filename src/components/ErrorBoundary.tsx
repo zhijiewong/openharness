@@ -2,8 +2,8 @@
  * React error boundary for graceful crash handling.
  */
 
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 
 type Props = {
   children: React.ReactNode;

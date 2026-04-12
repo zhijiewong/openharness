@@ -6,5 +6,6 @@
  * - query/errors.ts — error classification and recovery
  * - query/types.ts — shared types
  */
-export { query, compressMessages } from "./query/index.js";
+
 export type { QueryConfig, QueryLoopState } from "./query/index.js";
+export { compressMessages, query } from "./query/index.js";

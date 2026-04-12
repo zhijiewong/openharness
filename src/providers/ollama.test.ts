@@ -1,16 +1,22 @@
-import test, { mock } from "node:test";
 import assert from "node:assert/strict";
+import test, { mock } from "node:test";
 import { OllamaProvider } from "./ollama.js";
 
 const originalFetch = globalThis.fetch;
 
 test("fetchModels returns models from /api/tags", async () => {
-  globalThis.fetch = mock.fn(async () => new Response(JSON.stringify({
-    models: [
-      { name: "llama3:latest", details: { families: ["llama"] } },
-      { name: "llava:latest", details: { families: ["llama", "clip"] } },
-    ],
-  }), { status: 200 })) as any;
+  globalThis.fetch = mock.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          models: [
+            { name: "llama3:latest", details: { families: ["llama"] } },
+            { name: "llava:latest", details: { families: ["llama", "clip"] } },
+          ],
+        }),
+        { status: 200 },
+      ),
+  ) as any;
 
   const provider = new OllamaProvider({ name: "ollama", defaultModel: "llama3" });
   const models = await provider.fetchModels();
@@ -25,7 +31,9 @@ test("fetchModels returns models from /api/tags", async () => {
 });
 
 test("fetchModels returns [] on network error", async () => {
-  globalThis.fetch = mock.fn(async () => { throw new Error("ECONNREFUSED"); }) as any;
+  globalThis.fetch = mock.fn(async () => {
+    throw new Error("ECONNREFUSED");
+  }) as any;
 
   const provider = new OllamaProvider({ name: "ollama", defaultModel: "llama3" });
   const models = await provider.fetchModels();
@@ -44,7 +52,9 @@ test("healthCheck returns true when server responds", async () => {
 });
 
 test("healthCheck returns false on error", async () => {
-  globalThis.fetch = mock.fn(async () => { throw new Error("ECONNREFUSED"); }) as any;
+  globalThis.fetch = mock.fn(async () => {
+    throw new Error("ECONNREFUSED");
+  }) as any;
 
   const provider = new OllamaProvider({ name: "ollama", defaultModel: "llama3" });
   assert.equal(await provider.healthCheck(), false);

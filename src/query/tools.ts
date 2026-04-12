@@ -2,15 +2,15 @@
  * Tool execution — permission checking, batching, output capping.
  */
 
-import type { Tool, ToolContext, ToolResult, Tools } from "../Tool.js";
+import { createCheckpoint, getAffectedFiles } from "../harness/checkpoints.js";
+import { emitHook } from "../harness/hooks.js";
+import type { ToolContext, ToolResult, Tools } from "../Tool.js";
 import { findToolByName } from "../Tool.js";
 import type { StreamEvent } from "../types/events.js";
 import type { ToolCall } from "../types/message.js";
 import { createToolResultMessage } from "../types/message.js";
 import type { AskUserFn, PermissionMode } from "../types/permissions.js";
 import { checkPermission } from "../types/permissions.js";
-import { emitHook } from "../harness/hooks.js";
-import { createCheckpoint, getAffectedFiles } from "../harness/checkpoints.js";
 import type { QueryLoopState } from "./types.js";
 
 const MAX_TOOL_RESULT_CHARS = 100_000;
@@ -97,7 +97,9 @@ export async function executeSingleTool(
     let result = await Promise.race([
       tool.call(parsed.data, contextWithTimeout),
       new Promise<never>((_, reject) => {
-        toolAbort.addEventListener("abort", () => reject(new Error(`Tool '${tool.name}' timed out after ${TOOL_TIMEOUT_MS / 1000}s`)));
+        toolAbort.addEventListener("abort", () =>
+          reject(new Error(`Tool '${tool.name}' timed out after ${TOOL_TIMEOUT_MS / 1000}s`)),
+        );
       }),
     ]);
 
@@ -109,7 +111,7 @@ export async function executeSingleTool(
     });
 
     // Emit fileChanged hook for file-modifying tools
-    if (!result.isError && ['Edit', 'Write', 'MultiEdit'].includes(tool.name)) {
+    if (!result.isError && ["Edit", "Write", "MultiEdit"].includes(tool.name)) {
       const filePaths = getAffectedFiles(tool.name, parsed.data as Record<string, unknown>);
       for (const fp of filePaths) {
         emitHook("fileChanged", { filePath: fp, toolName: tool.name });
@@ -117,10 +119,12 @@ export async function executeSingleTool(
     }
 
     // Verification loop: auto-run lint/typecheck after file-modifying tools
-    let verificationSuffix = '';
-    if (!result.isError && ['Edit', 'Write', 'MultiEdit'].includes(tool.name)) {
+    let verificationSuffix = "";
+    if (!result.isError && ["Edit", "Write", "MultiEdit"].includes(tool.name)) {
       try {
-        const { runVerificationForFiles, getVerificationConfig, extractFilePaths } = await import('../harness/verification.js');
+        const { runVerificationForFiles, getVerificationConfig, extractFilePaths } = await import(
+          "../harness/verification.js"
+        );
         const vConfig = getVerificationConfig();
         if (vConfig?.enabled) {
           const filePaths = extractFilePaths(tool.name, parsed.data as Record<string, unknown>);
@@ -129,23 +133,26 @@ export async function executeSingleTool(
             if (vResult.ran) {
               if (!vResult.passed) {
                 verificationSuffix = `\n\n[Verification FAILED]\n${vResult.summary}`;
-                if (vConfig.mode === 'block') {
+                if (vConfig.mode === "block") {
                   result = { output: result.output, isError: true };
                 }
               } else {
-                verificationSuffix = '\n\n[Verification passed]';
+                verificationSuffix = "\n\n[Verification passed]";
               }
             }
           }
         }
-      } catch { /* verification should never break tool execution */ }
+      } catch {
+        /* verification should never break tool execution */
+      }
     }
 
     // Strip ANSI and cap output, then append verification suffix
     let output = result.output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "") + verificationSuffix;
     if (output.length > MAX_TOOL_RESULT_CHARS) {
-      output = output.slice(0, MAX_TOOL_RESULT_CHARS)
-        + `\n\n[TRUNCATED: output was ${output.length.toLocaleString()} chars, showing first ${MAX_TOOL_RESULT_CHARS.toLocaleString()}]`;
+      output =
+        output.slice(0, MAX_TOOL_RESULT_CHARS) +
+        `\n\n[TRUNCATED: output was ${output.length.toLocaleString()} chars, showing first ${MAX_TOOL_RESULT_CHARS.toLocaleString()}]`;
     }
     return { output, isError: result.isError };
   } catch (err) {
@@ -164,27 +171,39 @@ export async function* executeToolCalls(
   const batches = partitionToolCalls(toolCalls, tools);
   const outputChunks: StreamEvent[] = [];
   const onOutputChunk = (callId: string, chunk: string) => {
-    outputChunks.push({ type: 'tool_output_delta', callId, chunk });
+    outputChunks.push({ type: "tool_output_delta", callId, chunk });
   };
 
   for (const batch of batches) {
     if (batch.concurrent) {
       const results = await Promise.all(
-        batch.calls.map((tc) => executeSingleTool(tc, tools, { ...context, callId: tc.id, onOutputChunk }, permissionMode, askUser)),
+        batch.calls.map((tc) =>
+          executeSingleTool(tc, tools, { ...context, callId: tc.id, onOutputChunk }, permissionMode, askUser),
+        ),
       );
       for (const chunk of outputChunks.splice(0)) yield chunk;
       for (let i = 0; i < batch.calls.length; i++) {
         const tc = batch.calls[i]!;
         const result = results[i]!;
         yield { type: "tool_call_end", callId: tc.id, output: result.output, isError: result.isError };
-        state?.messages.push(createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }));
+        state?.messages.push(
+          createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }),
+        );
       }
     } else {
       for (const tc of batch.calls) {
-        const result = await executeSingleTool(tc, tools, { ...context, callId: tc.id, onOutputChunk }, permissionMode, askUser);
+        const result = await executeSingleTool(
+          tc,
+          tools,
+          { ...context, callId: tc.id, onOutputChunk },
+          permissionMode,
+          askUser,
+        );
         for (const chunk of outputChunks.splice(0)) yield chunk;
         yield { type: "tool_call_end", callId: tc.id, output: result.output, isError: result.isError };
-        state?.messages.push(createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }));
+        state?.messages.push(
+          createToolResultMessage({ callId: tc.id, output: result.output, isError: result.isError }),
+        );
       }
     }
   }

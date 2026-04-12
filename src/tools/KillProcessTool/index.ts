@@ -12,8 +12,12 @@ export const KillProcessTool: Tool<typeof inputSchema> = {
   description: "Kill a running process by PID or name. Use for stopping background tasks or stuck processes.",
   inputSchema,
   riskLevel: "high",
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return true; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return true;
+  },
 
   async call(input): Promise<ToolResult> {
     if (!input.pid && !input.name) {
@@ -22,18 +26,18 @@ export const KillProcessTool: Tool<typeof inputSchema> = {
 
     try {
       if (input.pid) {
-        const signal = input.signal ?? 'SIGTERM';
+        const signal = input.signal ?? "SIGTERM";
         process.kill(input.pid, signal as NodeJS.Signals);
         return { output: `Sent ${signal} to PID ${input.pid}`, isError: false };
       }
 
       if (input.name) {
-        const { execSync } = await import('node:child_process');
-        const isWin = process.platform === 'win32';
+        const { execSync } = await import("node:child_process");
+        const isWin = process.platform === "win32";
         const cmd = isWin
           ? `taskkill /IM "${input.name}" /F`
-          : `pkill ${input.signal ? `-${input.signal}` : ''} "${input.name}"`;
-        const result = execSync(cmd, { encoding: 'utf-8', timeout: 5000 });
+          : `pkill ${input.signal ? `-${input.signal}` : ""} "${input.name}"`;
+        const result = execSync(cmd, { encoding: "utf-8", timeout: 5000 });
         return { output: result || `Killed process: ${input.name}`, isError: false };
       }
     } catch (err) {

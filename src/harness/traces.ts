@@ -8,11 +8,11 @@
  * Compatible with OpenTelemetry export format.
  */
 
-import { appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const TRACE_DIR = join(homedir(), '.oh', 'traces');
+const TRACE_DIR = join(homedir(), ".oh", "traces");
 
 // ── Types ──
 
@@ -24,7 +24,7 @@ export type TraceSpan = {
   endTime: number;
   durationMs: number;
   attributes: Record<string, unknown>;
-  status: 'ok' | 'error';
+  status: "ok" | "error";
 };
 
 export type TraceEvent = {
@@ -40,7 +40,10 @@ const MAX_IN_MEMORY_SPANS = 1000;
 export class SessionTracer {
   private sessionId: string;
   private spans: TraceSpan[] = [];
-  private activeSpans = new Map<string, { name: string; startTime: number; parentSpanId?: string; attributes: Record<string, unknown> }>();
+  private activeSpans = new Map<
+    string,
+    { name: string; startTime: number; parentSpanId?: string; attributes: Record<string, unknown> }
+  >();
   private spanCounter = 0;
 
   constructor(sessionId: string) {
@@ -55,7 +58,7 @@ export class SessionTracer {
   }
 
   /** End a span and record it. */
-  endSpan(spanId: string, status: 'ok' | 'error' = 'ok', extraAttributes?: Record<string, unknown>): TraceSpan | null {
+  endSpan(spanId: string, status: "ok" | "error" = "ok", extraAttributes?: Record<string, unknown>): TraceSpan | null {
     const active = this.activeSpans.get(spanId);
     if (!active) return null;
 
@@ -104,7 +107,7 @@ export class SessionTracer {
       entry.totalMs += span.durationMs;
       spansByName[span.name] = entry;
 
-      if (span.status === 'error') errors++;
+      if (span.status === "error") errors++;
       if (span.startTime < minStart) minStart = span.startTime;
       if (span.endTime > maxEnd) maxEnd = span.endTime;
     }
@@ -122,8 +125,10 @@ export class SessionTracer {
     try {
       mkdirSync(TRACE_DIR, { recursive: true });
       const file = join(TRACE_DIR, `${this.sessionId}.jsonl`);
-      appendFileSync(file, JSON.stringify(span) + '\n');
-    } catch { /* never crash on tracing failure */ }
+      appendFileSync(file, `${JSON.stringify(span)}\n`);
+    } catch {
+      /* never crash on tracing failure */
+    }
   }
 }
 
@@ -135,29 +140,31 @@ export function loadTrace(sessionId: string): TraceSpan[] {
   if (!existsSync(file)) return [];
 
   try {
-    return readFileSync(file, 'utf-8')
-      .split('\n')
+    return readFileSync(file, "utf-8")
+      .split("\n")
       .filter(Boolean)
-      .map(line => JSON.parse(line) as TraceSpan);
-  } catch { return []; }
+      .map((line) => JSON.parse(line) as TraceSpan);
+  } catch {
+    return [];
+  }
 }
 
 /** List all sessions with traces */
 export function listTracedSessions(): string[] {
   if (!existsSync(TRACE_DIR)) return [];
   return readdirSync(TRACE_DIR)
-    .filter(f => f.endsWith('.jsonl'))
-    .map(f => f.replace('.jsonl', ''));
+    .filter((f) => f.endsWith(".jsonl"))
+    .map((f) => f.replace(".jsonl", ""));
 }
 
 /** Format trace for display */
 export function formatTrace(spans: TraceSpan[]): string {
-  if (spans.length === 0) return 'No trace spans recorded.';
+  if (spans.length === 0) return "No trace spans recorded.";
 
   const lines: string[] = [`Trace (${spans.length} spans):\n`];
 
   // Group by parent for tree display
-  const roots = spans.filter(s => !s.parentSpanId);
+  const roots = spans.filter((s) => !s.parentSpanId);
   const children = new Map<string, TraceSpan[]>();
   for (const s of spans) {
     if (s.parentSpanId) {
@@ -168,12 +175,12 @@ export function formatTrace(spans: TraceSpan[]): string {
   }
 
   function renderSpan(span: TraceSpan, indent: number): void {
-    const status = span.status === 'error' ? '✗' : '✓';
-    const pad = '  '.repeat(indent);
+    const status = span.status === "error" ? "✗" : "✓";
+    const pad = "  ".repeat(indent);
     const attrs = Object.entries(span.attributes)
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => `${k}=${String(v).slice(0, 30)}`)
-      .join(' ');
+      .join(" ");
 
     lines.push(`${pad}${status} ${span.name} (${span.durationMs}ms) ${attrs}`);
 
@@ -185,39 +192,43 @@ export function formatTrace(spans: TraceSpan[]): string {
 
   // Summary
   const totalMs = spans.reduce((sum, s) => sum + s.durationMs, 0);
-  const errors = spans.filter(s => s.status === 'error').length;
-  lines.push('');
+  const errors = spans.filter((s) => s.status === "error").length;
+  lines.push("");
   lines.push(`Total: ${spans.length} spans, ${totalMs}ms, ${errors} errors`);
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 /** Export trace in OpenTelemetry-compatible format */
 export function exportTraceOTLP(sessionId: string, spans: TraceSpan[]): object {
   return {
-    resourceSpans: [{
-      resource: {
-        attributes: [
-          { key: 'service.name', value: { stringValue: 'openharness' } },
-          { key: 'session.id', value: { stringValue: sessionId } },
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [
+            { key: "service.name", value: { stringValue: "openharness" } },
+            { key: "session.id", value: { stringValue: sessionId } },
+          ],
+        },
+        scopeSpans: [
+          {
+            scope: { name: "openharness.agent" },
+            spans: spans.map((s) => ({
+              traceId: sessionId.padEnd(32, "0").slice(0, 32),
+              spanId: s.spanId.padEnd(16, "0").slice(0, 16),
+              parentSpanId: s.parentSpanId?.padEnd(16, "0").slice(0, 16),
+              name: s.name,
+              startTimeUnixNano: s.startTime * 1_000_000,
+              endTimeUnixNano: s.endTime * 1_000_000,
+              attributes: Object.entries(s.attributes).map(([k, v]) => ({
+                key: k,
+                value: { stringValue: String(v) },
+              })),
+              status: { code: s.status === "ok" ? 1 : 2 },
+            })),
+          },
         ],
       },
-      scopeSpans: [{
-        scope: { name: 'openharness.agent' },
-        spans: spans.map(s => ({
-          traceId: sessionId.padEnd(32, '0').slice(0, 32),
-          spanId: s.spanId.padEnd(16, '0').slice(0, 16),
-          parentSpanId: s.parentSpanId?.padEnd(16, '0').slice(0, 16),
-          name: s.name,
-          startTimeUnixNano: s.startTime * 1_000_000,
-          endTimeUnixNano: s.endTime * 1_000_000,
-          attributes: Object.entries(s.attributes).map(([k, v]) => ({
-            key: k,
-            value: { stringValue: String(v) },
-          })),
-          status: { code: s.status === 'ok' ? 1 : 2 },
-        })),
-      }],
-    }],
+    ],
   };
 }

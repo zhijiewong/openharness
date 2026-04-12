@@ -9,40 +9,40 @@
  * Detection order: TERM_PROGRAM → TERM → fallback
  */
 
-import { IMAGE_PREFIX } from '../tools/ImageReadTool/index.js';
+import { IMAGE_PREFIX } from "../tools/ImageReadTool/index.js";
 
-type ImageProtocol = 'kitty' | 'iterm' | 'none';
+type ImageProtocol = "kitty" | "iterm" | "none";
 
 function detectProtocol(): ImageProtocol {
-  const termProgram = process.env.TERM_PROGRAM?.toLowerCase() ?? '';
-  const term = process.env.TERM?.toLowerCase() ?? '';
+  const termProgram = process.env.TERM_PROGRAM?.toLowerCase() ?? "";
+  const term = process.env.TERM?.toLowerCase() ?? "";
 
-  if (termProgram.includes('kitty') || termProgram.includes('ghostty') || termProgram.includes('wezterm')) {
-    return 'kitty';
+  if (termProgram.includes("kitty") || termProgram.includes("ghostty") || termProgram.includes("wezterm")) {
+    return "kitty";
   }
-  if (termProgram.includes('iterm') || termProgram.includes('wezterm')) {
-    return 'iterm';
+  if (termProgram.includes("iterm") || termProgram.includes("wezterm")) {
+    return "iterm";
   }
-  if (term.includes('xterm-kitty')) {
-    return 'kitty';
+  if (term.includes("xterm-kitty")) {
+    return "kitty";
   }
-  return 'none';
+  return "none";
 }
 
 /**
  * Check if a tool output contains an image result.
  */
 export function isImageOutput(output: string): boolean {
-  return output.startsWith(IMAGE_PREFIX + ':');
+  return output.startsWith(`${IMAGE_PREFIX}:`);
 }
 
 /**
  * Parse an image output string into its components.
  */
 function parseImageOutput(output: string): { mediaType: string; base64: string } | null {
-  if (!output.startsWith(IMAGE_PREFIX + ':')) return null;
+  if (!output.startsWith(`${IMAGE_PREFIX}:`)) return null;
   const rest = output.slice(IMAGE_PREFIX.length + 1);
-  const colonIdx = rest.indexOf(':');
+  const colonIdx = rest.indexOf(":");
   if (colonIdx < 0) return null;
   return {
     mediaType: rest.slice(0, colonIdx),
@@ -55,25 +55,21 @@ function parseImageOutput(output: string): { mediaType: string; base64: string }
  * Returns the ANSI escape sequence to display the image,
  * or a text fallback if the terminal doesn't support graphics.
  */
-export function renderImageInline(
-  output: string,
-  maxWidth = 60,
-  maxHeight = 15,
-): string {
+export function renderImageInline(output: string, maxWidth = 60, maxHeight = 15): string {
   const parsed = parseImageOutput(output);
-  if (!parsed) return '[image: parse error]';
+  if (!parsed) return "[image: parse error]";
 
   const protocol = detectProtocol();
 
-  if (protocol === 'kitty') {
+  if (protocol === "kitty") {
     return renderKitty(parsed.base64, parsed.mediaType, maxWidth, maxHeight);
   }
-  if (protocol === 'iterm') {
+  if (protocol === "iterm") {
     return renderIterm(parsed.base64, maxWidth, maxHeight);
   }
 
   // Fallback: show info
-  const sizeKB = Math.round(parsed.base64.length * 3 / 4 / 1024);
+  const sizeKB = Math.round((parsed.base64.length * 3) / 4 / 1024);
   return `[image: ${parsed.mediaType}, ${sizeKB}KB]`;
 }
 
@@ -81,7 +77,7 @@ export function renderImageInline(
  * Kitty graphics protocol.
  * Sends base64-encoded image data via escape sequences.
  */
-function renderKitty(base64: string, mediaType: string, maxCols: number, maxRows: number): string {
+function renderKitty(base64: string, _mediaType: string, maxCols: number, maxRows: number): string {
   // Kitty protocol: ESC_P ... ESC\
   // a=T (transmit), f=100 (PNG), t=d (direct), c=cols, r=rows
   const chunks: string[] = [];
@@ -100,7 +96,7 @@ function renderKitty(base64: string, mediaType: string, maxCols: number, maxRows
     }
   }
 
-  return chunks.join('');
+  return chunks.join("");
 }
 
 /**

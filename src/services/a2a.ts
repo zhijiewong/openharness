@@ -13,11 +13,11 @@
  * Based on the emerging A2A (Agent-to-Agent) protocol standard.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const AGENT_REGISTRY_DIR = join(homedir(), '.oh', 'agents');
+const AGENT_REGISTRY_DIR = join(homedir(), ".oh", "agents");
 
 // ── Types ──
 
@@ -56,7 +56,7 @@ export type AgentCapability = {
 
 export type AgentEndpoint = {
   /** Transport type */
-  type: 'http' | 'ipc' | 'stdio';
+  type: "http" | "ipc" | "stdio";
   /** Address (URL for http, socket path for ipc, pid for stdio) */
   address: string;
   /** Port for HTTP transport */
@@ -71,7 +71,7 @@ export type A2AMessage = {
   /** Target agent ID or capability name */
   to: string;
   /** Message type */
-  type: 'task' | 'result' | 'status' | 'cancel' | 'discover';
+  type: "task" | "result" | "status" | "cancel" | "discover";
   /** Payload */
   payload: A2APayload;
   /** Timestamp */
@@ -79,11 +79,11 @@ export type A2AMessage = {
 };
 
 export type A2APayload =
-  | { kind: 'task'; capability: string; input: unknown; timeout?: number }
-  | { kind: 'result'; taskId: string; output: unknown; error?: string }
-  | { kind: 'status'; state: 'idle' | 'working' | 'done' | 'error'; progress?: string }
-  | { kind: 'cancel'; taskId: string; reason?: string }
-  | { kind: 'discover'; filter?: { capability?: string; name?: string } };
+  | { kind: "task"; capability: string; input: unknown; timeout?: number }
+  | { kind: "result"; taskId: string; output: unknown; error?: string }
+  | { kind: "status"; state: "idle" | "working" | "done" | "error"; progress?: string }
+  | { kind: "cancel"; taskId: string; reason?: string }
+  | { kind: "discover"; filter?: { capability?: string; name?: string } };
 
 // ── Registry Operations ──
 
@@ -97,7 +97,11 @@ export function publishCard(card: AgentCard): void {
 /** Remove an agent card from the registry */
 export function unpublishCard(agentId: string): void {
   const filePath = join(AGENT_REGISTRY_DIR, `${agentId}.json`);
-  try { unlinkSync(filePath); } catch { /* ignore */ }
+  try {
+    unlinkSync(filePath);
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Discover all registered agents */
@@ -105,9 +109,9 @@ export function discoverAgents(): AgentCard[] {
   if (!existsSync(AGENT_REGISTRY_DIR)) return [];
 
   const cards: AgentCard[] = [];
-  for (const file of readdirSync(AGENT_REGISTRY_DIR).filter(f => f.endsWith('.json'))) {
+  for (const file of readdirSync(AGENT_REGISTRY_DIR).filter((f) => f.endsWith(".json"))) {
     try {
-      const raw = readFileSync(join(AGENT_REGISTRY_DIR, file), 'utf-8');
+      const raw = readFileSync(join(AGENT_REGISTRY_DIR, file), "utf-8");
       const card = JSON.parse(raw) as AgentCard;
 
       // Check if the agent process is still alive
@@ -115,9 +119,15 @@ export function discoverAgents(): AgentCard[] {
         cards.push(card);
       } else {
         // Stale card — clean up
-        try { unlinkSync(join(AGENT_REGISTRY_DIR, file)); } catch { /* ignore */ }
+        try {
+          unlinkSync(join(AGENT_REGISTRY_DIR, file));
+        } catch {
+          /* ignore */
+        }
       }
-    } catch { /* skip malformed cards */ }
+    } catch {
+      /* skip malformed cards */
+    }
   }
 
   return cards;
@@ -125,14 +135,14 @@ export function discoverAgents(): AgentCard[] {
 
 /** Find agents by capability name */
 export function findAgentsByCapability(capabilityName: string): AgentCard[] {
-  return discoverAgents().filter(card =>
-    card.capabilities.some(c => c.name.toLowerCase() === capabilityName.toLowerCase()),
+  return discoverAgents().filter((card) =>
+    card.capabilities.some((c) => c.name.toLowerCase() === capabilityName.toLowerCase()),
   );
 }
 
 /** Find an agent by name */
 export function findAgentByName(name: string): AgentCard | null {
-  return discoverAgents().find(c => c.name.toLowerCase() === name.toLowerCase()) ?? null;
+  return discoverAgents().find((c) => c.name.toLowerCase() === name.toLowerCase()) ?? null;
 }
 
 // ── Message Routing ──
@@ -148,15 +158,15 @@ export async function routeMessage(message: A2AMessage): Promise<A2AMessage | nu
 
   // Try by agent ID first
   const agents = discoverAgents();
-  targetCard = agents.find(a => a.id === message.to) ?? null;
+  targetCard = agents.find((a) => a.id === message.to) ?? null;
 
   // Try by name
   if (!targetCard) {
-    targetCard = agents.find(a => a.name.toLowerCase() === message.to.toLowerCase()) ?? null;
+    targetCard = agents.find((a) => a.name.toLowerCase() === message.to.toLowerCase()) ?? null;
   }
 
   // Try by capability
-  if (!targetCard && message.type === 'task' && message.payload.kind === 'task') {
+  if (!targetCard && message.type === "task" && message.payload.kind === "task") {
     const capable = findAgentsByCapability(message.payload.capability);
     if (capable.length > 0) targetCard = capable[0]!;
   }
@@ -165,25 +175,27 @@ export async function routeMessage(message: A2AMessage): Promise<A2AMessage | nu
 
   // Route based on endpoint type
   switch (targetCard.endpoint.type) {
-    case 'http': {
+    case "http": {
       try {
-        const url = `${targetCard.endpoint.address}${targetCard.endpoint.port ? ':' + targetCard.endpoint.port : ''}/a2a`;
+        const url = `${targetCard.endpoint.address}${targetCard.endpoint.port ? `:${targetCard.endpoint.port}` : ""}/a2a`;
         const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(message),
           signal: AbortSignal.timeout(30_000),
         });
         if (res.ok) {
-          return await res.json() as A2AMessage;
+          return (await res.json()) as A2AMessage;
         }
-      } catch { /* delivery failed */ }
+      } catch {
+        /* delivery failed */
+      }
       return null;
     }
 
-    case 'ipc': {
+    case "ipc": {
       // File-based inbox for local IPC
-      const inboxDir = join(AGENT_REGISTRY_DIR, 'inboxes', targetCard.id);
+      const inboxDir = join(AGENT_REGISTRY_DIR, "inboxes", targetCard.id);
       mkdirSync(inboxDir, { recursive: true });
       const msgFile = join(inboxDir, `${message.id}.json`);
       writeFileSync(msgFile, JSON.stringify(message, null, 2));
@@ -197,17 +209,19 @@ export async function routeMessage(message: A2AMessage): Promise<A2AMessage | nu
 
 /** Read pending messages from an agent's inbox */
 export function readInbox(agentId: string): A2AMessage[] {
-  const inboxDir = join(AGENT_REGISTRY_DIR, 'inboxes', agentId);
+  const inboxDir = join(AGENT_REGISTRY_DIR, "inboxes", agentId);
   if (!existsSync(inboxDir)) return [];
 
   const messages: A2AMessage[] = [];
-  for (const file of readdirSync(inboxDir).filter(f => f.endsWith('.json'))) {
+  for (const file of readdirSync(inboxDir).filter((f) => f.endsWith(".json"))) {
     try {
-      const raw = readFileSync(join(inboxDir, file), 'utf-8');
+      const raw = readFileSync(join(inboxDir, file), "utf-8");
       messages.push(JSON.parse(raw) as A2AMessage);
       // Remove after reading
       unlinkSync(join(inboxDir, file));
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   return messages.sort((a, b) => a.timestamp - b.timestamp);
@@ -238,17 +252,17 @@ export function createSessionCard(
   return {
     id: `oh-${sessionId}`,
     name: `openharness-${sessionId.slice(0, 6)}`,
-    version: '1.0.0',
+    version: "1.0.0",
     capabilities: [
-      { name: 'code-generation', description: 'Generate, edit, and review code' },
-      { name: 'code-review', description: 'Review code for bugs and quality' },
-      { name: 'test-generation', description: 'Write tests for existing code' },
-      { name: 'file-operations', description: 'Read, write, search files' },
-      { name: 'bash-execution', description: 'Run shell commands' },
+      { name: "code-generation", description: "Generate, edit, and review code" },
+      { name: "code-review", description: "Review code for bugs and quality" },
+      { name: "test-generation", description: "Write tests for existing code" },
+      { name: "file-operations", description: "Read, write, search files" },
+      { name: "bash-execution", description: "Run shell commands" },
     ],
     endpoint: opts.port
-      ? { type: 'http', address: 'http://localhost', port: opts.port }
-      : { type: 'ipc', address: join(AGENT_REGISTRY_DIR, 'inboxes', `oh-${sessionId}`) },
+      ? { type: "http", address: "http://localhost", port: opts.port }
+      : { type: "ipc", address: join(AGENT_REGISTRY_DIR, "inboxes", `oh-${sessionId}`) },
     registeredAt: Date.now(),
     pid: process.pid,
     provider: opts.provider,

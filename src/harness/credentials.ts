@@ -7,19 +7,19 @@
  * but far better than plaintext YAML.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir, hostname, userInfo } from 'node:os';
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, hostname, userInfo } from "node:os";
+import { join } from "node:path";
 
-const CRED_DIR = join(homedir(), '.oh');
-const CRED_PATH = join(CRED_DIR, 'credentials.enc');
-const ALGORITHM = 'aes-256-gcm';
+const CRED_DIR = join(homedir(), ".oh");
+const CRED_PATH = join(CRED_DIR, "credentials.enc");
+const ALGORITHM = "aes-256-gcm";
 
 /** Derive an encryption key from machine identity */
 function deriveKey(): Buffer {
   const identity = `${hostname()}-${userInfo().username}-openharness`;
-  return scryptSync(identity, 'oh-credential-salt', 32);
+  return scryptSync(identity, "oh-credential-salt", 32);
 }
 
 type CredentialStore = Record<string, string>;
@@ -28,7 +28,7 @@ function encrypt(data: string): Buffer {
   const key = deriveKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(data, 'utf-8'), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(data, "utf-8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   // Format: [iv (12)] [tag (16)] [encrypted data]
   return Buffer.concat([iv, tag, encrypted]);
@@ -41,7 +41,7 @@ function decrypt(data: Buffer): string {
   const encrypted = data.subarray(28);
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
-  return decipher.update(encrypted, undefined, 'utf-8') + decipher.final('utf-8');
+  return decipher.update(encrypted, undefined, "utf-8") + decipher.final("utf-8");
 }
 
 function loadStore(): CredentialStore {
@@ -94,9 +94,9 @@ export function listCredentials(): string[] {
 export function resolveApiKey(provider: string, configApiKey?: string): string | undefined {
   // Environment variable names by provider
   const envVarMap: Record<string, string> = {
-    anthropic: 'ANTHROPIC_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
   };
 
   const envVar = envVarMap[provider];

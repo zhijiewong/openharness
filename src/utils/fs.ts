@@ -3,8 +3,8 @@
  * Used by GrepTool, GlobTool, and other file-scanning tools.
  */
 
-import * as fs from "fs/promises";
-import * as path from "path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
 /**
  * Recursively walk a directory, returning all file paths.
@@ -50,7 +50,7 @@ export function matchGlob(filePath: string, pattern: string): boolean {
     .join("")
     .replace(/GLOBSTAR/g, ".*");
   try {
-    return new RegExp("(^|/)" + escaped + "$").test(normalized);
+    return new RegExp(`(^|/)${escaped}$`).test(normalized);
   } catch {
     return normalized.includes(pattern.replace(/\*/g, ""));
   }

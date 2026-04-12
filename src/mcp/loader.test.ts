@@ -4,9 +4,9 @@
  * These test the helper functions that operate on the connected clients list.
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
-import { connectedMcpServers, getMcpInstructions, disconnectMcpClients } from "./loader.js";
+import test from "node:test";
+import { connectedMcpServers, disconnectMcpClients, getMcpInstructions } from "./loader.js";
 
 test("connectedMcpServers() returns empty array initially", () => {
   const names = connectedMcpServers();

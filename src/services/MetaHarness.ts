@@ -19,16 +19,16 @@
  * - Permission rules
  */
 
-import type { Provider } from '../providers/base.js';
-import { readOhConfig, writeOhConfig, invalidateConfigCache, type OhConfig } from '../harness/config.js';
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync } from "node:child_process";
+import { copyFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { invalidateConfigCache, type OhConfig, readOhConfig, writeOhConfig } from "../harness/config.js";
+import type { Provider } from "../providers/base.js";
 
 // ── Types ──
 
 export type BenchmarkResult = {
-  score: number;       // 0-1
+  score: number; // 0-1
   details: string;
   durationMs: number;
 };
@@ -38,7 +38,7 @@ export type OptimizationChange = {
   field: string;
   oldValue: unknown;
   newValue: unknown;
-  impact: number;       // score delta
+  impact: number; // score delta
 };
 
 export type OptimizationResult = {
@@ -59,9 +59,9 @@ export async function runBenchmark(command: string): Promise<BenchmarkResult> {
   const start = Date.now();
   try {
     const output = execSync(command, {
-      encoding: 'utf-8',
+      encoding: "utf-8",
       timeout: 300_000, // 5 minute max
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     // Parse test results to extract score
@@ -72,7 +72,7 @@ export async function runBenchmark(command: string): Promise<BenchmarkResult> {
       durationMs: Date.now() - start,
     };
   } catch (err: any) {
-    const output = String(err.stdout ?? err.stderr ?? err.message ?? '');
+    const output = String(err.stdout ?? err.stderr ?? err.message ?? "");
     const score = extractScore(output);
     return {
       score: score > 0 ? score * 0.5 : 0, // Penalty for non-zero exit
@@ -90,8 +90,8 @@ function extractScore(output: string): number {
   const failMatch = output.match(/(\d+)\s+fail/i);
 
   if (passMatch) {
-    const passed = parseInt(passMatch[1]!);
-    const failed = failMatch ? parseInt(failMatch[1]!) : 0;
+    const passed = parseInt(passMatch[1]!, 10);
+    const failed = failMatch ? parseInt(failMatch[1]!, 10) : 0;
     const total = passed + failed;
     return total > 0 ? passed / total : 0;
   }
@@ -100,14 +100,14 @@ function extractScore(output: string): number {
   const tapPass = output.match(/# pass\s+(\d+)/);
   const tapFail = output.match(/# fail\s+(\d+)/);
   if (tapPass) {
-    const passed = parseInt(tapPass[1]!);
-    const failed = tapFail ? parseInt(tapFail[1]!) : 0;
+    const passed = parseInt(tapPass[1]!, 10);
+    const failed = tapFail ? parseInt(tapFail[1]!, 10) : 0;
     const total = passed + failed;
     return total > 0 ? passed / total : 0;
   }
 
   // Exit code 0 = 1.0, non-zero = 0
-  return output.includes('error') || output.includes('FAIL') ? 0.3 : 0.8;
+  return output.includes("error") || output.includes("FAIL") ? 0.3 : 0.8;
 }
 
 // ── Meta-Harness ──
@@ -127,8 +127,8 @@ export class MetaHarness {
     const changes: OptimizationChange[] = [];
 
     // Backup current config
-    const configPath = join('.oh', 'config.yaml');
-    const backupPath = join('.oh', 'config.yaml.backup');
+    const configPath = join(".oh", "config.yaml");
+    const backupPath = join(".oh", "config.yaml.backup");
     if (existsSync(configPath)) {
       copyFileSync(configPath, backupPath);
     }
@@ -171,12 +171,13 @@ export class MetaHarness {
   private async suggestChange(
     currentScore: number,
     previousChanges: OptimizationChange[],
-  ): Promise<Omit<OptimizationChange, 'impact'> | null> {
+  ): Promise<Omit<OptimizationChange, "impact"> | null> {
     const config = readOhConfig();
     const configStr = JSON.stringify(config, null, 2);
-    const prevChangesStr = previousChanges.length > 0
-      ? `\nPrevious successful changes:\n${previousChanges.map(c => `- ${c.description} (+${c.impact.toFixed(3)})`).join('\n')}`
-      : '';
+    const prevChangesStr =
+      previousChanges.length > 0
+        ? `\nPrevious successful changes:\n${previousChanges.map((c) => `- ${c.description} (+${c.impact.toFixed(3)})`).join("\n")}`
+        : "";
 
     const prompt = `You are optimizing an AI agent harness configuration. Current score: ${currentScore.toFixed(3)}/1.0.
 ${prevChangesStr}
@@ -194,8 +195,8 @@ Respond with JSON: {"description": "what to change", "field": "config.path", "ne
 
     try {
       const response = await this.provider.complete(
-        [{ role: 'user', content: prompt, uuid: `meta-${Date.now()}`, timestamp: Date.now() }],
-        'You are a harness optimization engine. Respond ONLY with valid JSON.',
+        [{ role: "user", content: prompt, uuid: `meta-${Date.now()}`, timestamp: Date.now() }],
+        "You are a harness optimization engine. Respond ONLY with valid JSON.",
         undefined,
         this.model,
       );
@@ -204,31 +205,35 @@ Respond with JSON: {"description": "what to change", "field": "config.path", "ne
       if (!jsonMatch) return null;
       const parsed = JSON.parse(jsonMatch[0]);
       return {
-        description: parsed.description ?? 'unknown change',
-        field: parsed.field ?? 'unknown',
+        description: parsed.description ?? "unknown change",
+        field: parsed.field ?? "unknown",
         oldValue: undefined,
         newValue: parsed.newValue,
       };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
-  private applyChange(change: Omit<OptimizationChange, 'impact'>): void {
+  private applyChange(change: Omit<OptimizationChange, "impact">): void {
     invalidateConfigCache();
     // Apply change to config by reading, modifying, and writing back
-    const config = readOhConfig() ?? {} as OhConfig;
+    const config = readOhConfig() ?? ({} as OhConfig);
     try {
       // Simple top-level field update (nested paths would need lodash.set)
-      const field = change.field.replace(/^config\./, '');
+      const field = change.field.replace(/^config\./, "");
       (config as any)[field] = change.newValue;
       writeOhConfig(config);
-    } catch { /* revert will handle failures */ }
+    } catch {
+      /* revert will handle failures */
+    }
   }
 
-  private revertChange(change: Omit<OptimizationChange, 'impact'>): void {
+  private revertChange(_change: Omit<OptimizationChange, "impact">): void {
     invalidateConfigCache();
     // Revert by re-reading the backup config
-    const backupPath = join('.oh', 'config.yaml.backup');
-    const configPath = join('.oh', 'config.yaml');
+    const backupPath = join(".oh", "config.yaml.backup");
+    const configPath = join(".oh", "config.yaml");
     if (existsSync(backupPath)) {
       copyFileSync(backupPath, configPath);
       invalidateConfigCache();
@@ -240,25 +245,25 @@ Respond with JSON: {"description": "what to change", "field": "config.path", "ne
 export function formatOptimizationResult(result: OptimizationResult): string {
   const lines: string[] = [];
   const improvement = result.finalScore - result.initialScore;
-  const pct = result.initialScore > 0 ? (improvement / result.initialScore * 100).toFixed(1) : '0';
+  const pct = result.initialScore > 0 ? ((improvement / result.initialScore) * 100).toFixed(1) : "0";
 
   lines.push(`Meta-Harness Optimization Complete`);
-  lines.push(`${'─'.repeat(40)}`);
+  lines.push(`${"─".repeat(40)}`);
   lines.push(`Initial score: ${result.initialScore.toFixed(3)}`);
-  lines.push(`Final score:   ${result.finalScore.toFixed(3)} (${improvement >= 0 ? '+' : ''}${pct}%)`);
+  lines.push(`Final score:   ${result.finalScore.toFixed(3)} (${improvement >= 0 ? "+" : ""}${pct}%)`);
   lines.push(`Iterations:    ${result.iterations}`);
   lines.push(`Duration:      ${Math.round(result.totalDurationMs / 1000)}s`);
 
   if (result.changes.length > 0) {
-    lines.push('');
-    lines.push('Applied changes:');
+    lines.push("");
+    lines.push("Applied changes:");
     for (const c of result.changes) {
       lines.push(`  +${c.impact.toFixed(3)} ${c.description}`);
     }
   } else {
-    lines.push('');
-    lines.push('No improvements found in this run.');
+    lines.push("");
+    lines.push("No improvements found in this run.");
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }

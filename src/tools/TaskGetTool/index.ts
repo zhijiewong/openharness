@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   taskId: z.number(),

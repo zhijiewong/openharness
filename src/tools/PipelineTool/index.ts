@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { PipelineExecutor, formatPipelineResults } from "../../services/PipelineExecutor.js";
+import { formatPipelineResults, PipelineExecutor } from "../../services/PipelineExecutor.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const stepSchema = z.object({
   id: z.string().describe("Unique step identifier"),
@@ -16,11 +16,12 @@ const inputSchema = z.object({
 
 export const PipelineTool: Tool<typeof inputSchema> = {
   name: "Pipeline",
-  description: "Execute a declarative multi-step tool pipeline. Steps run in dependency order with variable substitution.",
+  description:
+    "Execute a declarative multi-step tool pipeline. Steps run in dependency order with variable substitution.",
   inputSchema,
   riskLevel: "medium",
 
-  isReadOnly(input) {
+  isReadOnly(_input) {
     // Pipeline is read-only only if ALL steps use read-only tools
     // Conservative: assume not read-only
     return false;
@@ -38,7 +39,7 @@ export const PipelineTool: Tool<typeof inputSchema> = {
     const executor = new PipelineExecutor(context.tools, context);
     const results = await executor.execute(input.steps);
     const summary = formatPipelineResults(results);
-    const hasErrors = results.some(r => r.isError);
+    const hasErrors = results.some((r) => r.isError);
 
     return { output: summary, isError: hasErrors };
   },

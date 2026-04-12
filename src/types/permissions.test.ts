@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { checkPermission } from "./permissions.js";
 
 test("trust mode allows everything", () => {

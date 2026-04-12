@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   taskId: z.number(),
@@ -48,7 +48,7 @@ export const TaskStopTool: Tool<typeof inputSchema> = {
 
       task.status = "cancelled";
       if (input.reason) {
-        task.output = (task.output ? task.output + "\n" : "") + `Cancelled: ${input.reason}`;
+        task.output = `${task.output ? `${task.output}\n` : ""}Cancelled: ${input.reason}`;
       }
       await fs.writeFile(filePath, JSON.stringify(tasks, null, 2), "utf-8");
 

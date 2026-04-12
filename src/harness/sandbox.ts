@@ -9,8 +9,8 @@
  * Reduces permission prompts while maintaining security.
  */
 
-import { resolve, relative } from 'node:path';
-import { readOhConfig } from './config.js';
+import { relative, resolve } from "node:path";
+import { readOhConfig } from "./config.js";
 
 // ── Types ──
 
@@ -28,10 +28,10 @@ export type SandboxConfig = {
 
 const DEFAULT_SANDBOX: SandboxConfig = {
   enabled: false,
-  allowedPaths: ['.'],    // current directory
-  allowedDomains: [],     // empty = all allowed
+  allowedPaths: ["."], // current directory
+  allowedDomains: [], // empty = all allowed
   blockNetwork: false,
-  blockedCommands: ['curl', 'wget'],
+  blockedCommands: ["curl", "wget"],
 };
 
 // ── Sandbox Manager ──
@@ -71,7 +71,7 @@ export function isPathAllowed(filePath: string): boolean {
     const allowedResolved = resolve(cwd, allowed);
     // Check if the file is within the allowed directory
     const rel = relative(allowedResolved, resolved);
-    if (!rel.startsWith('..') && !rel.startsWith('/')) return true;
+    if (!rel.startsWith("..") && !rel.startsWith("/")) return true;
   }
 
   return false;
@@ -86,9 +86,7 @@ export function isDomainAllowed(url: string): boolean {
 
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return config.allowedDomains.some(d =>
-      hostname === d.toLowerCase() || hostname.endsWith('.' + d.toLowerCase()),
-    );
+    return config.allowedDomains.some((d) => hostname === d.toLowerCase() || hostname.endsWith(`.${d.toLowerCase()}`));
   } catch {
     return false;
   }
@@ -99,26 +97,26 @@ export function isCommandAllowed(command: string): boolean {
   const config = getSandboxConfig();
   if (!config.enabled) return true;
 
-  const firstWord = command.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  const firstWord = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
   return !config.blockedCommands.includes(firstWord);
 }
 
 /** Get a human-readable sandbox status */
 export function sandboxStatus(): string {
   const config = getSandboxConfig();
-  if (!config.enabled) return 'Sandbox: disabled';
+  if (!config.enabled) return "Sandbox: disabled";
 
-  const lines = ['Sandbox: enabled'];
-  lines.push(`  Allowed paths: ${config.allowedPaths.join(', ') || 'none'}`);
+  const lines = ["Sandbox: enabled"];
+  lines.push(`  Allowed paths: ${config.allowedPaths.join(", ") || "none"}`);
   if (config.blockNetwork) {
-    lines.push('  Network: blocked');
+    lines.push("  Network: blocked");
   } else if (config.allowedDomains.length > 0) {
-    lines.push(`  Allowed domains: ${config.allowedDomains.join(', ')}`);
+    lines.push(`  Allowed domains: ${config.allowedDomains.join(", ")}`);
   } else {
-    lines.push('  Network: unrestricted');
+    lines.push("  Network: unrestricted");
   }
   if (config.blockedCommands.length > 0) {
-    lines.push(`  Blocked commands: ${config.blockedCommands.join(', ')}`);
+    lines.push(`  Blocked commands: ${config.blockedCommands.join(", ")}`);
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }

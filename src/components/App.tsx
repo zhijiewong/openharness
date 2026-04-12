@@ -1,16 +1,16 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
+import { getCompanionSystemPrompt, loadCompanionRuntime } from "../cybergotchi/config.js";
+import { readOhConfig } from "../harness/config.js";
+import { loadMemories, memoriesToPrompt } from "../harness/memory.js";
+import { detectProject, projectContextToPrompt } from "../harness/onboarding.js";
+import { discoverSkills, skillsToPrompt } from "../harness/plugins.js";
+import { loadRulesAsPrompt } from "../harness/rules.js";
 import type { Provider } from "../providers/base.js";
 import type { Tools } from "../Tool.js";
-import type { PermissionMode } from "../types/permissions.js";
 import type { Message } from "../types/message.js";
-import { loadRulesAsPrompt } from "../harness/rules.js";
-import { detectProject, projectContextToPrompt } from "../harness/onboarding.js";
-import { loadCompanionRuntime, getCompanionSystemPrompt } from "../cybergotchi/config.js";
-import { readOhConfig } from "../harness/config.js";
+import type { PermissionMode } from "../types/permissions.js";
 import { setToolPermissionRules } from "../types/permissions.js";
-import { loadMemories, memoriesToPrompt } from "../harness/memory.js";
-import { discoverSkills, skillsToPrompt } from "../harness/plugins.js";
-import { ThemeProvider, darkTheme } from "../utils/theme.js";
+import { darkTheme, ThemeProvider } from "../utils/theme.js";
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import REPL from "./REPL.js";
 
@@ -76,7 +76,8 @@ export default function App({
       trust: "You are in TRUST mode. All tool calls are auto-approved.",
       deny: "You are in DENY mode. Only read-only tools are allowed.",
       plan: "You are in PLAN mode. Only read-only tools are allowed. Do not make changes — only research and plan.",
-      acceptEdits: "You are in ACCEPT-EDITS mode. File reads and edits are auto-approved; other risky tools require approval.",
+      acceptEdits:
+        "You are in ACCEPT-EDITS mode. File reads and edits are auto-approved; other risky tools require approval.",
     };
     const modePrompt = modeDescriptions[permissionMode];
     if (modePrompt) parts.push(`# Permission Mode\n${modePrompt}`);
@@ -101,7 +102,7 @@ export default function App({
     }
 
     return parts.join("\n\n");
-  }, [systemPrompt]);
+  }, [systemPrompt, permissionMode]);
 
   return (
     <ThemeProvider value={darkTheme}>

@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { decayNeeds, adjustNeed, applyEvent } from "./needs.js";
+import test from "node:test";
 import { defaultConfig } from "./config.js";
+import { adjustNeed, applyEvent, decayNeeds } from "./needs.js";
 
 function makeConfig() {
   return defaultConfig("duck", "Test");

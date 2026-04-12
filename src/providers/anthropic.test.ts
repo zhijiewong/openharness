@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { AnthropicProvider } from "./anthropic.js";
 
 test("Anthropic healthCheck returns true when apiKey is set", async () => {
@@ -16,5 +16,5 @@ test("Anthropic listModels returns hardcoded models", () => {
   const provider = new AnthropicProvider({ name: "anthropic", apiKey: "test-key" });
   const models = provider.listModels();
   assert.ok(models.length > 0);
-  assert.ok(models.some(m => m.id.includes("claude")));
+  assert.ok(models.some((m) => m.id.includes("claude")));
 });

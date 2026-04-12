@@ -56,8 +56,8 @@ export type ErrorEvent = {
 
 export type RateLimited = {
   readonly type: "rate_limited";
-  readonly retryIn: number;   // seconds
-  readonly attempt: number;   // 1-based
+  readonly retryIn: number; // seconds
+  readonly attempt: number; // 1-based
 };
 
 export type ThinkingDelta = {

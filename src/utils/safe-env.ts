@@ -29,7 +29,7 @@ export function safeEnv(extra?: Record<string, string>): Record<string, string> 
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
-    if (BLOCKED_PATTERNS.some(p => p.test(key))) continue;
+    if (BLOCKED_PATTERNS.some((p) => p.test(key))) continue;
     env[key] = value;
   }
   if (extra) {

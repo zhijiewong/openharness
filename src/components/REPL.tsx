@@ -1,27 +1,26 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Box, Text, Static, useApp, useInput } from "ink";
-import type { Message } from "../types/message.js";
-import type { StreamEvent } from "../types/events.js";
-import type { Provider } from "../providers/base.js";
-import type { Tools } from "../Tool.js";
-import type { PermissionMode } from "../types/permissions.js";
-import { createAssistantMessage, createUserMessage, createMessage, createInfoMessage } from "../types/message.js";
-import { query, type QueryConfig } from "../query/index.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createSession, saveSession, loadSession, type Session } from "../harness/session.js";
-import { CostTracker, estimateCost } from "../harness/cost.js";
-import { processSlashCommand, type CommandContext } from "../commands/index.js";
-import { estimateMessageTokens, getContextWarning } from "../harness/context-warning.js";
-import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
-import Spinner from "./Spinner.js";
-import TextInput from "./TextInput.js";
+import { Box, Static, Text, useApp, useInput } from "ink";
 import TextInputComponent from "ink-text-input";
-import PermissionPrompt from "./PermissionPrompt.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type CommandContext, processSlashCommand } from "../commands/index.js";
+import { cybergotchiEvents } from "../cybergotchi/events.js";
+import { autoCommitAIEdits, isGitRepo } from "../git/index.js";
+import { estimateMessageTokens, getContextWarning } from "../harness/context-warning.js";
+import { CostTracker, estimateCost } from "../harness/cost.js";
+import { createSession, loadSession, type Session, saveSession } from "../harness/session.js";
+import type { Provider } from "../providers/base.js";
+import { type QueryConfig, query } from "../query/index.js";
+import type { Tools } from "../Tool.js";
+import type { Message } from "../types/message.js";
+import { createAssistantMessage, createInfoMessage, createMessage, createUserMessage } from "../types/message.js";
+import type { PermissionMode } from "../types/permissions.js";
 import CybergotchiPanelConnected from "./CybergotchiPanelConnected.js";
 import CybergotchiSetup from "./CybergotchiSetup.js";
+import PermissionPrompt from "./PermissionPrompt.js";
+import Spinner from "./Spinner.js";
+import TextInput from "./TextInput.js";
 import type { ToolCallState } from "./ToolCallDisplay.js";
-import { cybergotchiEvents } from "../cybergotchi/events.js";
 
 /** Minimum terminal width to show the companion */
 const MIN_WIDTH_FOR_COMPANION = 40;
@@ -31,9 +30,9 @@ function getTerminalWidth(): number {
 }
 
 import { loadCompanionConfig, saveCompanionConfig } from "../cybergotchi/config.js";
+import { createKeybindingMatcher } from "../harness/keybindings.js";
 import { detectMemories, saveMemory } from "../harness/memory.js";
 import { resolveMcpMention } from "../mcp/loader.js";
-import { createKeybindingMatcher } from "../harness/keybindings.js";
 
 type REPLProps = {
   provider: Provider;
@@ -52,7 +51,6 @@ type PendingPermission = {
   resolve: (allowed: boolean) => void;
 };
 
-
 export default function REPL({
   provider,
   tools,
@@ -67,11 +65,17 @@ export default function REPL({
   // Session and cost tracking
   const sessionRef = useRef<Session>(
     resumeSessionId
-      ? (() => { try { return loadSession(resumeSessionId); } catch { return createSession(provider.name, model ?? ""); } })()
+      ? (() => {
+          try {
+            return loadSession(resumeSessionId);
+          } catch {
+            return createSession(provider.name, model ?? "");
+          }
+        })()
       : createSession(provider.name, model ?? ""),
   );
   const costRef = useRef(new CostTracker());
-  const [totalCost, setTotalCost] = useState(0);
+  const [_totalCost, setTotalCost] = useState(0);
   const [sessionId] = useState(sessionRef.current.id);
 
   const [messages, setMessages] = useState<Message[]>(
@@ -86,7 +90,9 @@ export default function REPL({
   toolCallsRef.current = toolCalls;
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<{
-    question: string; options?: string[]; resolve: (answer: string) => void;
+    question: string;
+    options?: string[];
+    resolve: (answer: string) => void;
   } | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +108,7 @@ export default function REPL({
       cfg.lifetime.totalSessions += 1;
       saveCompanionConfig(cfg);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save session on exit
@@ -110,7 +116,11 @@ export default function REPL({
     return () => {
       sessionRef.current.messages = messages;
       sessionRef.current.totalCost = costRef.current.totalCost;
-      try { saveSession(sessionRef.current); } catch { /* ignore */ }
+      try {
+        saveSession(sessionRef.current);
+      } catch {
+        /* ignore */
+      }
     };
   }, [messages]);
 
@@ -119,7 +129,7 @@ export default function REPL({
   useEffect(() => {
     if (loading) {
       loadingTimerRef.current = setTimeout(() => {
-        cybergotchiEvents.emit('cybergotchi', { type: 'longWait' });
+        cybergotchiEvents.emit("cybergotchi", { type: "longWait" });
       }, 30_000);
     } else {
       if (loadingTimerRef.current) {
@@ -154,7 +164,7 @@ export default function REPL({
 
   // Queue prompt submissions — useEffect picks them up for async processing
   const pendingPromptRef = useRef<string | null>(null);
-  const [submitCount, setSubmitCount] = useState(0);
+  const [_submitCount, setSubmitCount] = useState(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -189,10 +199,14 @@ export default function REPL({
       const askUserQuestion = (question: string, options?: string[]): Promise<string> => {
         return new Promise((resolve) => {
           setQuestionAnswer("");
-          setPendingQuestion({ question, options, resolve: (answer: string) => {
-            setPendingQuestion(null);
-            resolve(answer);
-          }});
+          setPendingQuestion({
+            question,
+            options,
+            resolve: (answer: string) => {
+              setPendingQuestion(null);
+              resolve(answer);
+            },
+          });
         });
       };
 
@@ -210,7 +224,7 @@ export default function REPL({
       // Resolve @mentions to MCP resource content
       let resolvedPrompt = prompt;
       const mentionPattern = /@(\w[\w.-]*)/g;
-      const mentions = [...prompt.matchAll(mentionPattern)].map(m => m[1]!);
+      const mentions = [...prompt.matchAll(mentionPattern)].map((m) => m[1]!);
       const companionName = cybergotchiConfigRef.current?.soul?.name?.toLowerCase();
       for (const mention of mentions) {
         if (companionName && mention.toLowerCase() === companionName) continue;
@@ -219,7 +233,9 @@ export default function REPL({
           if (content) {
             resolvedPrompt += `\n\n[Resource @${mention}]:\n${content.slice(0, 5000)}`;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
 
       let accumulated = "";
@@ -235,23 +251,24 @@ export default function REPL({
               setThinkingText((prev) => prev + event.content);
               break;
 
-            case "text_delta":
+            case "text_delta": {
               accumulated += event.content;
               // Move completed lines to Static (messages array) — keep only the current partial line in live area
-              const deltaLines = accumulated.split('\n');
+              const deltaLines = accumulated.split("\n");
               if (deltaLines.length > 1) {
-                const completedText = deltaLines.slice(0, -1).join('\n');
+                const completedText = deltaLines.slice(0, -1).join("\n");
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   if (last?.meta?.isStreaming) {
-                    return [...prev.slice(0, -1), { ...last, content: last.content + completedText + '\n' }];
+                    return [...prev.slice(0, -1), { ...last, content: `${last.content + completedText}\n` }];
                   }
-                  return [...prev, createMessage('assistant', completedText + '\n', { meta: { isStreaming: true } })];
+                  return [...prev, createMessage("assistant", `${completedText}\n`, { meta: { isStreaming: true } })];
                 });
                 accumulated = deltaLines[deltaLines.length - 1]!;
               }
               setStreamingText(accumulated);
               break;
+            }
 
             case "tool_call_start":
               setToolCalls((prev) => {
@@ -285,15 +302,15 @@ export default function REPL({
                 const next = new Map(prev);
                 const existing = next.get(event.callId);
                 if (existing) {
-                  const lines = (existing.liveOutput ?? []);
+                  const lines = existing.liveOutput ?? [];
                   // Split chunk by newlines and append
                   const chunks = event.chunk.split("\n");
                   const merged = [...lines];
                   if (merged.length > 0 && !event.chunk.startsWith("\n")) {
                     merged[merged.length - 1] = (merged[merged.length - 1] ?? "") + chunks[0];
-                    merged.push(...chunks.slice(1).filter(c => c !== ""));
+                    merged.push(...chunks.slice(1).filter((c) => c !== ""));
                   } else {
-                    merged.push(...chunks.filter(c => c !== ""));
+                    merged.push(...chunks.filter((c) => c !== ""));
                   }
                   next.set(event.callId, { ...existing, liveOutput: merged });
                 }
@@ -314,8 +331,8 @@ export default function REPL({
                 return next;
               });
               // Emit cybergotchi event
-              cybergotchiEvents.emit('cybergotchi', {
-                type: event.isError ? 'toolError' : 'toolSuccess',
+              cybergotchiEvents.emit("cybergotchi", {
+                type: event.isError ? "toolError" : "toolSuccess",
                 toolName,
               });
               // Git auto-commit for write tools
@@ -328,7 +345,7 @@ export default function REPL({
                   const hash = autoCommitAIEdits(toolName, files, process.cwd());
                   if (hash) {
                     setMessages((prev) => [...prev, createInfoMessage(`git: committed ${hash}`)]);
-                    cybergotchiEvents.emit('cybergotchi', { type: 'commit' });
+                    cybergotchiEvents.emit("cybergotchi", { type: "commit" });
                   }
                 }
               }
@@ -338,8 +355,10 @@ export default function REPL({
             case "cost_update":
               setCurrentModel(event.model);
               costRef.current.record(
-                "provider", event.model,
-                event.inputTokens, event.outputTokens,
+                "provider",
+                event.model,
+                event.inputTokens,
+                event.outputTokens,
                 event.cost || estimateCost(event.model, event.inputTokens, event.outputTokens),
               );
               setTotalCost(costRef.current.totalCost);
@@ -375,7 +394,11 @@ export default function REPL({
               // Auto-save session
               sessionRef.current.messages = messagesRef.current;
               sessionRef.current.totalCost = costRef.current.totalCost;
-              try { saveSession(sessionRef.current); } catch { /* ignore */ }
+              try {
+                saveSession(sessionRef.current);
+              } catch {
+                /* ignore */
+              }
               break;
           }
         }
@@ -394,18 +417,20 @@ export default function REPL({
         const msgCount = messagesRef.current.length;
         if (msgCount > 0 && msgCount % 10 === 0) {
           detectMemories(provider, messagesRef.current.slice(-10), model)
-            .then(memories => {
+            .then((memories) => {
               for (const m of memories) {
                 saveMemory(m.name, m.type, m.description, m.content);
               }
             })
-            .catch(() => {/* ignore memory detection errors */});
+            .catch(() => {
+              /* ignore memory detection errors */
+            });
         }
       }
     };
 
     run();
-  }, [submitCount, loading, provider, tools, systemPrompt, permissionMode]);
+  }, [loading, provider, tools, systemPrompt, permissionMode, currentModel, model]);
 
   const handleSubmit = useCallback(
     (input: string) => {
@@ -422,7 +447,7 @@ export default function REPL({
           const name = gotchiCfg.soul.name.toLowerCase();
           const lower = trimmed.toLowerCase();
           if (lower.startsWith(`@${name}`) || lower.startsWith(`${name},`) || lower.startsWith(`${name} `)) {
-            cybergotchiEvents.emit('cybergotchi', { type: 'userAddressed', text: trimmed });
+            cybergotchiEvents.emit("cybergotchi", { type: "userAddressed", text: trimmed });
             return;
           }
         }
@@ -430,7 +455,7 @@ export default function REPL({
 
       // Handle /vim toggle directly
       if (trimmed === "/vim") {
-        setVimMode(v => !v);
+        setVimMode((v) => !v);
         setMessages((prev) => [...prev, createInfoMessage(vimMode ? "Vim mode OFF" : "Vim mode ON")]);
         return;
       }
@@ -459,7 +484,9 @@ export default function REPL({
               const sess = loadSession(result.resumeSessionId, sessionDir);
               sessionRef.current = sess;
               setMessages(sess.messages);
-            } catch { /* already shown error in output */ }
+            } catch {
+              /* already shown error in output */
+            }
           }
           if (result.clearMessages) {
             setMessages([]);
@@ -492,7 +519,7 @@ export default function REPL({
       pendingPromptRef.current = input;
       setSubmitCount((c) => c + 1);
     },
-    [exit, currentModel, permissionMode, sessionId],
+    [exit, currentModel, permissionMode, sessionId, vimMode, provider.name],
   );
 
   // Process pending keybinding actions
@@ -508,8 +535,14 @@ export default function REPL({
   if (cybergotchiConfigRef.current === null || showCybergotchiSetup) {
     return (
       <CybergotchiSetup
-        onComplete={() => { cybergotchiConfigRef.current = loadCompanionConfig(); setShowCybergotchiSetup(false); }}
-        onSkip={() => { cybergotchiConfigRef.current = loadCompanionConfig(); setShowCybergotchiSetup(false); }}
+        onComplete={() => {
+          cybergotchiConfigRef.current = loadCompanionConfig();
+          setShowCybergotchiSetup(false);
+        }}
+        onSkip={() => {
+          cybergotchiConfigRef.current = loadCompanionConfig();
+          setShowCybergotchiSetup(false);
+        }}
       />
     );
   }
@@ -524,7 +557,12 @@ export default function REPL({
             return (
               <Box key={msg.uuid} flexDirection="column">
                 {showDivider && <Text dimColor>{"─".repeat(60)}</Text>}
-                <Box><Text color="cyan" bold>{"❯ "}</Text><Text bold>{msg.content}</Text></Box>
+                <Box>
+                  <Text color="cyan" bold>
+                    {"❯ "}
+                  </Text>
+                  <Text bold>{msg.content}</Text>
+                </Box>
               </Box>
             );
           }
@@ -532,7 +570,12 @@ export default function REPL({
             return (
               <Box key={msg.uuid} flexDirection="column">
                 {msg.content ? (
-                  <Box><Text color="magenta" bold>{"◆ "}</Text><Text>{msg.content}</Text></Box>
+                  <Box>
+                    <Text color="magenta" bold>
+                      {"◆ "}
+                    </Text>
+                    <Text>{msg.content}</Text>
+                  </Box>
                 ) : null}
               </Box>
             );
@@ -540,7 +583,10 @@ export default function REPL({
           if (msg.role === "system") {
             return (
               <Box key={msg.uuid}>
-                <Text dimColor>{"  "}{msg.content}</Text>
+                <Text dimColor>
+                  {"  "}
+                  {msg.content}
+                </Text>
               </Box>
             );
           }
@@ -550,18 +596,22 @@ export default function REPL({
 
       {/* Live area: streaming, spinner, prompts, input, companion (re-renders freely) */}
       <Box flexDirection="column">
-
         {/* Thinking */}
         {thinkingText && (
           <Box marginY={0}>
-            <Text dimColor>{"💭 "}{thinkingText.split('\n').slice(-3).join('\n')}</Text>
+            <Text dimColor>
+              {"💭 "}
+              {thinkingText.split("\n").slice(-3).join("\n")}
+            </Text>
           </Box>
         )}
 
         {/* Streaming response */}
         {loading && streamingText && (
           <Box marginY={0}>
-            <Text color="magenta" bold>{"◆ "}</Text>
+            <Text color="magenta" bold>
+              {"◆ "}
+            </Text>
             <Text>{streamingText}</Text>
           </Box>
         )}
@@ -572,7 +622,10 @@ export default function REPL({
         {/* Error */}
         {error && (
           <Box marginY={1} borderStyle="round" borderColor="red" paddingX={1}>
-            <Text color="red">{"✗ "}{error}</Text>
+            <Text color="red">
+              {"✗ "}
+              {error}
+            </Text>
           </Box>
         )}
 
@@ -593,16 +646,21 @@ export default function REPL({
             {pendingQuestion.options && pendingQuestion.options.length > 0 && (
               <Box flexDirection="column">
                 {pendingQuestion.options.map((o, i) => (
-                  <Text key={i} dimColor>  {i + 1}. {o}</Text>
+                  <Text key={i} dimColor>
+                    {" "}
+                    {i + 1}. {o}
+                  </Text>
                 ))}
               </Box>
             )}
             <Box>
-              <Text color="yellow">{'❯ '}</Text>
+              <Text color="yellow">{"❯ "}</Text>
               <TextInputComponent
                 value={questionAnswer}
                 onChange={setQuestionAnswer}
-                onSubmit={(val) => { if (val.trim()) pendingQuestion.resolve(val.trim()); }}
+                onSubmit={(val) => {
+                  if (val.trim()) pendingQuestion.resolve(val.trim());
+                }}
                 focus={true}
               />
             </Box>
@@ -624,7 +682,8 @@ export default function REPL({
 
         {/* Keybinding hints */}
         <Text dimColor>
-          {"exit to quit"}{loading ? " | Ctrl+C to interrupt" : ""}
+          {"exit to quit"}
+          {loading ? " | Ctrl+C to interrupt" : ""}
           {cybergotchiConfigRef.current?.soul?.name ? ` | @${cybergotchiConfigRef.current!.soul.name} to chat` : ""}
         </Text>
 

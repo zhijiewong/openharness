@@ -11,23 +11,23 @@
  * Supports single keys and two-key chord sequences (e.g., "ctrl+k ctrl+d").
  */
 
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export type Keybinding = {
-  key: string;       // e.g., "ctrl+s", "ctrl+k ctrl+d"
-  action: string;    // slash command or custom action
+  key: string; // e.g., "ctrl+s", "ctrl+k ctrl+d"
+  action: string; // slash command or custom action
 };
 
 type ParsedKey = {
   ctrl: boolean;
   alt: boolean;
   shift: boolean;
-  key: string;       // the actual key character
+  key: string; // the actual key character
 };
 
-const KEYBINDINGS_PATH = join(homedir(), '.oh', 'keybindings.json');
+const KEYBINDINGS_PATH = join(homedir(), ".oh", "keybindings.json");
 
 let cachedBindings: Keybinding[] | null = null;
 
@@ -41,13 +41,15 @@ export function loadKeybindings(): Keybinding[] {
   }
 
   try {
-    const raw = readFileSync(KEYBINDINGS_PATH, 'utf-8');
+    const raw = readFileSync(KEYBINDINGS_PATH, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       cachedBindings = parsed as Keybinding[];
       return cachedBindings;
     }
-  } catch { /* ignore parse errors */ }
+  } catch {
+    /* ignore parse errors */
+  }
 
   cachedBindings = defaultKeybindings();
   return cachedBindings;
@@ -56,24 +58,24 @@ export function loadKeybindings(): Keybinding[] {
 /** Default keybindings */
 function defaultKeybindings(): Keybinding[] {
   return [
-    { key: 'ctrl+d', action: '/diff' },
-    { key: 'ctrl+l', action: '/clear' },
-    { key: 'ctrl+u', action: '/undo' },
-    { key: 'ctrl+s', action: '/status' },
-    { key: 'ctrl+k ctrl+c', action: '/cost' },
-    { key: 'ctrl+k ctrl+f', action: '/fast' },
-    { key: 'ctrl+k ctrl+l', action: '/log' },
+    { key: "ctrl+d", action: "/diff" },
+    { key: "ctrl+l", action: "/clear" },
+    { key: "ctrl+u", action: "/undo" },
+    { key: "ctrl+s", action: "/status" },
+    { key: "ctrl+k ctrl+c", action: "/cost" },
+    { key: "ctrl+k ctrl+f", action: "/fast" },
+    { key: "ctrl+k ctrl+l", action: "/log" },
   ];
 }
 
 /** Parse a key string like "ctrl+s" into components */
 function parseKeyString(keyStr: string): ParsedKey {
-  const parts = keyStr.toLowerCase().split('+');
+  const parts = keyStr.toLowerCase().split("+");
   return {
-    ctrl: parts.includes('ctrl'),
-    alt: parts.includes('alt'),
-    shift: parts.includes('shift'),
-    key: parts.filter(p => p !== 'ctrl' && p !== 'alt' && p !== 'shift')[0] ?? '',
+    ctrl: parts.includes("ctrl"),
+    alt: parts.includes("alt"),
+    shift: parts.includes("shift"),
+    key: parts.filter((p) => p !== "ctrl" && p !== "alt" && p !== "shift")[0] ?? "",
   };
 }
 
@@ -104,10 +106,7 @@ export function createKeybindingMatcher() {
   let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
 
   return {
-    match(
-      input: string,
-      inkKey: { ctrl: boolean; meta: boolean; shift: boolean },
-    ): string | null {
+    match(input: string, inkKey: { ctrl: boolean; meta: boolean; shift: boolean }): string | null {
       // Parse all bindings
       for (const binding of bindings) {
         const parts = binding.key.split(/\s+/);
@@ -127,7 +126,10 @@ export function createKeybindingMatcher() {
           if (pendingChord && keyMatches(second, input, inkKey)) {
             // Second key of chord matches
             pendingChord = null;
-            if (pendingTimeout) { clearTimeout(pendingTimeout); pendingTimeout = null; }
+            if (pendingTimeout) {
+              clearTimeout(pendingTimeout);
+              pendingTimeout = null;
+            }
             return binding.action;
           }
 
@@ -147,7 +149,10 @@ export function createKeybindingMatcher() {
       // No match — clear pending chord
       if (pendingChord) {
         pendingChord = null;
-        if (pendingTimeout) { clearTimeout(pendingTimeout); pendingTimeout = null; }
+        if (pendingTimeout) {
+          clearTimeout(pendingTimeout);
+          pendingTimeout = null;
+        }
       }
       return null;
     },

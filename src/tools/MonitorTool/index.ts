@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { spawn } from "node:child_process";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import { z } from "zod";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   command: z.string().describe("Background command to watch"),
@@ -15,8 +15,12 @@ export const MonitorTool: Tool<typeof inputSchema> = {
   inputSchema,
   riskLevel: "medium",
 
-  isReadOnly() { return true; },
-  isConcurrencySafe() { return true; },
+  isReadOnly() {
+    return true;
+  },
+  isConcurrencySafe() {
+    return true;
+  },
 
   async call(input, context: ToolContext): Promise<ToolResult> {
     const timeout = input.timeout ?? 60_000;
@@ -29,7 +33,7 @@ export const MonitorTool: Tool<typeof inputSchema> = {
 
       const proc = spawn(input.command, {
         shell: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
 
@@ -38,9 +42,11 @@ export const MonitorTool: Tool<typeof inputSchema> = {
           settled = true;
           proc.kill();
           resolve({
-            output: lines.length > 0
-              ? lines.join('\n') + `\n\n[Monitor timed out after ${timeout / 1000}s — ${lines.length} lines collected]`
-              : `[Monitor timed out after ${timeout / 1000}s — no output]`,
+            output:
+              lines.length > 0
+                ? lines.join("\n") +
+                  `\n\n[Monitor timed out after ${timeout / 1000}s — ${lines.length} lines collected]`
+                : `[Monitor timed out after ${timeout / 1000}s — no output]`,
             isError: false,
           });
         }
@@ -53,7 +59,7 @@ export const MonitorTool: Tool<typeof inputSchema> = {
 
         // Stream output chunk if callback available
         if (context.onOutputChunk && context.callId) {
-          context.onOutputChunk(context.callId, line + '\n');
+          context.onOutputChunk(context.callId, `${line}\n`);
         }
 
         if (lines.length >= maxLines) {
@@ -61,29 +67,29 @@ export const MonitorTool: Tool<typeof inputSchema> = {
           clearTimeout(timer);
           proc.kill();
           resolve({
-            output: lines.join('\n') + `\n\n[Collected ${maxLines} lines — stopped]`,
+            output: `${lines.join("\n")}\n\n[Collected ${maxLines} lines — stopped]`,
             isError: false,
           });
         }
       };
 
-      let stdoutBuffer = '';
-      proc.stdout?.on('data', (chunk) => {
+      let stdoutBuffer = "";
+      proc.stdout?.on("data", (chunk) => {
         stdoutBuffer += chunk.toString();
-        const parts = stdoutBuffer.split('\n');
-        stdoutBuffer = parts.pop() ?? '';
+        const parts = stdoutBuffer.split("\n");
+        stdoutBuffer = parts.pop() ?? "";
         for (const line of parts) handleLine(line);
       });
 
-      let stderrBuffer = '';
-      proc.stderr?.on('data', (chunk) => {
+      let stderrBuffer = "";
+      proc.stderr?.on("data", (chunk) => {
         stderrBuffer += chunk.toString();
-        const parts = stderrBuffer.split('\n');
-        stderrBuffer = parts.pop() ?? '';
+        const parts = stderrBuffer.split("\n");
+        stderrBuffer = parts.pop() ?? "";
         for (const line of parts) handleLine(line);
       });
 
-      proc.on('exit', (code) => {
+      proc.on("exit", (code) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
@@ -91,15 +97,16 @@ export const MonitorTool: Tool<typeof inputSchema> = {
           if (stdoutBuffer) handleLine(stdoutBuffer);
           if (stderrBuffer) handleLine(stderrBuffer);
           resolve({
-            output: lines.length > 0
-              ? lines.join('\n') + `\n\n[Process exited with code ${code ?? 'unknown'} — ${lines.length} lines]`
-              : `[Process exited with code ${code ?? 'unknown'} — no output]`,
+            output:
+              lines.length > 0
+                ? `${lines.join("\n")}\n\n[Process exited with code ${code ?? "unknown"} — ${lines.length} lines]`
+                : `[Process exited with code ${code ?? "unknown"} — no output]`,
             isError: (code ?? 0) !== 0,
           });
         }
       });
 
-      proc.on('error', (err) => {
+      proc.on("error", (err) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);

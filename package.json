@@ -28,6 +28,9 @@
     "test": "node scripts/test.mjs",
     "test:coverage": "node scripts/coverage.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "format": "biome format --write src/",
     "start": "node dist/main.js"
   },
   "dependencies": {
@@ -43,6 +46,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.11",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "c8": "^11.0.0",

@@ -1,15 +1,15 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const SUPPORTED_TYPES: Record<string, string> = {
-  ".png":  "image/png",
-  ".jpg":  "image/jpeg",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".gif":  "image/gif",
+  ".gif": "image/gif",
   ".webp": "image/webp",
-  ".pdf":  "application/pdf",
+  ".pdf": "application/pdf",
 };
 
 const inputSchema = z.object({

@@ -1,6 +1,5 @@
-import React from 'react';
-import { useCybergotchi } from '../cybergotchi/useCybergotchi.js';
-import CompanionFooter from './CompanionFooter.js';
+import { useCybergotchi } from "../cybergotchi/useCybergotchi.js";
+import CompanionFooter from "./CompanionFooter.js";
 
 interface Props {
   paused?: boolean;

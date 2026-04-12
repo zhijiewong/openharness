@@ -12,17 +12,17 @@
  * Optional: POST to configurable endpoint on session end.
  */
 
-import { appendFileSync, mkdirSync, existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readOhConfig } from './config.js';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { readOhConfig } from "./config.js";
 
-const TELEMETRY_DIR = join(homedir(), '.oh', 'telemetry');
+const TELEMETRY_DIR = join(homedir(), ".oh", "telemetry");
 
 // ── Types ──
 
 export type TelemetryEvent = {
-  type: 'session_start' | 'tool_call' | 'error' | 'session_end';
+  type: "session_start" | "tool_call" | "error" | "session_end";
   timestamp: number;
   sessionId: string;
   payload: TelemetryPayload;
@@ -40,7 +40,7 @@ export type TelemetryPayload = {
   isError?: boolean;
 
   // error
-  errorCategory?: string;  // 'rate_limit' | 'network' | 'permission' | 'timeout' | 'unknown'
+  errorCategory?: string; // 'rate_limit' | 'network' | 'permission' | 'timeout' | 'unknown'
 
   // session_end
   totalTurns?: number;
@@ -76,19 +76,16 @@ export function recordEvent(event: TelemetryEvent): void {
 
   try {
     const file = getSessionFile(event.sessionId);
-    appendFileSync(file, JSON.stringify(event) + '\n');
-  } catch { /* never crash on telemetry failure */ }
+    appendFileSync(file, `${JSON.stringify(event)}\n`);
+  } catch {
+    /* never crash on telemetry failure */
+  }
 }
 
 /** Convenience: record a tool call event */
-export function recordToolCall(
-  sessionId: string,
-  toolName: string,
-  durationMs: number,
-  isError: boolean,
-): void {
+export function recordToolCall(sessionId: string, toolName: string, durationMs: number, isError: boolean): void {
   recordEvent({
-    type: 'tool_call',
+    type: "tool_call",
     timestamp: Date.now(),
     sessionId,
     payload: { toolName, durationMs, isError },
@@ -96,13 +93,9 @@ export function recordToolCall(
 }
 
 /** Convenience: record session start */
-export function recordSessionStart(
-  sessionId: string,
-  provider: string,
-  model: string,
-): void {
+export function recordSessionStart(sessionId: string, provider: string, model: string): void {
   recordEvent({
-    type: 'session_start',
+    type: "session_start",
     timestamp: Date.now(),
     sessionId,
     payload: { provider, model, platform: process.platform },
@@ -115,7 +108,7 @@ export function recordSessionEnd(
   stats: { totalTurns: number; totalCost: number; totalToolCalls: number; durationMinutes: number },
 ): void {
   recordEvent({
-    type: 'session_end',
+    type: "session_end",
     timestamp: Date.now(),
     sessionId,
     payload: stats,
@@ -123,12 +116,9 @@ export function recordSessionEnd(
 }
 
 /** Convenience: record an error */
-export function recordError(
-  sessionId: string,
-  category: string,
-): void {
+export function recordError(sessionId: string, category: string): void {
   recordEvent({
-    type: 'error',
+    type: "error",
     timestamp: Date.now(),
     sessionId,
     payload: { errorCategory: category },
@@ -141,11 +131,13 @@ export function readSessionEvents(sessionId: string): TelemetryEvent[] {
   if (!existsSync(file)) return [];
 
   try {
-    return readFileSync(file, 'utf-8')
-      .split('\n')
+    return readFileSync(file, "utf-8")
+      .split("\n")
       .filter(Boolean)
-      .map(line => JSON.parse(line) as TelemetryEvent);
-  } catch { return []; }
+      .map((line) => JSON.parse(line) as TelemetryEvent);
+  } catch {
+    return [];
+  }
 }
 
 /** Get aggregate stats across all sessions */
@@ -157,26 +149,28 @@ export function getAggregateStats(): {
 } {
   if (!existsSync(TELEMETRY_DIR)) return { totalSessions: 0, totalEvents: 0, toolUsage: {}, errorCategories: {} };
 
-  const files = readdirSync(TELEMETRY_DIR).filter(f => f.endsWith('.jsonl'));
+  const files = readdirSync(TELEMETRY_DIR).filter((f) => f.endsWith(".jsonl"));
   const toolUsage: Record<string, number> = {};
   const errorCategories: Record<string, number> = {};
   let totalEvents = 0;
 
   for (const file of files) {
     try {
-      const lines = readFileSync(join(TELEMETRY_DIR, file), 'utf-8').split('\n').filter(Boolean);
+      const lines = readFileSync(join(TELEMETRY_DIR, file), "utf-8").split("\n").filter(Boolean);
       totalEvents += lines.length;
 
       for (const line of lines) {
         const event = JSON.parse(line) as TelemetryEvent;
-        if (event.type === 'tool_call' && event.payload.toolName) {
+        if (event.type === "tool_call" && event.payload.toolName) {
           toolUsage[event.payload.toolName] = (toolUsage[event.payload.toolName] ?? 0) + 1;
         }
-        if (event.type === 'error' && event.payload.errorCategory) {
+        if (event.type === "error" && event.payload.errorCategory) {
           errorCategories[event.payload.errorCategory] = (errorCategories[event.payload.errorCategory] ?? 0) + 1;
         }
       }
-    } catch { /* skip malformed files */ }
+    } catch {
+      /* skip malformed files */
+    }
   }
 
   return { totalSessions: files.length, totalEvents, toolUsage, errorCategories };

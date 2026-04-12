@@ -11,20 +11,20 @@
  * Security: bearer token auth, per-IP rate limiting, tool allowlists.
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { WebSocketServer, WebSocket } from 'ws';
-import type { Provider } from '../providers/base.js';
-import type { Tools } from '../Tool.js';
-import type { PermissionMode } from '../types/permissions.js';
-import { authenticateRequest, filterRemoteTools, generateRequestId } from './auth.js';
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { WebSocket, WebSocketServer } from "ws";
+import type { Provider } from "../providers/base.js";
 import {
+  type A2AMessage,
   createSessionCard,
-  publishCard,
-  unpublishCard,
   discoverAgents,
   generateMessageId,
-  type A2AMessage,
-} from '../services/a2a.js';
+  publishCard,
+  unpublishCard,
+} from "../services/a2a.js";
+import type { Tools } from "../Tool.js";
+import type { PermissionMode } from "../types/permissions.js";
+import { authenticateRequest, filterRemoteTools } from "./auth.js";
 
 export type RemoteServerConfig = {
   port: number;
@@ -58,8 +58,8 @@ export class RemoteServer {
 
       // WebSocket upgrade
       const wss = new WebSocketServer({ noServer: true });
-      this.server.on('upgrade', (request, socket, head) => {
-        if (request.url === '/channel') {
+      this.server.on("upgrade", (request, socket, head) => {
+        if (request.url === "/channel") {
           wss.handleUpgrade(request, socket, head, (ws) => {
             this.handleChannel(ws);
           });
@@ -104,54 +104,56 @@ export class RemoteServer {
 
   private async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
       return;
     }
 
     // Auth check (skip for /status which is a health check)
-    if (req.url !== '/status') {
+    if (req.url !== "/status") {
       const auth = authenticateRequest(req, res);
       if (!auth.allowed) {
-        const status = auth.reason?.includes('Rate limit') ? 429 : 401;
-        res.writeHead(status, { 'Content-Type': 'application/json' });
+        const status = auth.reason?.includes("Rate limit") ? 429 : 401;
+        res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: auth.reason, requestId: auth.requestId }));
         return;
       }
     }
 
     // ── GET /status ──
-    if (req.url === '/status' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        status: 'ok',
-        provider: this.config.provider.name,
-        model: this.config.model,
-        channels: this.channels.size,
-        agentId: this.agentCardId,
-      }));
+    if (req.url === "/status" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          provider: this.config.provider.name,
+          model: this.config.model,
+          channels: this.channels.size,
+          agentId: this.agentCardId,
+        }),
+      );
       return;
     }
 
     // ── POST /dispatch ──
-    if (req.url === '/dispatch' && req.method === 'POST') {
+    if (req.url === "/dispatch" && req.method === "POST") {
       await this.handleDispatch(req, res);
       return;
     }
 
     // ── POST /a2a ──
-    if (req.url === '/a2a' && req.method === 'POST') {
+    if (req.url === "/a2a" && req.method === "POST") {
       await this.handleA2A(req, res);
       return;
     }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
   }
 
   private async handleDispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -159,7 +161,7 @@ export class RemoteServer {
     try {
       const { prompt, maxTurns } = JSON.parse(body);
       if (!prompt) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: 'Missing "prompt" field' }));
         return;
       }
@@ -169,12 +171,12 @@ export class RemoteServer {
 
       // Stream response as Server-Sent Events
       res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       });
 
-      const { query } = await import('../query.js');
+      const { query } = await import("../query.js");
       const config = {
         provider: this.config.provider,
         tools,
@@ -188,11 +190,11 @@ export class RemoteServer {
         const data = JSON.stringify(event);
         res.write(`data: ${data}\n\n`);
       }
-      res.write('data: [DONE]\n\n');
+      res.write("data: [DONE]\n\n");
       res.end();
     } catch (err) {
       if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.writeHead(500, { "Content-Type": "application/json" });
       }
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     }
@@ -213,27 +215,27 @@ export class RemoteServer {
       const message = JSON.parse(body) as A2AMessage;
 
       switch (message.payload.kind) {
-        case 'discover': {
+        case "discover": {
           // Return our agent card
           const agents = discoverAgents();
-          const self = agents.find(a => a.id === this.agentCardId);
+          const self = agents.find((a) => a.id === this.agentCardId);
           const response: A2AMessage = {
             id: generateMessageId(),
-            from: this.agentCardId ?? 'unknown',
+            from: this.agentCardId ?? "unknown",
             to: message.from,
-            type: 'result',
-            payload: { kind: 'result', taskId: message.id, output: self ?? { error: 'agent not found' } },
+            type: "result",
+            payload: { kind: "result", taskId: message.id, output: self ?? { error: "agent not found" } },
             timestamp: Date.now(),
           };
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(response));
           return;
         }
 
-        case 'task': {
+        case "task": {
           // Execute the task via query loop
           const tools = filterRemoteTools(this.config.tools);
-          const { query } = await import('../query.js');
+          const { query } = await import("../query.js");
           const config = {
             provider: this.config.provider,
             tools,
@@ -243,46 +245,46 @@ export class RemoteServer {
             maxTurns: 10,
           };
 
-          let output = '';
+          let output = "";
           for await (const event of query(String(message.payload.input), config)) {
-            if (event.type === 'text_delta') output += (event as any).content;
+            if (event.type === "text_delta") output += (event as any).content;
           }
 
           const response: A2AMessage = {
             id: generateMessageId(),
-            from: this.agentCardId ?? 'unknown',
+            from: this.agentCardId ?? "unknown",
             to: message.from,
-            type: 'result',
-            payload: { kind: 'result', taskId: message.id, output },
+            type: "result",
+            payload: { kind: "result", taskId: message.id, output },
             timestamp: Date.now(),
           };
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(response));
           return;
         }
 
-        case 'status': {
+        case "status": {
           const response: A2AMessage = {
             id: generateMessageId(),
-            from: this.agentCardId ?? 'unknown',
+            from: this.agentCardId ?? "unknown",
             to: message.from,
-            type: 'status',
-            payload: { kind: 'status', state: 'idle' },
+            type: "status",
+            payload: { kind: "status", state: "idle" },
             timestamp: Date.now(),
           };
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(response));
           return;
         }
 
         default: {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: `Unknown A2A message kind: ${(message.payload as any).kind}` }));
           return;
         }
       }
     } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     }
   }
@@ -295,15 +297,15 @@ export class RemoteServer {
 
     process.stderr.write(`[remote] Channel ${id} connected\n`);
 
-    ws.send(JSON.stringify({ type: 'connected', channelId: id }));
+    ws.send(JSON.stringify({ type: "connected", channelId: id }));
 
-    ws.on('message', async (data) => {
+    ws.on("message", async (data) => {
       try {
         const msg = JSON.parse(data.toString());
 
-        if (msg.type === 'dispatch') {
+        if (msg.type === "dispatch") {
           const tools = filterRemoteTools(this.config.tools);
-          const { query } = await import('../query.js');
+          const { query } = await import("../query.js");
           const config = {
             provider: this.config.provider,
             tools,
@@ -318,19 +320,19 @@ export class RemoteServer {
             if (ws.readyState !== WebSocket.OPEN) break;
             ws.send(JSON.stringify(event));
           }
-          ws.send(JSON.stringify({ type: 'dispatch_complete' }));
+          ws.send(JSON.stringify({ type: "dispatch_complete" }));
         }
 
-        if (msg.type === 'abort') {
+        if (msg.type === "abort") {
           abortController.abort();
-          ws.send(JSON.stringify({ type: 'aborted' }));
+          ws.send(JSON.stringify({ type: "aborted" }));
         }
       } catch (err) {
-        ws.send(JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : String(err) }));
+        ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : String(err) }));
       }
     });
 
-    ws.on('close', () => {
+    ws.on("close", () => {
       abortController.abort();
       this.channels.delete(id);
       process.stderr.write(`[remote] Channel ${id} disconnected\n`);
@@ -341,8 +343,8 @@ export class RemoteServer {
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-    req.on('error', reject);
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("error", reject);
   });
 }

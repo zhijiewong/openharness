@@ -2,8 +2,8 @@
  * Tests for terminal image rendering.
  */
 
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { isImageOutput, renderImageInline } from "./image.js";
 
 // ── isImageOutput ──

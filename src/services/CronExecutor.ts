@@ -9,20 +9,13 @@
  * does not affect others or the main REPL session.
  */
 
-import type { Provider } from '../providers/base.js';
-import type { Tools } from '../Tool.js';
-import type { PermissionMode } from '../types/permissions.js';
-import {
-  listCrons,
-  getDueCrons,
-  updateCron,
-  saveCronResult,
-  type CronDefinition,
-  type CronResult,
-} from './cron.js';
+import type { Provider } from "../providers/base.js";
+import type { Tools } from "../Tool.js";
+import type { PermissionMode } from "../types/permissions.js";
+import { type CronDefinition, type CronResult, getDueCrons, listCrons, saveCronResult, updateCron } from "./cron.js";
 
 const CHECK_INTERVAL_MS = 60_000; // Check every 60 seconds
-const MAX_CRON_TURNS = 10;        // Limit sub-query turns for cron tasks
+const MAX_CRON_TURNS = 10; // Limit sub-query turns for cron tasks
 
 export class CronExecutor {
   private intervalId: ReturnType<typeof setInterval> | null = null;
@@ -78,7 +71,7 @@ export class CronExecutor {
         const result: CronResult = {
           cronId: cron.id,
           timestamp: Date.now(),
-          output: '',
+          output: "",
           error: err instanceof Error ? err.message : String(err),
         };
         saveCronResult(result);
@@ -95,7 +88,7 @@ export class CronExecutor {
     const timestamp = Date.now();
 
     try {
-      const { query } = await import('../query.js');
+      const { query } = await import("../query.js");
 
       const config = {
         provider: this.provider,
@@ -106,10 +99,10 @@ export class CronExecutor {
         maxTurns: MAX_CRON_TURNS,
       };
 
-      let output = '';
+      let output = "";
       for await (const event of query(cron.prompt, config)) {
-        if (event.type === 'text_delta') output += event.content;
-        if (event.type === 'error') {
+        if (event.type === "text_delta") output += event.content;
+        if (event.type === "error") {
           const result: CronResult = { cronId: cron.id, timestamp, output, error: event.message };
           saveCronResult(result);
           // Still update lastRun on error to prevent rapid retry loops

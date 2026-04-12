@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({});
 
@@ -37,9 +37,7 @@ export const TaskListTool: Tool<typeof inputSchema> = {
         return { output: "No tasks found.", isError: false };
       }
 
-      const output = tasks
-        .map((t) => `#${t.id} [${t.status}] ${t.subject}\n   ${t.description}`)
-        .join("\n\n");
+      const output = tasks.map((t) => `#${t.id} [${t.status}] ${t.subject}\n   ${t.description}`).join("\n\n");
 
       return { output, isError: false };
     } catch (err: any) {

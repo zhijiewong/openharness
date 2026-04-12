@@ -1,13 +1,13 @@
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from "node:events";
 
 export type CybergotchiEventType =
-  | 'toolError'
-  | 'toolSuccess'
-  | 'longWait'
-  | 'commit'
-  | 'taskComplete'
-  | 'userAddressed'
-  | 'idle';
+  | "toolError"
+  | "toolSuccess"
+  | "longWait"
+  | "commit"
+  | "taskComplete"
+  | "userAddressed"
+  | "idle";
 
 export interface CybergotchiEvent {
   type: CybergotchiEventType;
@@ -16,14 +16,14 @@ export interface CybergotchiEvent {
 }
 
 class CybergotchiEventEmitter extends EventEmitter {
-  emit(event: 'cybergotchi', data: CybergotchiEvent): boolean {
-    return super.emit('cybergotchi', data);
+  emit(_event: "cybergotchi", data: CybergotchiEvent): boolean {
+    return super.emit("cybergotchi", data);
   }
-  on(event: 'cybergotchi', listener: (data: CybergotchiEvent) => void): this {
-    return super.on('cybergotchi', listener);
+  on(_event: "cybergotchi", listener: (data: CybergotchiEvent) => void): this {
+    return super.on("cybergotchi", listener);
   }
-  off(event: 'cybergotchi', listener: (data: CybergotchiEvent) => void): this {
-    return super.off('cybergotchi', listener);
+  off(_event: "cybergotchi", listener: (data: CybergotchiEvent) => void): this {
+    return super.off("cybergotchi", listener);
   }
 }
 

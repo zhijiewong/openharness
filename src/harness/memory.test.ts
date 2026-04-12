@@ -1,8 +1,16 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { makeTmpDir, writeFile } from "../test-helpers.js";
-import { loadMemories, saveMemory, memoriesToPrompt, touchMemory, boostRelevance } from "./memory.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import { makeTmpDir } from "../test-helpers.js";
+import {
+  boostRelevance,
+  loadMemories,
+  memoriesToPrompt,
+  saveMemory,
+  touchMemory,
+  updateMemoryIndex,
+} from "./memory.js";
 
 function withTmpCwd(fn: (dir: string) => void) {
   const dir = makeTmpDir();
@@ -16,7 +24,7 @@ function withTmpCwd(fn: (dir: string) => void) {
 }
 
 test("saveMemory writes a .md file with frontmatter", () => {
-  withTmpCwd((dir) => {
+  withTmpCwd((_dir) => {
     const filePath = saveMemory("test-conv", "convention", "A test convention", "Always use semicolons");
     const content = readFileSync(filePath, "utf-8");
     assert.ok(content.includes("name: test-conv"));
@@ -27,7 +35,7 @@ test("saveMemory writes a .md file with frontmatter", () => {
 });
 
 test("loadMemories reads saved memories from project dir", () => {
-  withTmpCwd((dir) => {
+  withTmpCwd((_dir) => {
     // saveMemory writes to .oh/memory/ relative to cwd
     const filePath = saveMemory("my-pref", "preference", "User prefers tabs", "Use tabs over spaces");
     // Verify file was written
@@ -76,8 +84,13 @@ test("touchMemory updates lastAccessed and accessCount", () => {
     assert.ok(raw1.includes("accessCount: 0"));
 
     const entry = {
-      name: "touch-test", type: "convention" as const, description: "test",
-      content: "content", filePath, accessCount: 0, lastAccessed: Date.now() - 10000,
+      name: "touch-test",
+      type: "convention" as const,
+      description: "test",
+      content: "content",
+      filePath,
+      accessCount: 0,
+      lastAccessed: Date.now() - 10000,
     };
     touchMemory(entry);
 
@@ -91,8 +104,12 @@ test("boostRelevance increases score and caps at 1.0", () => {
   withTmpCwd(() => {
     const filePath = saveMemory("boost-test", "convention", "test", "content");
     const entry = {
-      name: "boost-test", type: "convention" as const, description: "test",
-      content: "content", filePath, relevance: 0.5,
+      name: "boost-test",
+      type: "convention" as const,
+      description: "test",
+      content: "content",
+      filePath,
+      relevance: 0.5,
     };
 
     boostRelevance(entry, 0.3);
@@ -116,5 +133,43 @@ test("saved memory has relevance and timestamps in frontmatter", () => {
     assert.ok(raw.match(/createdAt: \d+/));
     assert.ok(raw.match(/lastAccessed: \d+/));
     assert.ok(raw.includes("accessCount: 0"));
+  });
+});
+
+// ── MEMORY.md Index ──
+
+test("saveMemory creates MEMORY.md index file", () => {
+  withTmpCwd(() => {
+    saveMemory("first-memory", "user", "A user memory", "User is a senior dev");
+    saveMemory("second-memory", "feedback", "A feedback memory", "Prefers short responses");
+    const indexPath = join(process.cwd(), ".oh", "memory", "MEMORY.md");
+    assert.ok(existsSync(indexPath), "MEMORY.md should exist");
+
+    const index = readFileSync(indexPath, "utf-8");
+    assert.ok(index.includes("# Memory Index"));
+    assert.ok(index.includes("first-memory"));
+    assert.ok(index.includes("second-memory"));
+    assert.ok(index.includes("A user memory"));
+    assert.ok(index.includes("A feedback memory"));
+  });
+});
+
+test("updateMemoryIndex ignores non-existent directory", () => {
+  // Should not throw
+  updateMemoryIndex("/nonexistent/path/to/nothing");
+});
+
+// ── New Memory Types ──
+
+test("saveMemory accepts new type names (user, feedback, reference)", () => {
+  withTmpCwd(() => {
+    const p1 = saveMemory("user-role", "user", "User role info", "Senior engineer");
+    assert.ok(readFileSync(p1, "utf-8").includes("type: user"));
+
+    const p2 = saveMemory("correction", "feedback", "Style feedback", "No trailing summaries");
+    assert.ok(readFileSync(p2, "utf-8").includes("type: feedback"));
+
+    const p3 = saveMemory("linear-board", "reference", "Bug tracker", "Bugs in Linear INGEST");
+    assert.ok(readFileSync(p3, "utf-8").includes("type: reference"));
   });
 });

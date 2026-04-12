@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRules, createRulesFile } from "./rules.js";
+import test from "node:test";
+import { createRulesFile, loadRules } from "./rules.js";
 
 test("loadRules() returns empty array when no .oh dir exists", () => {
   const tmp = mkdtempSync(join(tmpdir(), "oh-test-"));
@@ -32,14 +32,14 @@ test("loadRules() picks up CLAUDE.md in project root", () => {
   const tmp = mkdtempSync(join(tmpdir(), "oh-test-"));
   writeFileSync(join(tmp, "CLAUDE.md"), "Always use TypeScript");
   const rules = loadRules(tmp);
-  assert.ok(rules.some(r => r.includes("Always use TypeScript")));
+  assert.ok(rules.some((r) => r.includes("Always use TypeScript")));
 });
 
 test("loadRules() picks up CLAUDE.local.md", () => {
   const tmp = mkdtempSync(join(tmpdir(), "oh-test-"));
   writeFileSync(join(tmp, "CLAUDE.local.md"), "My personal overrides");
   const rules = loadRules(tmp);
-  assert.ok(rules.some(r => r.includes("My personal overrides")));
+  assert.ok(rules.some((r) => r.includes("My personal overrides")));
 });
 
 test("loadRules() loads both CLAUDE.md and .oh/RULES.md", () => {
@@ -47,8 +47,8 @@ test("loadRules() loads both CLAUDE.md and .oh/RULES.md", () => {
   writeFileSync(join(tmp, "CLAUDE.md"), "Claude rule");
   createRulesFile(tmp);
   const rules = loadRules(tmp);
-  assert.ok(rules.some(r => r.includes("Claude rule")));
-  assert.ok(rules.some(r => r.includes("Project Rules")));
+  assert.ok(rules.some((r) => r.includes("Claude rule")));
+  assert.ok(rules.some((r) => r.includes("Project Rules")));
 });
 
 test("loadRules() loads .oh/rules/*.md files", () => {
@@ -57,5 +57,5 @@ test("loadRules() loads .oh/rules/*.md files", () => {
   mkdirSync(rulesDir, { recursive: true });
   writeFileSync(join(rulesDir, "extra.md"), "Extra rule content");
   const rules = loadRules(tmp);
-  assert.ok(rules.some(r => r.includes("Extra rule content")));
+  assert.ok(rules.some((r) => r.includes("Extra rule content")));
 });

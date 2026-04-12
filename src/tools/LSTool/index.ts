@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   path: z.string().optional(),
@@ -25,17 +25,18 @@ async function listDir(dir: string, prefix: string, maxDepth: number, currentDep
     if (entry.isDirectory()) {
       lines.push(`${prefix}${entry.name}/`);
       if (currentDepth + 1 < maxDepth) {
-        const subLines = await listDir(path.join(dir, entry.name), prefix + "  ", maxDepth, currentDepth + 1);
+        const subLines = await listDir(path.join(dir, entry.name), `${prefix}  `, maxDepth, currentDepth + 1);
         lines.push(...subLines);
       }
     } else {
       try {
         const stat = await fs.stat(path.join(dir, entry.name));
-        const size = stat.size < 1024
-          ? `${stat.size}B`
-          : stat.size < 1024 * 1024
-          ? `${(stat.size / 1024).toFixed(1)}K`
-          : `${(stat.size / 1024 / 1024).toFixed(1)}M`;
+        const size =
+          stat.size < 1024
+            ? `${stat.size}B`
+            : stat.size < 1024 * 1024
+              ? `${(stat.size / 1024).toFixed(1)}K`
+              : `${(stat.size / 1024 / 1024).toFixed(1)}M`;
         lines.push(`${prefix}${entry.name.padEnd(Math.max(1, 40 - prefix.length))} ${size}`);
       } catch {
         lines.push(`${prefix}${entry.name}`);

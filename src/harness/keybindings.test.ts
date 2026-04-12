@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { createKeybindingMatcher } from "./keybindings.js";
 
 test("default bindings include ctrl+d -> /diff", () => {

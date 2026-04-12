@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { execSync } from "node:child_process";
+import { z } from "zod";
 import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
@@ -9,15 +9,20 @@ const inputSchema = z.object({
 
 export const PowerShellTool: Tool<typeof inputSchema> = {
   name: "PowerShell",
-  description: "Execute PowerShell commands (Windows only). Use for Windows-specific tasks like registry access, COM objects, or .NET calls.",
+  description:
+    "Execute PowerShell commands (Windows only). Use for Windows-specific tasks like registry access, COM objects, or .NET calls.",
   inputSchema,
   riskLevel: "high",
 
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return false; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return false;
+  },
 
   async call(input): Promise<ToolResult> {
-    if (process.platform !== 'win32') {
+    if (process.platform !== "win32") {
       return { output: "PowerShell is only available on Windows. Use Bash instead.", isError: true };
     }
 
@@ -25,11 +30,11 @@ export const PowerShellTool: Tool<typeof inputSchema> = {
     try {
       const output = execSync(
         `powershell.exe -NoProfile -NonInteractive -Command "${input.command.replace(/"/g, '\\"')}"`,
-        { encoding: 'utf-8', timeout, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+        { encoding: "utf-8", timeout, maxBuffer: 10 * 1024 * 1024, windowsHide: true },
       );
       return { output: output.trim(), isError: false };
     } catch (err: any) {
-      const output = String(err.stdout ?? err.stderr ?? err.message ?? 'PowerShell error');
+      const output = String(err.stdout ?? err.stderr ?? err.message ?? "PowerShell error");
       return { output: output.slice(0, 100_000), isError: true };
     }
   },

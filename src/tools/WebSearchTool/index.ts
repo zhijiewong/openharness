@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   query: z.string(),
@@ -52,9 +52,7 @@ export const WebSearchTool: Tool<typeof inputSchema> = {
         const title = match[2].replace(/<[^>]*>/g, "").trim();
         // DuckDuckGo wraps URLs in a redirect; extract the actual URL
         const actualUrlMatch = rawUrl.match(/uddg=([^&]+)/);
-        const actualUrl = actualUrlMatch
-          ? decodeURIComponent(actualUrlMatch[1])
-          : rawUrl;
+        const actualUrl = actualUrlMatch ? decodeURIComponent(actualUrlMatch[1]) : rawUrl;
         titles.push({ url: actualUrl, title });
       }
 
@@ -75,9 +73,7 @@ export const WebSearchTool: Tool<typeof inputSchema> = {
         return { output: "No results found.", isError: false };
       }
 
-      const output = results
-        .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
-        .join("\n\n");
+      const output = results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n\n");
 
       return { output, isError: false };
     } catch (err: any) {

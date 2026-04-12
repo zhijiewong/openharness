@@ -2,10 +2,10 @@
  * Project auto-detection — detect language, framework, test runner, git state.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
-import { platform, release, hostname } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { platform, release } from "node:os";
+import { join } from "node:path";
 
 export type ProjectContext = {
   root: string;
@@ -45,7 +45,7 @@ const FRAMEWORKS: Record<string, string> = {
   "svelte.config.js": "Svelte",
   "manage.py": "Django",
   "tailwind.config.js": "Tailwind CSS",
-  "Dockerfile": "Docker",
+  Dockerfile: "Docker",
   "docker-compose.yml": "Docker Compose",
 };
 
@@ -81,12 +81,12 @@ export function detectProject(root?: string): ProjectContext {
       if (head.startsWith("ref: refs/heads/")) {
         gitBranch = head.slice("ref: refs/heads/".length);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  const hasReadme = ["README.md", "README.rst", "README.txt", "README"].some(
-    (f) => existsSync(join(projectRoot, f)),
-  );
+  const hasReadme = ["README.md", "README.rst", "README.txt", "README"].some((f) => existsSync(join(projectRoot, f)));
 
   let description = "";
   for (const name of ["README.md", "README.rst", "README.txt"]) {
@@ -95,13 +95,26 @@ export function detectProject(root?: string): ProjectContext {
       const lines = readFileSync(path, "utf-8").split("\n");
       for (const line of lines) {
         const trimmed = line.replace(/^#+\s*/, "").trim();
-        if (trimmed) { description = trimmed.slice(0, 200); break; }
+        if (trimmed) {
+          description = trimmed.slice(0, 200);
+          break;
+        }
       }
       break;
     }
   }
 
-  return { root: projectRoot, language, framework, packageManager, testRunner, hasGit, gitBranch, hasReadme, description };
+  return {
+    root: projectRoot,
+    language,
+    framework,
+    packageManager,
+    testRunner,
+    hasGit,
+    gitBranch,
+    hasReadme,
+    description,
+  };
 }
 
 export function projectContextToPrompt(ctx: ProjectContext, model?: string): string {
@@ -143,14 +156,18 @@ export function projectContextToPrompt(ctx: ProjectContext, model?: string): str
       const refs = execSync("git branch -l main master", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
       if (refs.includes("main")) mainBranch = "main";
       else if (refs.includes("master")) mainBranch = "master";
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     parts.push(`Main branch: ${mainBranch}`);
 
     // Git user
     try {
       const user = execSync("git config user.name", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
       if (user) parts.push(`Git user: ${user}`);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Git status (brief)
     try {
@@ -159,14 +176,18 @@ export function projectContextToPrompt(ctx: ProjectContext, model?: string): str
         const lines = status.split("\n").slice(0, 20);
         parts.push(`\nStatus:\n${lines.join("\n")}${status.split("\n").length > 20 ? "\n..." : ""}`);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Recent commits
     try {
       const log = execSync("git log --oneline -5", { cwd: ctx.root, stdio: "pipe" }).toString().trim();
       if (log) parts.push(`\nRecent commits:\n${log}`);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  return "# Environment\n" + parts.map((p) => `- ${p}`).join("\n");
+  return `# Environment\n${parts.map((p) => `- ${p}`).join("\n")}`;
 }

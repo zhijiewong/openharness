@@ -13,14 +13,18 @@ export const RemoteTriggerTool: Tool<typeof inputSchema> = {
   description: "Trigger a remote webhook or API endpoint. Useful for CI/CD, deployments, and external integrations.",
   inputSchema,
   riskLevel: "high",
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return true; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return true;
+  },
 
   async call(input): Promise<ToolResult> {
     try {
       const method = input.method ?? (input.body ? "POST" : "GET");
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...input.headers,
       };
 
@@ -32,7 +36,7 @@ export const RemoteTriggerTool: Tool<typeof inputSchema> = {
       });
 
       const text = await res.text();
-      const truncated = text.length > 5000 ? text.slice(0, 5000) + '\n[truncated]' : text;
+      const truncated = text.length > 5000 ? `${text.slice(0, 5000)}\n[truncated]` : text;
       return {
         output: `${res.status} ${res.statusText}\n${truncated}`,
         isError: res.status >= 400,

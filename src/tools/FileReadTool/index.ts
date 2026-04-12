@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   file_path: z.string(),
@@ -21,12 +21,12 @@ function parsePageRange(pages: string): number[] {
     const trimmed = part.trim();
     if (trimmed.includes("-")) {
       const [start, end] = trimmed.split("-").map(Number);
-      if (!isNaN(start) && !isNaN(end)) {
+      if (!Number.isNaN(start) && !Number.isNaN(end)) {
         for (let i = start; i <= Math.min(end, start + 19); i++) result.push(i);
       }
     } else {
       const n = Number(trimmed);
-      if (!isNaN(n)) result.push(n);
+      if (!Number.isNaN(n)) result.push(n);
     }
   }
   return result.slice(0, 20); // Max 20 pages
@@ -64,8 +64,13 @@ export const FileReadTool: Tool<typeof inputSchema> = {
         const buffer = await fs.readFile(filePath);
         const base64 = buffer.toString("base64");
         const mimeTypes: Record<string, string> = {
-          ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-          ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp", ".svg": "image/svg+xml",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".webp": "image/webp",
+          ".bmp": "image/bmp",
+          ".svg": "image/svg+xml",
         };
         return { output: `__IMAGE__:${mimeTypes[ext] ?? "image/png"}:${base64}`, isError: false };
       }
@@ -74,7 +79,10 @@ export const FileReadTool: Tool<typeof inputSchema> = {
       if (ext === ".pdf") {
         // Guard against very large PDFs without page filter
         if (stat.size > 20 * 1024 * 1024 && !input.pages) {
-          return { output: `PDF is ${(stat.size / 1024 / 1024).toFixed(1)} MB. Provide a 'pages' parameter (e.g., "1-5") to read specific pages.`, isError: true };
+          return {
+            output: `PDF is ${(stat.size / 1024 / 1024).toFixed(1)} MB. Provide a 'pages' parameter (e.g., "1-5") to read specific pages.`,
+            isError: true,
+          };
         }
         const buffer = await fs.readFile(filePath);
         // Basic PDF text extraction — look for text between BT/ET markers or stream content
@@ -143,9 +151,7 @@ export const FileReadTool: Tool<typeof inputSchema> = {
       const limit = input.limit ?? DEFAULT_LIMIT;
       const lines = allLines.slice(offset, offset + limit);
 
-      const numbered = lines
-        .map((line, i) => `${offset + i + 1}\t${line}`)
-        .join("\n");
+      const numbered = lines.map((line, i) => `${offset + i + 1}\t${line}`).join("\n");
 
       const total = allLines.length;
       const shown = lines.length;

@@ -13,26 +13,26 @@
  * 4. Repeat until pass or max iterations reached
  */
 
-import type { Provider } from '../providers/base.js';
-import type { Tools } from '../Tool.js';
-import type { PermissionMode } from '../types/permissions.js';
+import type { Provider } from "../providers/base.js";
+import type { Tools } from "../Tool.js";
+import type { PermissionMode } from "../types/permissions.js";
 
 // ── Types ──
 
 export type EvaluationCriterion = {
-  name: string;           // "correctness", "code_quality", "test_coverage"
-  weight: number;         // 0-1, must sum to 1
-  description: string;    // what the evaluator checks for
+  name: string; // "correctness", "code_quality", "test_coverage"
+  weight: number; // 0-1, must sum to 1
+  description: string; // what the evaluator checks for
 };
 
 export type EvaluationRubric = {
   criteria: EvaluationCriterion[];
-  passThreshold: number;  // 0-1, minimum weighted score
+  passThreshold: number; // 0-1, minimum weighted score
 };
 
 export type EvaluationScore = {
   criterion: string;
-  score: number;          // 0-1
+  score: number; // 0-1
   feedback: string;
 };
 
@@ -49,10 +49,18 @@ export type EvaluatorResult = {
 
 export const DEFAULT_RUBRIC: EvaluationRubric = {
   criteria: [
-    { name: 'correctness', weight: 0.4, description: 'Does the output correctly address the task? Are there logical errors?' },
-    { name: 'completeness', weight: 0.3, description: 'Is the solution complete? Any missing edge cases or requirements?' },
-    { name: 'quality', weight: 0.2, description: 'Is the code clean, well-structured, and following best practices?' },
-    { name: 'safety', weight: 0.1, description: 'Are there security issues, unsafe patterns, or potential bugs?' },
+    {
+      name: "correctness",
+      weight: 0.4,
+      description: "Does the output correctly address the task? Are there logical errors?",
+    },
+    {
+      name: "completeness",
+      weight: 0.3,
+      description: "Is the solution complete? Any missing edge cases or requirements?",
+    },
+    { name: "quality", weight: 0.2, description: "Is the code clean, well-structured, and following best practices?" },
+    { name: "safety", weight: 0.1, description: "Are there security issues, unsafe patterns, or potential bugs?" },
   ],
   passThreshold: 0.7,
 };
@@ -75,15 +83,16 @@ export class EvaluatorLoop {
    */
   async run(task: string): Promise<EvaluatorResult> {
     const refinements: string[] = [];
-    let currentOutput = '';
+    let currentOutput = "";
     let scores: EvaluationScore[] = [];
     let weightedScore = 0;
 
     for (let iteration = 1; iteration <= this.maxIterations; iteration++) {
       // ── Generate ──
-      const generatorPrompt = iteration === 1
-        ? task
-        : `${task}\n\n[Evaluator feedback from iteration ${iteration - 1}]:\n${scores.map(s => `${s.criterion}: ${s.score}/1.0 — ${s.feedback}`).join('\n')}\n\nPlease refine your output based on this feedback.`;
+      const generatorPrompt =
+        iteration === 1
+          ? task
+          : `${task}\n\n[Evaluator feedback from iteration ${iteration - 1}]:\n${scores.map((s) => `${s.criterion}: ${s.score}/1.0 — ${s.feedback}`).join("\n")}\n\nPlease refine your output based on this feedback.`;
 
       currentOutput = await this.generate(generatorPrompt);
 
@@ -117,7 +126,7 @@ export class EvaluatorLoop {
   }
 
   private async generate(prompt: string): Promise<string> {
-    const { query } = await import('../query.js');
+    const { query } = await import("../query.js");
     const config = {
       provider: this.provider,
       tools: this.tools,
@@ -127,9 +136,9 @@ export class EvaluatorLoop {
       maxTurns: 15,
     };
 
-    let output = '';
+    let output = "";
     for await (const event of query(prompt, config)) {
-      if (event.type === 'text_delta') output += (event as any).content;
+      if (event.type === "text_delta") output += (event as any).content;
     }
     return output;
   }
@@ -143,13 +152,13 @@ Output to evaluate:
 ${output.slice(0, 3000)}
 
 Criteria:
-${this.rubric.criteria.map(c => `- ${c.name} (weight: ${c.weight}): ${c.description}`).join('\n')}
+${this.rubric.criteria.map((c) => `- ${c.name} (weight: ${c.weight}): ${c.description}`).join("\n")}
 
 Respond ONLY with a JSON array: [{"criterion": "name", "score": 0.8, "feedback": "brief explanation"}, ...]`;
 
     const response = await this.provider.complete(
-      [{ role: 'user', content: evaluationPrompt, uuid: `eval-${Date.now()}`, timestamp: Date.now() }],
-      'You are a strict code evaluator. Respond ONLY with valid JSON. Be critical and specific.',
+      [{ role: "user", content: evaluationPrompt, uuid: `eval-${Date.now()}`, timestamp: Date.now() }],
+      "You are a strict code evaluator. Respond ONLY with valid JSON. Be critical and specific.",
       undefined,
       this.model,
     );
@@ -158,7 +167,7 @@ Respond ONLY with a JSON array: [{"criterion": "name", "score": 0.8, "feedback":
       const jsonMatch = response.content.match(/\[[\s\S]*\]/);
       if (!jsonMatch) return this.defaultScores();
       const parsed = JSON.parse(jsonMatch[0]) as EvaluationScore[];
-      return parsed.filter(s => s.criterion && typeof s.score === 'number');
+      return parsed.filter((s) => s.criterion && typeof s.score === "number");
     } catch {
       return this.defaultScores();
     }
@@ -167,17 +176,17 @@ Respond ONLY with a JSON array: [{"criterion": "name", "score": 0.8, "feedback":
   private calculateWeightedScore(scores: EvaluationScore[]): number {
     let total = 0;
     for (const criterion of this.rubric.criteria) {
-      const score = scores.find(s => s.criterion === criterion.name);
+      const score = scores.find((s) => s.criterion === criterion.name);
       total += (score?.score ?? 0.5) * criterion.weight;
     }
     return total;
   }
 
   private defaultScores(): EvaluationScore[] {
-    return this.rubric.criteria.map(c => ({
+    return this.rubric.criteria.map((c) => ({
       criterion: c.name,
       score: 0.5,
-      feedback: 'Could not evaluate (parsing error)',
+      feedback: "Could not evaluate (parsing error)",
     }));
   }
 }
@@ -185,17 +194,19 @@ Respond ONLY with a JSON array: [{"criterion": "name", "score": 0.8, "feedback":
 /** Format evaluator results for display */
 export function formatEvaluatorResult(result: EvaluatorResult): string {
   const lines: string[] = [];
-  lines.push(`Evaluator: ${result.passed ? 'PASSED' : 'NEEDS IMPROVEMENT'} (${result.weightedScore.toFixed(2)}/${1.0})`);
+  lines.push(
+    `Evaluator: ${result.passed ? "PASSED" : "NEEDS IMPROVEMENT"} (${result.weightedScore.toFixed(2)}/${1.0})`,
+  );
   lines.push(`Iterations: ${result.iterations}`);
-  lines.push('');
+  lines.push("");
   for (const s of result.scores) {
-    const bar = '█'.repeat(Math.round(s.score * 10)) + '░'.repeat(10 - Math.round(s.score * 10));
+    const bar = "█".repeat(Math.round(s.score * 10)) + "░".repeat(10 - Math.round(s.score * 10));
     lines.push(`  ${s.criterion.padEnd(15)} ${bar} ${s.score.toFixed(1)} — ${s.feedback}`);
   }
   if (result.refinements.length > 0) {
-    lines.push('');
-    lines.push('Refinements:');
+    lines.push("");
+    lines.push("Refinements:");
     for (const r of result.refinements) lines.push(`  ${r}`);
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }

@@ -1,6 +1,6 @@
+import { spawn } from "node:child_process";
 import { z } from "zod";
-import { spawn } from "child_process";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 import { safeEnv } from "../../utils/safe-env.js";
 
 const inputSchema = z.object({
@@ -11,7 +11,7 @@ const inputSchema = z.object({
 });
 
 const MAX_OUTPUT = 100_000;
-const DEFAULT_TIMEOUT = 120_000;
+const _DEFAULT_TIMEOUT = 120_000;
 const MAX_TIMEOUT = 600_000;
 
 export const BashTool: Tool<typeof inputSchema> = {
@@ -48,20 +48,28 @@ export const BashTool: Tool<typeof inputSchema> = {
       let stdout = "";
       let stderr = "";
 
-      proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
-      proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      proc.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
-      const timer = setTimeout(() => { proc.kill("SIGTERM"); }, timeoutMs);
+      const timer = setTimeout(() => {
+        proc.kill("SIGTERM");
+      }, timeoutMs);
 
       if (context.abortSignal) {
-        context.abortSignal.addEventListener("abort", () => { proc.kill("SIGTERM"); });
+        context.abortSignal.addEventListener("abort", () => {
+          proc.kill("SIGTERM");
+        });
       }
 
       proc.on("close", (code) => {
         clearTimeout(timer);
-        let output = stdout + (stderr ? "\n[stderr]\n" + stderr : "");
+        let output = stdout + (stderr ? `\n[stderr]\n${stderr}` : "");
         if (output.length > MAX_OUTPUT) {
-          output = output.slice(0, MAX_OUTPUT) + "\n... [truncated]";
+          output = `${output.slice(0, MAX_OUTPUT)}\n... [truncated]`;
         }
         // Notify via output chunk when background process completes
         if (context.onOutputChunk && context.callId) {
@@ -115,9 +123,9 @@ export const BashTool: Tool<typeof inputSchema> = {
 
       proc.on("close", (code) => {
         clearTimeout(timer);
-        let output = stdout + (stderr ? "\n[stderr]\n" + stderr : "");
+        let output = stdout + (stderr ? `\n[stderr]\n${stderr}` : "");
         if (output.length > MAX_OUTPUT) {
-          output = output.slice(0, MAX_OUTPUT) + "\n... [truncated]";
+          output = `${output.slice(0, MAX_OUTPUT)}\n... [truncated]`;
         }
         if (killed) {
           output += "\n[timed out]";

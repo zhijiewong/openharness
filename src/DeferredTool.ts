@@ -32,7 +32,9 @@ export class DeferredTool implements Tool<z.ZodType> {
   }
 
   /** Whether this tool has been activated (called or resolved) */
-  get activated(): boolean { return this._activated; }
+  get activated(): boolean {
+    return this._activated;
+  }
 
   isReadOnly(input: unknown): boolean {
     return this.inner.isReadOnly(input);

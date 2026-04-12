@@ -1,19 +1,19 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import test from "node:test";
 import {
-  isGitRepo,
+  autoCommitAIEdits,
   gitBranch,
-  hasUncommittedChanges,
   gitCommit,
   gitLog,
-  gitUndo,
-  autoCommitAIEdits,
   gitRoot,
+  gitUndo,
+  hasUncommittedChanges,
   hasWorktreeChanges,
+  isGitRepo,
 } from "./index.js";
 
 function makeRepo(): string {

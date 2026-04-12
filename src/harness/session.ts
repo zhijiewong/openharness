@@ -2,10 +2,10 @@
  * Session persistence — save and resume conversations.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Message } from "../types/message.js";
 
 const DEFAULT_SESSION_DIR = join(homedir(), ".oh", "sessions");
@@ -23,15 +23,19 @@ export type Session = {
   tools?: string[];
   /** Hibernate state — saved on exit for wake reconstruction */
   hibernate?: {
-    summary?: string;           // LLM-generated summary of session state
-    lastUserMessage?: string;   // Last thing the user said
-    pendingTask?: string;       // What was being worked on
+    summary?: string; // LLM-generated summary of session state
+    lastUserMessage?: string; // Last thing the user said
+    pendingTask?: string; // What was being worked on
     totalInputTokens?: number;
     totalOutputTokens?: number;
   };
 };
 
-export function createSession(provider: string, model: string, extras?: { gitBranch?: string; workingDir?: string; tools?: string[] }): Session {
+export function createSession(
+  provider: string,
+  model: string,
+  extras?: { gitBranch?: string; workingDir?: string; tools?: string[] },
+): Session {
   return {
     id: randomUUID().slice(0, 12),
     messages: [],
@@ -57,7 +61,11 @@ export function saveSession(session: Session, dir?: string): string {
   // Evict old sessions (with lock to prevent concurrent eviction)
   if (!_evicting) {
     _evicting = true;
-    try { evictOldSessions(sessionDir); } catch { /* ignore */ }
+    try {
+      evictOldSessions(sessionDir);
+    } catch {
+      /* ignore */
+    }
     _evicting = false;
   }
   return path;
@@ -110,20 +118,20 @@ export function getLastSessionId(dir?: string): string | null {
  * Captures the last user message, recent assistant activity,
  * and a brief summary for context reconstruction on wake.
  */
-export function buildHibernateState(messages: Message[]): Session['hibernate'] {
+export function buildHibernateState(messages: Message[]): Session["hibernate"] {
   if (messages.length === 0) return undefined;
 
   // Find last user message
-  const lastUser = [...messages].reverse().find(m => m.role === 'user');
-  const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 
   // Build a brief summary from the last few exchanges
   const recentMsgs = messages.slice(-6);
   const summaryParts: string[] = [];
   for (const m of recentMsgs) {
-    if (m.role === 'user') {
+    if (m.role === "user") {
       summaryParts.push(`User: ${m.content.slice(0, 100)}`);
-    } else if (m.role === 'assistant' && m.content) {
+    } else if (m.role === "assistant" && m.content) {
       summaryParts.push(`Assistant: ${m.content.slice(0, 100)}`);
     }
   }
@@ -131,7 +139,7 @@ export function buildHibernateState(messages: Message[]): Session['hibernate'] {
   return {
     lastUserMessage: lastUser?.content.slice(0, 200),
     pendingTask: lastAssistant?.content.slice(0, 200),
-    summary: summaryParts.join('\n'),
+    summary: summaryParts.join("\n"),
   };
 }
 
@@ -140,7 +148,7 @@ export function buildHibernateState(messages: Message[]): Session['hibernate'] {
  * Tells the LLM what happened in the previous session.
  */
 export function buildWakeContext(session: Session): string {
-  const parts: string[] = ['[Session Resumed]'];
+  const parts: string[] = ["[Session Resumed]"];
 
   if (session.workingDir) {
     parts.push(`Previous working directory: ${session.workingDir}`);
@@ -162,9 +170,11 @@ export function buildWakeContext(session: Session): string {
   }
 
   parts.push(`\nSession has ${session.messages.length} messages and cost $${session.totalCost.toFixed(4)} so far.`);
-  parts.push('Continue where you left off. If the user\'s last request was incomplete, acknowledge that and ask how to proceed.');
+  parts.push(
+    "Continue where you left off. If the user's last request was incomplete, acknowledge that and ask how to proceed.",
+  );
 
-  return parts.join('\n');
+  return parts.join("\n");
 }
 
 /** Maximum number of sessions to keep on disk. */
@@ -182,19 +192,25 @@ export function evictOldSessions(dir?: string, maxSessions = MAX_SESSIONS): numb
   if (files.length <= maxSessions) return 0;
 
   // Sort by modification time (oldest first)
-  const withStats = files.map((f) => {
-    const path = join(sessionDir, f);
-    try {
-      const data = JSON.parse(readFileSync(path, "utf-8")) as Session;
-      return { path, updatedAt: data.updatedAt ?? 0 };
-    } catch {
-      return { path, updatedAt: 0 };
-    }
-  }).sort((a, b) => a.updatedAt - b.updatedAt);
+  const withStats = files
+    .map((f) => {
+      const path = join(sessionDir, f);
+      try {
+        const data = JSON.parse(readFileSync(path, "utf-8")) as Session;
+        return { path, updatedAt: data.updatedAt ?? 0 };
+      } catch {
+        return { path, updatedAt: 0 };
+      }
+    })
+    .sort((a, b) => a.updatedAt - b.updatedAt);
 
   const toRemove = withStats.slice(0, files.length - maxSessions);
   for (const { path } of toRemove) {
-    try { unlinkSync(path); } catch { /* ignore */ }
+    try {
+      unlinkSync(path);
+    } catch {
+      /* ignore */
+    }
   }
   return toRemove.length;
 }

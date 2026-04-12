@@ -2,9 +2,9 @@
  * Shared types for the query loop sub-modules.
  */
 
-import type { Message } from "../types/message.js";
 import type { Provider } from "../providers/base.js";
 import type { Tools } from "../Tool.js";
+import type { Message } from "../types/message.js";
 import type { AskUserFn, PermissionMode } from "../types/permissions.js";
 
 export type QueryConfig = {
@@ -20,11 +20,7 @@ export type QueryConfig = {
   abortSignal?: AbortSignal;
 };
 
-export type TransitionReason =
-  | "next_turn"
-  | "retry_network"
-  | "retry_prompt_too_long"
-  | "retry_max_output_tokens";
+export type TransitionReason = "next_turn" | "retry_network" | "retry_prompt_too_long" | "retry_max_output_tokens";
 
 export type QueryLoopState = {
   messages: Message[];

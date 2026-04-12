@@ -4,8 +4,8 @@
  */
 
 import { execSync, spawnSync } from "node:child_process";
-import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Check if we're in a git repository.
@@ -93,19 +93,17 @@ export function isInMergeOrRebase(cwd?: string): boolean {
   const root = cwd ?? process.cwd();
   try {
     const gitDir = join(root, ".git");
-    return existsSync(join(gitDir, "MERGE_HEAD"))
-      || existsSync(join(gitDir, "rebase-merge"))
-      || existsSync(join(gitDir, "rebase-apply"));
+    return (
+      existsSync(join(gitDir, "MERGE_HEAD")) ||
+      existsSync(join(gitDir, "rebase-merge")) ||
+      existsSync(join(gitDir, "rebase-apply"))
+    );
   } catch {
     return false;
   }
 }
 
-export function autoCommitAIEdits(
-  toolName: string,
-  files: string[],
-  cwd?: string,
-): string | null {
+export function autoCommitAIEdits(toolName: string, files: string[], cwd?: string): string | null {
   if (!isGitRepo(cwd)) return null;
   if (isInMergeOrRebase(cwd)) return null; // skip auto-commit during merge/rebase
 
@@ -129,9 +127,12 @@ export function autoCommitAIEdits(
     if (!staged) return null;
 
     // Generate commit message with Co-Authored-By trailer
-    const fileList = files.length > 0
-      ? (files.length <= 3 ? files.join(", ") : `${files.length} files`)
-      : staged.split("\n").slice(0, 3).join(", ");
+    const fileList =
+      files.length > 0
+        ? files.length <= 3
+          ? files.join(", ")
+          : `${files.length} files`
+        : staged.split("\n").slice(0, 3).join(", ");
     const message = `oh: ${toolName} ${fileList}\n\nCo-Authored-By: OpenHarness <noreply@openharness.dev>`;
 
     // Respect git signing config — don't pass --no-gpg-sign
@@ -180,10 +181,10 @@ export function createWorktree(cwd?: string): string | null {
   if (!isGitRepo(cwd)) return null;
   try {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const worktreePath = join(cwd ?? process.cwd(), '..', `.oh-worktree-${id}`);
-    const branch = `oh-agent-${id}`;
+    const worktreePath = join(cwd ?? process.cwd(), "..", `.oh-worktree-${id}`);
+    const _branch = `oh-agent-${id}`;
     // Create a detached worktree from HEAD
-    execSync(`git worktree add --detach "${worktreePath}"`, { cwd, stdio: 'pipe' });
+    execSync(`git worktree add --detach "${worktreePath}"`, { cwd, stdio: "pipe" });
     return worktreePath;
   } catch {
     return null;
@@ -219,7 +220,7 @@ export function gitRoot(cwd?: string): string | null {
  */
 export function removeWorktree(worktreePath: string, cwd?: string): void {
   try {
-    execSync(`git worktree remove --force "${worktreePath}"`, { cwd, stdio: 'pipe' });
+    execSync(`git worktree remove --force "${worktreePath}"`, { cwd, stdio: "pipe" });
   } catch {
     // Best effort cleanup
   }

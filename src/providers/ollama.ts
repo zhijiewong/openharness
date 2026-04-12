@@ -2,10 +2,10 @@
  * Ollama provider — local LLM inference via Ollama REST API.
  */
 
-import type { Message, ToolCall } from "../types/message.js";
 import type { StreamEvent, ToolCallComplete } from "../types/events.js";
+import type { Message, ToolCall } from "../types/message.js";
 import { createAssistantMessage } from "../types/message.js";
-import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
+import type { APIToolDef, ModelInfo, Provider, ProviderConfig } from "./base.js";
 
 export class OllamaProvider implements Provider {
   readonly name = "ollama";
@@ -17,10 +17,7 @@ export class OllamaProvider implements Provider {
     this.defaultModel = config.defaultModel ?? "llama3.1";
   }
 
-  private convertMessages(
-    messages: Message[],
-    systemPrompt: string,
-  ): unknown[] {
+  private convertMessages(messages: Message[], systemPrompt: string): unknown[] {
     const converted: unknown[] = [];
     if (systemPrompt) {
       converted.push({ role: "system", content: systemPrompt });
@@ -204,7 +201,7 @@ export class OllamaProvider implements Provider {
             const args =
               typeof tc.function?.arguments === "string"
                 ? JSON.parse(tc.function.arguments)
-                : tc.function?.arguments ?? {};
+                : (tc.function?.arguments ?? {});
             yield {
               type: "tool_call_complete",
               callId,
@@ -229,12 +226,7 @@ export class OllamaProvider implements Provider {
     }
   }
 
-  async complete(
-    messages: Message[],
-    systemPrompt: string,
-    tools?: APIToolDef[],
-    model?: string,
-  ): Promise<Message> {
+  async complete(messages: Message[], systemPrompt: string, tools?: APIToolDef[], model?: string): Promise<Message> {
     const m = model ?? this.defaultModel;
     const msgs = this.convertMessages(messages, systemPrompt);
     const body: Record<string, unknown> = {
@@ -277,7 +269,7 @@ export class OllamaProvider implements Provider {
         arguments:
           typeof tc.function?.arguments === "string"
             ? JSON.parse(tc.function.arguments)
-            : tc.function?.arguments ?? {},
+            : (tc.function?.arguments ?? {}),
       }));
     }
 
@@ -297,8 +289,8 @@ export class OllamaProvider implements Provider {
         // Detect vision support from model families
         // Presence of "clip" or "llava" in families indicates vision capability
         const families = m.details?.families ?? [];
-        const supportsVision = Array.isArray(families) &&
-          families.some((f: string) => f.includes("clip") || f.includes("llava"));
+        const supportsVision =
+          Array.isArray(families) && families.some((f: string) => f.includes("clip") || f.includes("llava"));
 
         return {
           id: m.name as string,

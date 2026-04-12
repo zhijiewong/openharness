@@ -6,16 +6,16 @@
  * and triggers dependent tasks when their blockers complete.
  */
 
-import type { Provider } from '../providers/base.js';
-import type { Tools, ToolContext } from '../Tool.js';
-import type { PermissionMode } from '../types/permissions.js';
-import { createWorktree, removeWorktree, isGitRepo } from '../git/index.js';
+import { createWorktree, isGitRepo, removeWorktree } from "../git/index.js";
+import type { Provider } from "../providers/base.js";
+import type { Tools } from "../Tool.js";
+import type { PermissionMode } from "../types/permissions.js";
 
 export type AgentTask = {
   id: string;
   prompt: string;
   description?: string;
-  blockedBy?: string[];  // task IDs that must complete before this one starts
+  blockedBy?: string[]; // task IDs that must complete before this one starts
   allowedTools?: string[]; // restrict this task's agent to specific tools
 };
 
@@ -27,7 +27,7 @@ export type AgentTaskResult = {
 };
 
 type InternalTask = AgentTask & {
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: "pending" | "running" | "completed" | "failed";
   result?: AgentTaskResult;
 };
 
@@ -51,7 +51,7 @@ export class AgentDispatcher {
   }
 
   addTask(task: AgentTask): void {
-    this.tasks.set(task.id, { ...task, status: 'pending' });
+    this.tasks.set(task.id, { ...task, status: "pending" });
   }
 
   addTasks(tasks: AgentTask[]): void {
@@ -66,10 +66,8 @@ export class AgentDispatcher {
       if (this.abortSignal?.aborted) break;
 
       // Find tasks ready to run (all blockers completed)
-      const ready = [...this.tasks.values()].filter(t =>
-        t.status === 'pending' && this.isReady(t),
-      );
-      const running = [...this.tasks.values()].filter(t => t.status === 'running');
+      const ready = [...this.tasks.values()].filter((t) => t.status === "pending" && this.isReady(t));
+      const running = [...this.tasks.values()].filter((t) => t.status === "running");
 
       // All done?
       if (ready.length === 0 && running.length === 0) break;
@@ -79,11 +77,11 @@ export class AgentDispatcher {
       if (toStart.length === 0 && running.length === 0) {
         // Deadlock — blocked tasks with no way to unblock
         for (const t of this.tasks.values()) {
-          if (t.status === 'pending') {
-            t.status = 'failed';
+          if (t.status === "pending") {
+            t.status = "failed";
             const result: AgentTaskResult = {
               id: t.id,
-              output: 'Deadlock: blocked dependencies never completed.',
+              output: "Deadlock: blocked dependencies never completed.",
               isError: true,
               durationMs: 0,
             };
@@ -95,10 +93,10 @@ export class AgentDispatcher {
       }
 
       // Run tasks in parallel
-      const promises = toStart.map(t => {
-        t.status = 'running';
-        return this.runTask(t).then(result => {
-          t.status = 'completed';
+      const promises = toStart.map((t) => {
+        t.status = "running";
+        return this.runTask(t).then((result) => {
+          t.status = "completed";
           t.result = result;
           this.results.set(t.id, result);
           results.push(result);
@@ -113,11 +111,11 @@ export class AgentDispatcher {
       } else {
         // Running tasks exist but we can't start more — wait for all running
         const runningPromises = [...this.tasks.values()]
-          .filter(t => t.status === 'running' && t.result)
-          .map(t => Promise.resolve());
+          .filter((t) => t.status === "running" && t.result)
+          .map((_t) => Promise.resolve());
         if (runningPromises.length === 0) {
           // Need to poll — running tasks haven't resolved yet
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise((r) => setTimeout(r, 100));
         }
       }
     }
@@ -127,9 +125,9 @@ export class AgentDispatcher {
 
   private isReady(task: InternalTask): boolean {
     if (!task.blockedBy || task.blockedBy.length === 0) return true;
-    return task.blockedBy.every(id => {
+    return task.blockedBy.every((id) => {
       const blocker = this.tasks.get(id);
-      return blocker && (blocker.status === 'completed' || blocker.status === 'failed');
+      return blocker && (blocker.status === "completed" || blocker.status === "failed");
     });
   }
 
@@ -144,14 +142,14 @@ export class AgentDispatcher {
     }
 
     try {
-      const { query } = await import('../query.js');
+      const { query } = await import("../query.js");
 
       // Filter tools if task specifies allowed tools
       let taskTools = this.tools;
       if (task.allowedTools && task.allowedTools.length > 0) {
-        const allowSet = new Set(task.allowedTools.map(n => n.toLowerCase()));
-        allowSet.add('askuser');
-        const filtered = this.tools.filter(t => allowSet.has(t.name.toLowerCase()));
+        const allowSet = new Set(task.allowedTools.map((n) => n.toLowerCase()));
+        allowSet.add("askuser");
+        const filtered = this.tools.filter((t) => allowSet.has(t.name.toLowerCase()));
         if (filtered.length > 0) taskTools = filtered;
       }
 
@@ -169,12 +167,12 @@ export class AgentDispatcher {
       let promptWithContext = task.prompt;
       if (task.blockedBy && task.blockedBy.length > 0) {
         const blockerContext = task.blockedBy
-          .map(id => {
+          .map((id) => {
             const r = this.results.get(id);
-            return r ? `## Result from task "${id}":\n${r.output.slice(0, 1000)}` : '';
+            return r ? `## Result from task "${id}":\n${r.output.slice(0, 1000)}` : "";
           })
           .filter(Boolean)
-          .join('\n\n');
+          .join("\n\n");
         if (blockerContext) {
           promptWithContext = `${blockerContext}\n\n---\n\n${task.prompt}`;
         }
@@ -182,24 +180,32 @@ export class AgentDispatcher {
 
       const originalCwd = process.cwd();
       if (worktreePath) {
-        try { process.chdir(worktreePath); } catch { /* ignore */ }
+        try {
+          process.chdir(worktreePath);
+        } catch {
+          /* ignore */
+        }
       }
 
-      let output = '';
+      let output = "";
       try {
         for await (const event of query(promptWithContext, config)) {
-          if (event.type === 'text_delta') output += event.content;
-          if (event.type === 'error') {
+          if (event.type === "text_delta") output += event.content;
+          if (event.type === "error") {
             return { id: task.id, output: `Error: ${event.message}`, isError: true, durationMs: Date.now() - start };
           }
         }
       } finally {
         if (worktreePath) {
-          try { process.chdir(originalCwd); } catch { /* ignore */ }
+          try {
+            process.chdir(originalCwd);
+          } catch {
+            /* ignore */
+          }
         }
       }
 
-      return { id: task.id, output: output || '(no output)', isError: false, durationMs: Date.now() - start };
+      return { id: task.id, output: output || "(no output)", isError: false, durationMs: Date.now() - start };
     } catch (err) {
       return {
         id: task.id,

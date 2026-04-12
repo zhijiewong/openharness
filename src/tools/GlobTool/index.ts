@@ -1,8 +1,8 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
-import { walkDir, matchGlob } from "../../utils/fs.js";
+import type { Tool, ToolResult } from "../../Tool.js";
+import { matchGlob, walkDir } from "../../utils/fs.js";
 
 const inputSchema = z.object({
   pattern: z.string(),
@@ -42,9 +42,7 @@ export const GlobTool: Tool<typeof inputSchema> = {
         }
         matches.sort();
         return {
-          output: matches.length
-            ? matches.join("\n")
-            : "No files matched the pattern.",
+          output: matches.length ? matches.join("\n") : "No files matched the pattern.",
           isError: false,
         };
       }
@@ -58,9 +56,7 @@ export const GlobTool: Tool<typeof inputSchema> = {
         .sort();
 
       return {
-        output: matched.length
-          ? matched.join("\n")
-          : "No files matched the pattern.",
+        output: matched.length ? matched.join("\n") : "No files matched the pattern.",
         isError: false,
       };
     } catch (err: any) {

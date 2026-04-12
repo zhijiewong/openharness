@@ -4,9 +4,11 @@
  */
 
 import React from "react";
-export { type Theme, darkTheme, lightTheme, getTheme, setActiveTheme } from "./theme-data.js";
-import { darkTheme } from "./theme-data.js";
+
+export { darkTheme, getTheme, lightTheme, setActiveTheme, type Theme } from "./theme-data.js";
+
 import type { Theme } from "./theme-data.js";
+import { darkTheme } from "./theme-data.js";
 
 const ThemeContext = React.createContext<Theme>(darkTheme);
 

@@ -3,11 +3,11 @@
  * within the context window.
  */
 
-import type { Message } from "../types/message.js";
-import type { Provider } from "../providers/base.js";
-import { createUserMessage } from "../types/message.js";
-import { defaultEstimateTokens } from "../providers/base.js";
 import { emitHook } from "../harness/hooks.js";
+import type { Provider } from "../providers/base.js";
+import { defaultEstimateTokens } from "../providers/base.js";
+import type { Message } from "../types/message.js";
+import { createUserMessage } from "../types/message.js";
 
 const DEFAULT_KEEP_LAST = 10;
 
@@ -21,11 +21,12 @@ export function scoreMessage(msg: Message, index: number, total: number): number
   let score = 0;
 
   // Role weight: user intent > tool decisions > assistant text
-  if (msg.role === 'user') score += 30;
-  else if (msg.role === 'assistant' && msg.toolCalls?.length) score += 20;
-  else if (msg.role === 'assistant') score += 10;
-  else if (msg.role === 'system') score += 25; // system messages are usually important
-  else if (msg.role === 'tool') score += 5;
+  if (msg.role === "user") score += 30;
+  else if (msg.role === "assistant" && msg.toolCalls?.length) score += 20;
+  else if (msg.role === "assistant") score += 10;
+  else if (msg.role === "system")
+    score += 25; // system messages are usually important
+  else if (msg.role === "tool") score += 5;
 
   // Recency bonus: recent messages get +0 to +20
   const recencyFactor = index / total;
@@ -81,11 +82,11 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
     if (result[i]!.meta?.pinned) continue;
     if (result[i]!.role === "tool" && result[i]!.content.length > 500) {
       const c = result[i]!.content;
-      result[i] = { ...result[i]!, content: c.slice(0, 200) + "\n...[truncated]...\n" + c.slice(-100) };
+      result[i] = { ...result[i]!, content: `${c.slice(0, 200)}\n...[truncated]...\n${c.slice(-100)}` };
     }
     if (result[i]!.role === "assistant" && result[i]!.content.length > 2000) {
       const c = result[i]!.content;
-      result[i] = { ...result[i]!, content: c.slice(0, 500) + "\n...[truncated]...\n" + c.slice(-200) };
+      result[i] = { ...result[i]!, content: `${c.slice(0, 500)}\n...[truncated]...\n${c.slice(-200)}` };
     }
   }
 
@@ -106,7 +107,7 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
     let lowestIdx = -1;
     for (let i = 0; i < result.length - keepLast; i++) {
       const msg = result[i]!;
-      if (msg.role === 'system' || msg.meta?.pinned) continue;
+      if (msg.role === "system" || msg.meta?.pinned) continue;
       const score = scoreMessage(msg, i, result.length);
       if (score < lowestScore) {
         lowestScore = score;
@@ -126,8 +127,7 @@ export function compressMessages(messages: Message[], targetTokens: number): Mes
   }
   const filtered = result.filter((msg) => {
     if (msg.role !== "tool") return true;
-    return (msg.toolResults?.length ?? 0) > 0 &&
-           msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
+    return (msg.toolResults?.length ?? 0) > 0 && msg.toolResults!.every((tr) => validCallIds.has(tr.callId));
   });
 
   emitHook("postCompact", {});
@@ -141,7 +141,7 @@ export async function summarizeConversation(
   provider: Provider,
   messages: Message[],
   model: string | undefined,
-  targetTokens: number,
+  _targetTokens: number,
 ): Promise<Message[]> {
   const keepRecent = Math.min(6, messages.length - 1);
   const older = messages.slice(0, messages.length - keepRecent);
@@ -149,31 +149,33 @@ export async function summarizeConversation(
 
   if (older.length < 2) return messages;
 
-  const pinned = older.filter(m => m.meta?.pinned);
-  const summarizable = older.filter(m => !m.meta?.pinned);
+  const pinned = older.filter((m) => m.meta?.pinned);
+  const summarizable = older.filter((m) => !m.meta?.pinned);
 
   if (summarizable.length < 2) return messages;
 
-  const olderText = summarizable.map(m => {
-    const prefix = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System';
-    let text = `${prefix}: ${m.content.slice(0, 500)}`;
-    if (m.toolCalls?.length) {
-      text += `\n  [Used tools: ${m.toolCalls.map(tc => tc.toolName).join(', ')}]`;
-    }
-    return text;
-  }).join('\n\n');
+  const olderText = summarizable
+    .map((m) => {
+      const prefix = m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System";
+      let text = `${prefix}: ${m.content.slice(0, 500)}`;
+      if (m.toolCalls?.length) {
+        text += `\n  [Used tools: ${m.toolCalls.map((tc) => tc.toolName).join(", ")}]`;
+      }
+      return text;
+    })
+    .join("\n\n");
 
   const summaryPrompt = `Summarize this conversation history in 2-4 sentences, preserving key decisions, file paths mentioned, and what was accomplished:\n\n${olderText.slice(0, 3000)}`;
 
   const summaryResponse = await provider.complete(
     [createUserMessage(summaryPrompt)],
-    'You are a conversation summarizer. Be concise and factual. Preserve important details like file paths and decisions.',
+    "You are a conversation summarizer. Be concise and factual. Preserve important details like file paths and decisions.",
     undefined,
     model,
   );
 
   const summaryMessage: Message = {
-    role: 'system',
+    role: "system",
     content: `[Conversation summary: ${summaryResponse.content}]`,
     uuid: `summary-${Date.now()}`,
     timestamp: Date.now(),

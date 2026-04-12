@@ -2,11 +2,11 @@
  * OpenAI-compatible provider — works with OpenAI, DeepSeek, Groq, Together, etc.
  */
 
-import type { Message, ToolCall } from "../types/message.js";
-import type { StreamEvent, ToolCallComplete } from "../types/events.js";
-import { createAssistantMessage } from "../types/message.js";
-import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
 import { IMAGE_PREFIX } from "../tools/ImageReadTool/index.js";
+import type { StreamEvent, ToolCallComplete } from "../types/events.js";
+import type { Message, ToolCall } from "../types/message.js";
+import { createAssistantMessage } from "../types/message.js";
+import type { APIToolDef, ModelInfo, Provider, ProviderConfig } from "./base.js";
 
 export class OpenAIProvider implements Provider {
   readonly name: string;
@@ -21,10 +21,7 @@ export class OpenAIProvider implements Provider {
     this.defaultModel = config.defaultModel ?? "gpt-4o";
   }
 
-  private convertMessages(
-    messages: Message[],
-    systemPrompt: string,
-  ): unknown[] {
+  private convertMessages(messages: Message[], systemPrompt: string): unknown[] {
     const out: unknown[] = [{ role: "system", content: systemPrompt }];
 
     for (const msg of messages) {
@@ -45,7 +42,7 @@ export class OpenAIProvider implements Provider {
         });
       } else if (msg.role === "tool" && msg.toolResults?.length) {
         for (const tr of msg.toolResults) {
-          if (!tr.isError && tr.output.startsWith(IMAGE_PREFIX + ":")) {
+          if (!tr.isError && tr.output.startsWith(`${IMAGE_PREFIX}:`)) {
             const [, mediaType, data] = tr.output.split(":");
             out.push({
               role: "tool",
@@ -149,9 +146,7 @@ export class OpenAIProvider implements Provider {
           const outputTokens = chunk.usage.completion_tokens ?? 0;
           const info = this.getModelInfo(m);
           const cost =
-            (inputTokens * (info?.inputCostPerMtok ?? 0) +
-              outputTokens * (info?.outputCostPerMtok ?? 0)) /
-            1_000_000;
+            (inputTokens * (info?.inputCostPerMtok ?? 0) + outputTokens * (info?.outputCostPerMtok ?? 0)) / 1_000_000;
           yield { type: "cost_update", inputTokens, outputTokens, cost, model: m };
         }
 
@@ -204,12 +199,7 @@ export class OpenAIProvider implements Provider {
     }
   }
 
-  async complete(
-    messages: Message[],
-    systemPrompt: string,
-    tools?: APIToolDef[],
-    model?: string,
-  ): Promise<Message> {
+  async complete(messages: Message[], systemPrompt: string, tools?: APIToolDef[], model?: string): Promise<Message> {
     const m = model ?? this.defaultModel;
     const body: Record<string, unknown> = {
       model: m,
@@ -297,6 +287,9 @@ export class OpenAIProvider implements Provider {
 
 function safeParse(json: string | undefined): Record<string, unknown> {
   if (!json) return {};
-  try { return JSON.parse(json); }
-  catch { return {}; }
+  try {
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
 }

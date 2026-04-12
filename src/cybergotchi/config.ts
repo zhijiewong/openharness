@@ -1,17 +1,17 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import type { CompanionConfig, CompanionRuntime, CompanionBones, Rarity } from './types.js';
-import { DEFAULT_NEEDS, DEFAULT_LIFETIME, RARITY_COLORS } from './types.js';
-import { roll, getDefaultSeed } from './bones.js';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { getDefaultSeed, roll } from "./bones.js";
+import type { CompanionConfig, CompanionRuntime } from "./types.js";
+import { DEFAULT_LIFETIME, DEFAULT_NEEDS } from "./types.js";
 
-const CONFIG_DIR = join(homedir(), '.oh');
-const CONFIG_PATH = join(CONFIG_DIR, 'cybergotchi.json');
+const CONFIG_DIR = join(homedir(), ".oh");
+const CONFIG_PATH = join(CONFIG_DIR, "cybergotchi.json");
 
 export function loadCompanionConfig(): CompanionConfig | null {
   if (!existsSync(CONFIG_PATH)) return null;
   try {
-    const raw = readFileSync(CONFIG_PATH, 'utf-8');
+    const raw = readFileSync(CONFIG_PATH, "utf-8");
     const cfg = JSON.parse(raw) as CompanionConfig;
     // Fill in defaults for fields added after initial setup
     if (!cfg.seed) cfg.seed = getDefaultSeed();
@@ -19,9 +19,9 @@ export function loadCompanionConfig(): CompanionConfig | null {
       // Migrate from old CybergotchiConfig format
       const old = cfg as any;
       cfg.soul = {
-        name: old.name || 'Companion',
-        personality: '',
-        hat: old.hat || 'none',
+        name: old.name || "Companion",
+        personality: "",
+        hat: old.hat || "none",
       };
     }
     if (!cfg.needs) cfg.needs = { ...DEFAULT_NEEDS };
@@ -94,6 +94,6 @@ export function companionReservedColumns(hasCompanion: boolean, hasSpeech: boole
 // Legacy aliases for gradual migration
 export const loadCybergotchiConfig = loadCompanionConfig;
 export const saveCybergotchiConfig = saveCompanionConfig;
-export function defaultConfig(species: string, name: string): CompanionConfig {
-  return createCompanionConfig(getDefaultSeed(), name, '', 'none');
+export function defaultConfig(_species: string, name: string): CompanionConfig {
+  return createCompanionConfig(getDefaultSeed(), name, "", "none");
 }

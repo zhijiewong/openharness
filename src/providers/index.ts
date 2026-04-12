@@ -2,12 +2,12 @@
  * Provider factory — create the right provider from a model string.
  */
 
+import { AnthropicProvider } from "./anthropic.js";
 import type { Provider, ProviderConfig } from "./base.js";
+import { LlamaCppProvider } from "./llamacpp.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAIProvider } from "./openai.js";
-import { AnthropicProvider } from "./anthropic.js";
 import { OpenRouterProvider } from "./openrouter.js";
-import { LlamaCppProvider } from "./llamacpp.js";
 
 /**
  * Create a provider from a model string like "ollama/llama3" or "gpt-4o".
@@ -69,6 +69,16 @@ function guessProviderFromModel(model: string): string {
   if (model.includes("gpt") || model.startsWith("o3")) return "openai";
   if (model.includes("claude")) return "anthropic";
   if (model.includes("gguf") || model.startsWith("llamacpp")) return "llamacpp";
-  if (model.includes("llama") || model.includes("mistral") || model.includes("phi") || model.includes("qwen") || model.includes("gemma") || model.includes("deepseek") || model.includes("codestral") || model.includes("starcoder")) return "ollama";
+  if (
+    model.includes("llama") ||
+    model.includes("mistral") ||
+    model.includes("phi") ||
+    model.includes("qwen") ||
+    model.includes("gemma") ||
+    model.includes("deepseek") ||
+    model.includes("codestral") ||
+    model.includes("starcoder")
+  )
+    return "ollama";
   return "openai"; // default fallback
 }

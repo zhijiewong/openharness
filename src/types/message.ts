@@ -53,10 +53,7 @@ export function createUserMessage(content: string): Message {
   return createMessage("user", content);
 }
 
-export function createAssistantMessage(
-  content: string,
-  toolCalls?: readonly ToolCall[],
-): Message {
+export function createAssistantMessage(content: string, toolCalls?: readonly ToolCall[]): Message {
   return createMessage("assistant", content, { toolCalls });
 }
 

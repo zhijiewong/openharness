@@ -76,6 +76,6 @@ export function getTheme(): Theme {
 }
 
 /** Set the active theme. Must be called before renderer modules initialize. */
-export function setActiveTheme(name: 'dark' | 'light'): void {
-  activeTheme = name === 'light' ? lightTheme : darkTheme;
+export function setActiveTheme(name: "dark" | "light"): void {
+  activeTheme = name === "light" ? lightTheme : darkTheme;
 }

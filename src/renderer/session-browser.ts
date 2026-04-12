@@ -3,14 +3,14 @@
  * Navigate with ↑/↓, Enter to resume, Escape to cancel.
  */
 
-import type { Style } from './cells.js';
-import type { CellGrid } from './cells.js';
-import { getTheme } from '../utils/theme-data.js';
-import { listSessions, loadSession } from '../harness/session.js';
+import { listSessions, loadSession } from "../harness/session.js";
+import { getTheme } from "../utils/theme-data.js";
+import type { CellGrid, Style } from "./cells.js";
 
 type SessionSummary = ReturnType<typeof listSessions>[number];
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const s = (fg: string | null, bold = false, dim = false): Style => ({ fg, bg: null, bold, dim, underline: false });
 
@@ -25,7 +25,7 @@ export type SessionBrowserState = {
 
 /** Load sessions and create initial browser state */
 export function createSessionBrowser(): SessionBrowserState {
-  const sessionDir = join(homedir(), '.oh', 'sessions');
+  const sessionDir = join(homedir(), ".oh", "sessions");
   const allSessions = listSessions(sessionDir);
   return {
     allSessions,
@@ -33,7 +33,7 @@ export function createSessionBrowser(): SessionBrowserState {
     selectedIndex: 0,
     scrollOffset: 0,
     preview: null,
-    searchQuery: '',
+    searchQuery: "",
   };
 }
 
@@ -41,10 +41,12 @@ export function createSessionBrowser(): SessionBrowserState {
 export function browserSearch(state: SessionBrowserState, query: string): SessionBrowserState {
   const q = query.toLowerCase();
   const filtered = q
-    ? state.allSessions.filter(s =>
-        s.model.toLowerCase().includes(q) ||
-        s.id.toLowerCase().includes(q) ||
-        new Date(s.updatedAt).toLocaleDateString().includes(q))
+    ? state.allSessions.filter(
+        (s) =>
+          s.model.toLowerCase().includes(q) ||
+          s.id.toLowerCase().includes(q) ||
+          new Date(s.updatedAt).toLocaleDateString().includes(q),
+      )
     : state.allSessions;
   return { ...state, searchQuery: query, sessions: filtered, selectedIndex: 0, scrollOffset: 0, preview: null };
 }
@@ -73,15 +75,13 @@ export function browserLoadPreview(state: SessionBrowserState): SessionBrowserSt
   const session = state.sessions[state.selectedIndex];
   if (!session) return { ...state, preview: null };
   try {
-    const sessionDir = join(homedir(), '.oh', 'sessions');
+    const sessionDir = join(homedir(), ".oh", "sessions");
     const full = loadSession(session.id, sessionDir);
     const lastMsgs = full.messages.slice(-3);
-    const preview = lastMsgs
-      .map(m => `${m.role === 'user' ? '❯' : '◆'} ${m.content.slice(0, 100)}`)
-      .join('\n');
+    const preview = lastMsgs.map((m) => `${m.role === "user" ? "❯" : "◆"} ${m.content.slice(0, 100)}`).join("\n");
     return { ...state, preview };
   } catch {
-    return { ...state, preview: '[could not load preview]' };
+    return { ...state, preview: "[could not load preview]" };
   }
 }
 
@@ -101,16 +101,21 @@ export function renderSessionBrowser(
   let r = row;
 
   // Title + search
-  grid.writeText(r, col, '─── Session Browser (↑/↓ navigate, Enter resume, Esc cancel) ───', s(null, false, true));
+  grid.writeText(r, col, "─── Session Browser (↑/↓ navigate, Enter resume, Esc cancel) ───", s(null, false, true));
   r++;
   if (state.searchQuery || state.allSessions.length > 5) {
-    grid.writeText(r, col, '🔍 ', s(null, false, true));
-    grid.writeText(r, col + 3, state.searchQuery || '(type to filter)', state.searchQuery ? s(null) : s(null, false, true));
+    grid.writeText(r, col, "🔍 ", s(null, false, true));
+    grid.writeText(
+      r,
+      col + 3,
+      state.searchQuery || "(type to filter)",
+      state.searchQuery ? s(null) : s(null, false, true),
+    );
     r++;
   }
 
   if (state.sessions.length === 0) {
-    grid.writeText(r, col + 2, 'No saved sessions.', s(null, false, true));
+    grid.writeText(r, col + 2, "No saved sessions.", s(null, false, true));
     return r - row + 1;
   }
 
@@ -131,19 +136,23 @@ export function renderSessionBrowser(
     const sess = state.sessions[idx]!;
     const selected = idx === state.selectedIndex;
     const date = new Date(sess.updatedAt).toLocaleDateString();
-    const cost = sess.cost > 0 ? ` $${sess.cost.toFixed(4)}` : '';
-    const model = (sess.model || '?').slice(0, 20);
+    const cost = sess.cost > 0 ? ` $${sess.cost.toFixed(4)}` : "";
+    const model = (sess.model || "?").slice(0, 20);
     const msgs = String(sess.messages).padStart(3);
 
-    const prefix = selected ? '▶ ' : '  ';
+    const prefix = selected ? "▶ " : "  ";
     const style = selected ? s(t.user, true) : s(null);
     const dimStyle = selected ? s(t.user) : s(null, false, true);
 
     grid.writeText(r, col, prefix, style);
     grid.writeText(r, col + 2, `${date}  ${msgs} msgs  ${model}${cost}`, dimStyle);
     if (selected) {
-      grid.writeText(r, col + 2 + date.length + msgs.length + model.length + cost.length + 12,
-        `  ${sess.id.slice(0, 8)}…`, s(null, false, true));
+      grid.writeText(
+        r,
+        col + 2 + date.length + msgs.length + model.length + cost.length + 12,
+        `  ${sess.id.slice(0, 8)}…`,
+        s(null, false, true),
+      );
     }
     r++;
   }
@@ -151,9 +160,9 @@ export function renderSessionBrowser(
   // Preview
   if (state.preview && r < row + maxRows - 1) {
     r++;
-    grid.writeText(r, col, '─── Preview ───', s(null, false, true));
+    grid.writeText(r, col, "─── Preview ───", s(null, false, true));
     r++;
-    for (const line of state.preview.split('\n')) {
+    for (const line of state.preview.split("\n")) {
       if (r >= row + maxRows) break;
       grid.writeText(r, col + 2, line.slice(0, width - col - 4), s(null, false, true));
       r++;

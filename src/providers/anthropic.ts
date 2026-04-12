@@ -2,11 +2,11 @@
  * Anthropic provider — Claude models via the Anthropic Messages API.
  */
 
-import type { Message, ToolCall } from "../types/message.js";
-import type { StreamEvent, ToolCallComplete } from "../types/events.js";
-import { createAssistantMessage } from "../types/message.js";
-import type { Provider, APIToolDef, ModelInfo, ProviderConfig } from "./base.js";
 import { IMAGE_PREFIX } from "../tools/ImageReadTool/index.js";
+import type { StreamEvent, ToolCallComplete } from "../types/events.js";
+import type { Message, ToolCall } from "../types/message.js";
+import { createAssistantMessage } from "../types/message.js";
+import type { APIToolDef, ModelInfo, Provider, ProviderConfig } from "./base.js";
 
 export class AnthropicProvider implements Provider {
   readonly name = "anthropic";
@@ -55,7 +55,7 @@ export class AnthropicProvider implements Provider {
         out.push({ role: "assistant", content });
       } else if (msg.role === "tool" && msg.toolResults?.length) {
         const content = msg.toolResults.map((tr) => {
-          if (!tr.isError && tr.output.startsWith(IMAGE_PREFIX + ":")) {
+          if (!tr.isError && tr.output.startsWith(`${IMAGE_PREFIX}:`)) {
             const [, mediaType, data] = tr.output.split(":");
             return {
               type: "tool_result",
@@ -98,9 +98,7 @@ export class AnthropicProvider implements Provider {
     const m = model ?? this.defaultModel;
     // Prompt caching: send system prompt as content blocks with cache_control.
     // Anthropic caches matching prefixes — 90% cost reduction on repeat turns.
-    const systemBlocks = [
-      { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
-    ];
+    const systemBlocks = [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }];
 
     const body: Record<string, unknown> = {
       model: m,
@@ -149,7 +147,7 @@ export class AnthropicProvider implements Provider {
     let currentToolId = "";
     let currentToolName = "";
     let currentToolArgs = "";
-    let inThinkingBlock = false;
+    let _inThinkingBlock = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -193,7 +191,7 @@ export class AnthropicProvider implements Provider {
               };
             }
             if (block?.type === "thinking") {
-              inThinkingBlock = true;
+              _inThinkingBlock = true;
             }
             break;
           }
@@ -211,14 +209,17 @@ export class AnthropicProvider implements Provider {
             break;
           }
           case "content_block_stop": {
-            inThinkingBlock = false;
+            _inThinkingBlock = false;
             if (currentToolId) {
               let parsedArgs: Record<string, unknown> = {};
               if (currentToolArgs) {
                 try {
                   parsedArgs = JSON.parse(currentToolArgs);
                 } catch {
-                  yield { type: "error", message: `Malformed tool args for ${currentToolName}: ${currentToolArgs.slice(0, 200)}` };
+                  yield {
+                    type: "error",
+                    message: `Malformed tool args for ${currentToolName}: ${currentToolArgs.slice(0, 200)}`,
+                  };
                 }
               }
               yield {
@@ -275,12 +276,7 @@ export class AnthropicProvider implements Provider {
     }
   }
 
-  async complete(
-    messages: Message[],
-    systemPrompt: string,
-    tools?: APIToolDef[],
-    model?: string,
-  ): Promise<Message> {
+  async complete(messages: Message[], systemPrompt: string, tools?: APIToolDef[], model?: string): Promise<Message> {
     const m = model ?? this.defaultModel;
     const body: Record<string, unknown> = {
       model: m,

@@ -79,7 +79,7 @@ export const MODEL_PRICING: Record<string, [number, number]> = {
   "gpt-4o": [2.5, 10.0],
   "gpt-4o-mini": [0.15, 0.6],
   "o3-mini": [1.1, 4.4],
-  "o3": [10.0, 40.0],
+  o3: [10.0, 40.0],
   "claude-sonnet-4-6": [3.0, 15.0],
   "claude-haiku-4-5": [0.8, 4.0],
   "claude-opus-4-6": [15.0, 75.0],

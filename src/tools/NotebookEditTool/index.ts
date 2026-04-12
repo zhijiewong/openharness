@@ -1,7 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   notebook_path: z.string(),
@@ -46,9 +46,7 @@ export const NotebookEditTool: Tool<typeof inputSchema> = {
       }
 
       // Notebook cell source is an array of lines
-      const lines = input.new_source.split("\n").map((line, i, arr) =>
-        i < arr.length - 1 ? line + "\n" : line
-      );
+      const lines = input.new_source.split("\n").map((line, i, arr) => (i < arr.length - 1 ? `${line}\n` : line));
       notebook.cells[input.cell_index].source = lines;
 
       await fs.writeFile(filePath, JSON.stringify(notebook, null, 1), "utf-8");

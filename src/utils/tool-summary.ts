@@ -10,27 +10,47 @@
 export function summarizeToolArgs(toolName: string, argsJson: string): string | null {
   const lower = toolName.toLowerCase();
 
-  if (lower === 'bash' || lower === 'shell' || lower === 'execute') {
+  if (lower === "bash" || lower === "shell" || lower === "execute") {
     const cmdMatch = argsJson.match(/command[:\s]+["`]?(.+?)["`]?(?:\n|$)/i);
     if (cmdMatch) return `$ ${cmdMatch[1]}`;
     try {
       const args = JSON.parse(argsJson);
       if (args.command) return `$ ${(args.command as string).slice(0, 60)}`;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  if (lower.includes('read') || lower.includes('write') || lower.includes('edit') || lower.includes('glob') || lower.includes('grep')) {
+  if (
+    lower.includes("read") ||
+    lower.includes("write") ||
+    lower.includes("edit") ||
+    lower.includes("glob") ||
+    lower.includes("grep")
+  ) {
     try {
       const args = JSON.parse(argsJson);
       if (args.file_path) {
-        const action = lower.includes('read') ? 'reading' : lower.includes('write') ? 'writing' : lower.includes('edit') ? 'editing' : lower;
+        const action = lower.includes("read")
+          ? "reading"
+          : lower.includes("write")
+            ? "writing"
+            : lower.includes("edit")
+              ? "editing"
+              : lower;
         return `${action} ${args.file_path}`;
       }
       if (args.pattern) return `pattern: ${args.pattern as string}`;
     } catch {
       const pathMatch = argsJson.match(/(?:path|file)[:\s]+["`]?([^\s"`]+)/i);
       if (pathMatch) {
-        const action = lower.includes('read') ? 'reading' : lower.includes('write') ? 'writing' : lower.includes('edit') ? 'editing' : lower;
+        const action = lower.includes("read")
+          ? "reading"
+          : lower.includes("write")
+            ? "writing"
+            : lower.includes("edit")
+              ? "editing"
+              : lower;
         return `${action} ${pathMatch[1]}`;
       }
     }
@@ -43,7 +63,7 @@ export function summarizeToolArgs(toolName: string, argsJson: string): string | 
  * Extract a readable summary of tool arguments for display.
  * Simpler version for inline display (tool call rows).
  */
-export function formatToolArgs(toolName: string, args: Record<string, unknown>): string {
+export function formatToolArgs(_toolName: string, args: Record<string, unknown>): string {
   if (args.file_path) return args.file_path as string;
   if (args.command) return `$ ${(args.command as string).slice(0, 60)}`;
   if (args.pattern) return `pattern: ${(args.pattern as string).slice(0, 40)}`;
@@ -51,7 +71,7 @@ export function formatToolArgs(toolName: string, args: Record<string, unknown>):
   if (args.url) return args.url as string;
   // Compact JSON for other args
   const json = JSON.stringify(args);
-  return json.length > 60 ? json.slice(0, 57) + '...' : json;
+  return json.length > 60 ? `${json.slice(0, 57)}...` : json;
 }
 
 /**
@@ -59,8 +79,8 @@ export function formatToolArgs(toolName: string, args: Record<string, unknown>):
  * Returns a short string like "42 lines" or "1.2 KB".
  */
 export function summarizeToolOutput(output: string): string {
-  if (!output) return '';
-  const lines = output.split('\n').length;
+  if (!output) return "";
+  const lines = output.split("\n").length;
   if (lines === 1 && output.length < 60) return output.trim();
   return `${lines} lines`;
 }

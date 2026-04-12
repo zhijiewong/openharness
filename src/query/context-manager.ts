@@ -10,9 +10,9 @@
  * Based on the "context engineering" pattern from Anthropic's harness research.
  */
 
-import type { Message } from '../types/message.js';
-import { getContextWindow } from '../harness/cost.js';
-import { estimateMessagesTokens } from './compress.js';
+import { getContextWindow } from "../harness/cost.js";
+import type { Message } from "../types/message.js";
+import { estimateMessagesTokens } from "./compress.js";
 
 // ── Types ──
 
@@ -69,9 +69,11 @@ export class ContextManager {
     const keepTail = Math.floor(maxChars * 0.2);
     const truncated = output.length - keepHead - keepTail;
 
-    return output.slice(0, keepHead)
-      + `\n\n[...${truncated.toLocaleString()} chars truncated (budget: ${budget} tokens)...]\n\n`
-      + output.slice(-keepTail);
+    return (
+      output.slice(0, keepHead) +
+      `\n\n[...${truncated.toLocaleString()} chars truncated (budget: ${budget} tokens)...]\n\n` +
+      output.slice(-keepTail)
+    );
   }
 
   /**
@@ -96,10 +98,7 @@ export class ContextManager {
    * Check if we should proactively compress before a tool call.
    * Returns true if estimated context usage exceeds the proactive threshold.
    */
-  shouldPreCompress(
-    messages: Message[],
-    estimatedOutputTokens: number,
-  ): boolean {
+  shouldPreCompress(messages: Message[], estimatedOutputTokens: number): boolean {
     const contextWindow = getContextWindow(this.model);
     const currentTokens = estimateMessagesTokens(messages);
     const projected = currentTokens + estimatedOutputTokens;

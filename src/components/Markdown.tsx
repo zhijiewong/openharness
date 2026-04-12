@@ -1,6 +1,6 @@
-import React from "react";
 import { Box, Text } from "ink";
 import { marked } from "marked";
+import type React from "react";
 import { useTheme } from "../utils/theme.js";
 
 // LRU cache for parsed tokens (max 200 entries)
@@ -107,22 +107,14 @@ function TokenView({
       const cols = t.header.length;
       const widths = new Array(cols).fill(0);
       for (let c = 0; c < cols; c++) {
-        widths[c] = Math.max(
-          widths[c],
-          cleanInline(t.header[c]?.text ?? "").length,
-        );
+        widths[c] = Math.max(widths[c], cleanInline(t.header[c]?.text ?? "").length);
         for (const row of t.rows) {
-          widths[c] = Math.max(
-            widths[c],
-            cleanInline(row[c]?.text ?? "").length,
-          );
+          widths[c] = Math.max(widths[c], cleanInline(row[c]?.text ?? "").length);
         }
       }
 
       const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
-      const headerLine = t.header
-        .map((h: any, c: number) => pad(cleanInline(h.text), widths[c]!))
-        .join(" | ");
+      const headerLine = t.header.map((h: any, c: number) => pad(cleanInline(h.text), widths[c]!)).join(" | ");
       const sepLine = widths.map((w) => "─".repeat(w)).join("─┼─");
 
       return (
@@ -158,9 +150,7 @@ function TokenView({
 
     default: {
       const t = token as any;
-      return t.text ? (
-        <Text color={theme.text}>{cleanInline(t.text)}</Text>
-      ) : null;
+      return t.text ? <Text color={theme.text}>{cleanInline(t.text)}</Text> : null;
     }
   }
 }

@@ -2,9 +2,9 @@
  * Cell-level differ — compares two CellGrids and produces minimal ANSI output.
  */
 
-import type { Style, CellGrid } from './cells.js';
-import { cellsEqual } from './cells.js';
-import { FG_CODES, BG_CODES } from './colors.js';
+import type { CellGrid, Style } from "./cells.js";
+import { cellsEqual } from "./cells.js";
+import { BG_CODES, FG_CODES } from "./colors.js";
 
 /** Convert a Style to an SGR escape sequence */
 export function styleToSGR(style: Style): string {
@@ -14,7 +14,7 @@ export function styleToSGR(style: Style): string {
   if (style.underline) codes.push(4);
   if (style.fg && FG_CODES[style.fg]) codes.push(FG_CODES[style.fg]!);
   if (style.bg && BG_CODES[style.bg]) codes.push(BG_CODES[style.bg]!);
-  return `\x1b[${codes.join(';')}m`;
+  return `\x1b[${codes.join(";")}m`;
 }
 
 /**
@@ -54,10 +54,10 @@ export function diff(prev: CellGrid, next: CellGrid, rowOffset = 0): string {
 
   // Reset style at end
   if (parts.length > 0) {
-    parts.push('\x1b[0m');
+    parts.push("\x1b[0m");
   }
 
-  return parts.join('');
+  return parts.join("");
 }
 
 /**
@@ -66,22 +66,22 @@ export function diff(prev: CellGrid, next: CellGrid, rowOffset = 0): string {
  */
 export function syncWrite(output: string): void {
   if (!output) return;
-  process.stdout.write('\x1b[?2026h' + output + '\x1b[?2026l');
+  process.stdout.write(`\x1b[?2026h${output}\x1b[?2026l`);
 }
 
 /** Clear the entire screen */
 export function clearScreen(): void {
-  process.stdout.write('\x1b[2J\x1b[H');
+  process.stdout.write("\x1b[2J\x1b[H");
 }
 
 /** Hide cursor */
 export function hideCursor(): void {
-  process.stdout.write('\x1b[?25l');
+  process.stdout.write("\x1b[?25l");
 }
 
 /** Show cursor */
 export function showCursor(): void {
-  process.stdout.write('\x1b[?25h');
+  process.stdout.write("\x1b[?25h");
 }
 
 /** Move cursor to position */

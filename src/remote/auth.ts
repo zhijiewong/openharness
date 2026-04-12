@@ -3,9 +3,9 @@
  * for the remote server.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Tools } from '../Tool.js';
-import { readOhConfig } from '../harness/config.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { readOhConfig } from "../harness/config.js";
+import type { Tools } from "../Tool.js";
 
 // ── Rate Limiting ──
 
@@ -44,7 +44,7 @@ export function validateToken(authHeader: string | undefined): boolean {
   if (!tokens || tokens.length === 0) return true;
 
   if (!authHeader) return false;
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   if (!token) return false;
 
   return tokens.includes(token);
@@ -59,8 +59,8 @@ export function filterRemoteTools(tools: Tools): Tools {
 
   if (!allowed || allowed.length === 0) return tools;
 
-  const allowSet = new Set(allowed.map(n => n.toLowerCase()));
-  const filtered = tools.filter(t => allowSet.has(t.name.toLowerCase()));
+  const allowSet = new Set(allowed.map((n) => n.toLowerCase()));
+  const filtered = tools.filter((t) => allowSet.has(t.name.toLowerCase()));
   return filtered.length > 0 ? filtered : tools; // fallback to all if filter empties
 }
 
@@ -87,20 +87,20 @@ export type AuthResult = {
  */
 export function authenticateRequest(req: IncomingMessage, res: ServerResponse): AuthResult {
   const requestId = generateRequestId();
-  res.setHeader('X-Request-ID', requestId);
+  res.setHeader("X-Request-ID", requestId);
 
   // Token auth
   if (!validateToken(req.headers.authorization)) {
-    return { allowed: false, reason: 'Invalid or missing bearer token', requestId };
+    return { allowed: false, reason: "Invalid or missing bearer token", requestId };
   }
 
   // Rate limiting
   const config = readOhConfig();
   const rateLimit = config?.remote?.rateLimit ?? 60; // default 60/min
-  const ip = req.socket.remoteAddress ?? 'unknown';
+  const ip = req.socket.remoteAddress ?? "unknown";
 
   if (!checkRateLimit(ip, rateLimit)) {
-    return { allowed: false, reason: 'Rate limit exceeded', requestId };
+    return { allowed: false, reason: "Rate limit exceeded", requestId };
   }
 
   return { allowed: true, requestId };

@@ -1,6 +1,6 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import type { Tool, ToolResult } from "../../Tool.js";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
 const editSchema = z.object({
   file_path: z.string(),
@@ -14,11 +14,16 @@ const inputSchema = z.object({
 
 export const MultiEditTool: Tool<typeof inputSchema> = {
   name: "MultiEdit",
-  description: "Apply multiple file edits atomically. All edits succeed or none do. Useful for coordinated changes across files.",
+  description:
+    "Apply multiple file edits atomically. All edits succeed or none do. Useful for coordinated changes across files.",
   inputSchema,
   riskLevel: "medium",
-  isReadOnly() { return false; },
-  isConcurrencySafe() { return false; },
+  isReadOnly() {
+    return false;
+  },
+  isConcurrencySafe() {
+    return false;
+  },
 
   async call(input): Promise<ToolResult> {
     // Phase 1: Validate all edits can be applied
@@ -30,7 +35,7 @@ export const MultiEditTool: Tool<typeof inputSchema> = {
         return { output: `File not found: ${edit.file_path}`, isError: true };
       }
       if (!originals.has(edit.file_path)) {
-        originals.set(edit.file_path, readFileSync(edit.file_path, 'utf-8'));
+        originals.set(edit.file_path, readFileSync(edit.file_path, "utf-8"));
       }
       const current = modified.get(edit.file_path) ?? originals.get(edit.file_path)!;
       if (!current.includes(edit.old_string)) {
@@ -50,7 +55,7 @@ export const MultiEditTool: Tool<typeof inputSchema> = {
     }
 
     return {
-      output: `Applied ${input.edits.length} edit(s) across ${results.length} file(s): ${results.join(', ')}`,
+      output: `Applied ${input.edits.length} edit(s) across ${results.length} file(s): ${results.join(", ")}`,
       isError: false,
     };
   },

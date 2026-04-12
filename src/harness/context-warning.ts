@@ -2,8 +2,8 @@
  * Context window warning — shared between cell renderer and Ink REPL.
  */
 
-import type { Message } from '../types/message.js';
-import { getContextWindow } from './cost.js';
+import type { Message } from "../types/message.js";
+import { getContextWindow } from "./cost.js";
 
 /** Estimate total tokens from messages (incremental-friendly) */
 export function estimateMessageTokens(messages: Message[], startFrom = 0): number {
@@ -26,10 +26,7 @@ export function estimateMessageTokens(messages: Message[], startFrom = 0): numbe
 }
 
 /** Compute context warning if usage exceeds 75% */
-export function getContextWarning(
-  estimatedTokens: number,
-  model: string,
-): { text: string; critical: boolean } | null {
+export function getContextWarning(estimatedTokens: number, model: string): { text: string; critical: boolean } | null {
   const window = getContextWindow(model);
   const usage = window > 0 ? estimatedTokens / window : 0;
   if (usage >= 0.75) {

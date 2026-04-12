@@ -1,54 +1,50 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { toolToAPIFormat, findToolByName } from './Tool.js';
-import { createMockTool } from './test-helpers.js';
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { findToolByName, toolToAPIFormat } from "./Tool.js";
+import { createMockTool } from "./test-helpers.js";
 
-describe('toolToAPIFormat', () => {
+describe("toolToAPIFormat", () => {
   it('returns { type: "function", function: { name, description, parameters } }', () => {
-    const tool = createMockTool('Bash');
+    const tool = createMockTool("Bash");
     const formatted = toolToAPIFormat(tool);
-    assert.equal(formatted.type, 'function');
-    assert.equal(typeof formatted.function, 'object');
-    assert.equal(formatted.function.name, 'Bash');
-    assert.equal(typeof formatted.function.description, 'string');
+    assert.equal(formatted.type, "function");
+    assert.equal(typeof formatted.function, "object");
+    assert.equal(formatted.function.name, "Bash");
+    assert.equal(typeof formatted.function.description, "string");
     assert.ok(formatted.function.parameters !== undefined);
   });
 
   it('parameters has type "object"', () => {
-    const tool = createMockTool('Read');
+    const tool = createMockTool("Read");
     const formatted = toolToAPIFormat(tool);
     const params = formatted.function.parameters as { type: string };
-    assert.equal(params.type, 'object');
+    assert.equal(params.type, "object");
   });
 });
 
-describe('findToolByName', () => {
-  const tools = [
-    createMockTool('Bash'),
-    createMockTool('Read'),
-    createMockTool('Write'),
-  ];
+describe("findToolByName", () => {
+  const tools = [createMockTool("Bash"), createMockTool("Read"), createMockTool("Write")];
 
-  it('finds existing tool', () => {
-    const found = findToolByName(tools, 'Read');
+  it("finds existing tool", () => {
+    const found = findToolByName(tools, "Read");
     assert.ok(found);
-    assert.equal(found.name, 'Read');
+    assert.equal(found.name, "Read");
   });
 
-  it('returns undefined for missing tool', () => {
-    const found = findToolByName(tools, 'NonExistent');
+  it("returns undefined for missing tool", () => {
+    const found = findToolByName(tools, "NonExistent");
     assert.equal(found, undefined);
   });
 
-  it('falls back to case-insensitive match', () => {
-    const found = findToolByName(tools, 'bash');
+  it("falls back to case-insensitive match", () => {
+    const found = findToolByName(tools, "bash");
     assert.ok(found);
-    assert.equal(found.name, 'Bash');
+    assert.equal(found.name, "Bash");
   });
 
-  it('prefers exact match over case-insensitive', () => {
-    const found = findToolByName(tools, 'Bash');
+  it("prefers exact match over case-insensitive", () => {
+    const found = findToolByName(tools, "Bash");
     assert.ok(found);
-    assert.equal(found.name, 'Bash');
+    assert.equal(found.name, "Bash");
   });
 });

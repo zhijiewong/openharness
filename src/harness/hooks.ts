@@ -15,12 +15,18 @@ import type { HookDef, HooksConfig } from "./config.js";
 import { readOhConfig } from "./config.js";
 
 export type HookEvent =
-  | "sessionStart" | "sessionEnd"
-  | "preToolUse" | "postToolUse"
-  | "fileChanged" | "cwdChanged"
-  | "subagentStart" | "subagentStop"
-  | "preCompact" | "postCompact"
-  | "configChange" | "notification";
+  | "sessionStart"
+  | "sessionEnd"
+  | "preToolUse"
+  | "postToolUse"
+  | "fileChanged"
+  | "cwdChanged"
+  | "subagentStart"
+  | "subagentStop"
+  | "preCompact"
+  | "postCompact"
+  | "configChange"
+  | "notification";
 
 export type HookContext = {
   toolName?: string;
@@ -59,7 +65,7 @@ export function invalidateHookCache(): void {
 
 function buildEnv(event: HookEvent, ctx: HookContext): Record<string, string> {
   const env: Record<string, string> = {
-    ...process.env as Record<string, string>,
+    ...(process.env as Record<string, string>),
     OH_EVENT: event,
   };
   if (ctx.toolName) env.OH_TOOL_NAME = ctx.toolName;
@@ -130,13 +136,13 @@ async function runHttpHook(url: string, event: HookEvent, ctx: HookContext, time
   try {
     const body = JSON.stringify({ event, ...ctx });
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body,
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return false;
-    const data = await res.json() as { allowed?: boolean };
+    const data = (await res.json()) as { allowed?: boolean };
     return data.allowed !== false;
   } catch {
     return false;
@@ -144,7 +150,7 @@ async function runHttpHook(url: string, event: HookEvent, ctx: HookContext, time
 }
 
 /** Run a prompt hook. Uses LLM to make a yes/no decision. */
-async function runPromptHook(promptText: string, ctx: HookContext): Promise<boolean> {
+async function runPromptHook(_promptText: string, _ctx: HookContext): Promise<boolean> {
   // Prompt hooks require a provider — skip if not available
   // This is a lightweight check; full LLM call would need provider injection
   // For now, prompt hooks evaluate the prompt text as a simple template
@@ -210,7 +216,9 @@ export function emitHook(event: HookEvent, ctx: HookContext = {}): boolean {
   // All other hooks run asynchronously (fire-and-forget)
   for (const def of defs) {
     if (!matchesHook(def, ctx)) continue;
-    executeHookDef(def, event, ctx).catch(() => {/* ignore */});
+    executeHookDef(def, event, ctx).catch(() => {
+      /* ignore */
+    });
   }
   return true;
 }

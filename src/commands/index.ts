@@ -5,22 +5,19 @@
  * If input starts with /, it's treated as a command.
  */
 
-import { writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { isGitRepo, gitDiff, gitUndo, gitCommit, gitLog, gitBranch } from "../git/index.js";
-import type { Message } from "../types/message.js";
-import { guessProviderFromModel } from "../providers/index.js";
-import { handleCybergotchiCommand } from "./cybergotchi.js";
-import { connectedMcpServers } from "../mcp/loader.js";
-import { listSessions, loadSession, createSession, saveSession } from "../harness/session.js";
-import { readOhConfig } from "../harness/config.js";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { compressMessages } from "../query/index.js";
+import { dirname, join } from "node:path";
+import { gitBranch, gitCommit, gitDiff, gitLog, gitUndo, isGitRepo, isInMergeOrRebase } from "../git/index.js";
+import { readOhConfig } from "../harness/config.js";
+import { estimateMessageTokens } from "../harness/context-warning.js";
 import { getContextWindow } from "../harness/cost.js";
 import { loadKeybindings } from "../harness/keybindings.js";
-import { isInMergeOrRebase } from "../git/index.js";
-import { estimateMessageTokens } from "../harness/context-warning.js";
+import { createSession, listSessions, loadSession, saveSession } from "../harness/session.js";
+import { connectedMcpServers } from "../mcp/loader.js";
+import { compressMessages } from "../query/index.js";
+import type { Message } from "../types/message.js";
+import { handleCybergotchiCommand } from "./cybergotchi.js";
 
 export type CommandResult = {
   /** Text output to display */
@@ -66,12 +63,25 @@ function register(name: string, description: string, handler: CommandHandler) {
 
 register("help", "Show available commands", () => {
   const categories: Record<string, string[]> = {
-    'Session': ['clear', 'compact', 'export', 'history', 'browse', 'resume', 'fork', 'pin', 'unpin'],
-    'Git': ['diff', 'undo', 'rewind', 'commit', 'log'],
-    'Info': ['help', 'cost', 'status', 'config', 'files', 'model', 'memory', 'doctor', 'context', 'mcp', 'mcp-registry'],
-    'Settings': ['theme', 'vim', 'companion', 'fast', 'keys', 'effort', 'sandbox'],
-    'AI': ['plan', 'review', 'roles', 'agents', 'plugins', 'btw'],
-    'Pet': ['cybergotchi'],
+    Session: ["clear", "compact", "export", "history", "browse", "resume", "fork", "pin", "unpin"],
+    Git: ["diff", "undo", "rewind", "commit", "log"],
+    Info: [
+      "help",
+      "cost",
+      "status",
+      "config",
+      "files",
+      "model",
+      "memory",
+      "doctor",
+      "context",
+      "mcp",
+      "mcp-registry",
+      "init",
+    ],
+    Settings: ["theme", "vim", "companion", "fast", "keys", "effort", "sandbox", "permissions", "allowed-tools"],
+    AI: ["plan", "review", "roles", "agents", "plugins", "btw", "loop"],
+    Pet: ["cybergotchi"],
   };
   const lines: string[] = [];
   for (const [category, names] of Object.entries(categories)) {
@@ -80,13 +90,13 @@ register("help", "Show available commands", () => {
       const cmd = commands.get(name);
       if (cmd) lines.push(`  /${name.padEnd(12)} ${cmd.description}`);
     }
-    lines.push('');
+    lines.push("");
   }
   // Include any uncategorized commands
   const categorized = new Set(Object.values(categories).flat());
-  const uncategorized = [...commands.keys()].filter(n => !categorized.has(n));
+  const uncategorized = [...commands.keys()].filter((n) => !categorized.has(n));
   if (uncategorized.length > 0) {
-    lines.push('Other:');
+    lines.push("Other:");
     for (const name of uncategorized) {
       const cmd = commands.get(name)!;
       lines.push(`  /${name.padEnd(12)} ${cmd.description}`);
@@ -122,7 +132,7 @@ register("status", "Show session status", (_args, ctx) => {
   }
   const mcp = connectedMcpServers();
   if (mcp.length > 0) {
-    lines.push(`MCP servers: ${mcp.join(', ')}`);
+    lines.push(`MCP servers: ${mcp.join(", ")}`);
   }
   return { output: lines.join("\n"), handled: true };
 });
@@ -163,16 +173,16 @@ register("rewind", "Restore files from checkpoint (interactive picker or last)",
       const cp = checkpoints[i]!;
       const age = Math.round((Date.now() - cp.timestamp) / 60_000);
       lines.push(`  ${i + 1}. [${age}m ago] ${cp.description}`);
-      lines.push(`     Files: ${cp.files.join(', ')}`);
+      lines.push(`     Files: ${cp.files.join(", ")}`);
     }
-    lines.push('');
-    lines.push('Usage: /rewind <number> to restore a specific checkpoint');
-    lines.push('       /rewind last    to restore the most recent');
-    return { output: lines.join('\n'), handled: true };
+    lines.push("");
+    lines.push("Usage: /rewind <number> to restore a specific checkpoint");
+    lines.push("       /rewind last    to restore the most recent");
+    return { output: lines.join("\n"), handled: true };
   }
 
   // /rewind last — restore most recent
-  if (idx === 'last') {
+  if (idx === "last") {
     const cp = rewindLastCheckpoint();
     if (!cp) return { output: "No checkpoints.", handled: true };
     return {
@@ -183,7 +193,7 @@ register("rewind", "Restore files from checkpoint (interactive picker or last)",
 
   // /rewind <n> — restore specific checkpoint
   const num = parseInt(idx, 10);
-  if (isNaN(num) || num < 1 || num > checkpoints.length) {
+  if (Number.isNaN(num) || num < 1 || num > checkpoints.length) {
     return { output: `Invalid checkpoint number. Use 1-${checkpoints.length}.`, handled: true };
   }
 
@@ -229,14 +239,14 @@ register("history", "List recent sessions or search across them", (args) => {
     for (const s of sessions) {
       try {
         const full = loadSession(s.id, sessionDir);
-        const hit = full.messages.find(m =>
-          typeof m.content === "string" && m.content.toLowerCase().includes(term)
-        );
+        const hit = full.messages.find((m) => typeof m.content === "string" && m.content.toLowerCase().includes(term));
         if (hit) {
           const date = new Date(s.updatedAt).toLocaleDateString();
           matches.push(`  ${s.id}  ${date}  ${s.model || "?"}`);
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
     if (matches.length === 0) return { output: `No sessions matching "${term}".`, handled: true };
     return { output: `Sessions matching "${term}":\n${matches.join("\n")}`, handled: true };
@@ -246,7 +256,7 @@ register("history", "List recent sessions or search across them", (args) => {
   const sessions = listSessions(sessionDir).slice(0, n);
   if (sessions.length === 0) return { output: "No saved sessions.", handled: true };
 
-  const lines = sessions.map(s => {
+  const lines = sessions.map((s) => {
     const date = new Date(s.updatedAt).toLocaleDateString();
     const cost = s.cost > 0 ? ` $${s.cost.toFixed(4)}` : "";
     return `  ${s.id}  ${date}  ${String(s.messages).padStart(3)} msgs  ${(s.model || "?").slice(0, 24)}${cost}`;
@@ -256,7 +266,7 @@ register("history", "List recent sessions or search across them", (args) => {
 
 register("theme", "Switch theme (dark/light)", (args) => {
   const theme = args.trim().toLowerCase();
-  if (theme !== 'dark' && theme !== 'light') {
+  if (theme !== "dark" && theme !== "light") {
     return { output: "Usage: /theme dark or /theme light", handled: true };
   }
   return { output: `__SWITCH_THEME__:${theme}`, handled: true };
@@ -300,12 +310,13 @@ register("files", "List files in context", (_args, ctx) => {
     }
   }
   if (files.size === 0) return { output: "No files in context yet.", handled: true };
-  return { output: `Files in context:\n${[...files].map(f => `  ${f}`).join("\n")}`, handled: true };
+  return { output: `Files in context:\n${[...files].map((f) => `  ${f}`).join("\n")}`, handled: true };
 });
 
 register("model", "Switch model (e.g., /model llama3.2 or /model ollama/llama3.2)", (args, ctx) => {
   const model = args.trim();
-  if (!model) return { output: "Usage: /model <model-name>  (prefix with provider/ to switch providers)", handled: true };
+  if (!model)
+    return { output: "Usage: /model <model-name>  (prefix with provider/ to switch providers)", handled: true };
 
   // Detect the provider implied by the new model
   let newProviderName: string;
@@ -335,7 +346,7 @@ register("compact", "Compress conversation history (optional: focus keyword or m
 
   if (focus && /^\d+$/.test(focus)) {
     // Numeric: compact messages 1-N, keep N+1 onwards
-    const cutoff = parseInt(focus);
+    const cutoff = parseInt(focus, 10);
     if (cutoff < 1 || cutoff >= before) {
       return { output: `Invalid: use 1-${before - 1}`, handled: true };
     }
@@ -350,12 +361,8 @@ register("compact", "Compress conversation history (optional: focus keyword or m
   if (focus) {
     // Keyword focus: compress but preserve messages containing the keyword
     const focusLower = focus.toLowerCase();
-    const preserved = ctx.messages.filter(m =>
-      m.content.toLowerCase().includes(focusLower) || m.meta?.pinned
-    );
-    const others = ctx.messages.filter(m =>
-      !m.content.toLowerCase().includes(focusLower) && !m.meta?.pinned
-    );
+    const preserved = ctx.messages.filter((m) => m.content.toLowerCase().includes(focusLower) || m.meta?.pinned);
+    const others = ctx.messages.filter((m) => !m.content.toLowerCase().includes(focusLower) && !m.meta?.pinned);
     const compactedOthers = compressMessages(others, targetTokens);
     const merged = [...compactedOthers, ...preserved].sort((a, b) => a.timestamp - b.timestamp);
     return {
@@ -377,8 +384,8 @@ register("compact", "Compress conversation history (optional: focus keyword or m
 
 register("export", "Export conversation to file", (_args, ctx) => {
   const lines = ctx.messages
-    .filter(m => m.role === "user" || m.role === "assistant")
-    .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
     .join("\n\n");
 
   const filename = `.oh/export-${ctx.sessionId}.md`;
@@ -421,7 +428,7 @@ register("memory", "View and search memories in .oh/memory/", (args) => {
   const term = args.trim().toLowerCase();
   let files: string[];
   try {
-    files = readdirSync(memDir).filter(f => f.endsWith(".md"));
+    files = readdirSync(memDir).filter((f) => f.endsWith(".md"));
   } catch {
     return { output: "Could not read .oh/memory/", handled: true };
   }
@@ -434,10 +441,12 @@ register("memory", "View and search memories in .oh/memory/", (args) => {
       try {
         const content = readFileSync(join(memDir, file), "utf-8");
         if (content.toLowerCase().includes(term)) {
-          const firstLine = content.split("\n").find(l => l.trim() && !l.startsWith("---")) ?? file;
+          const firstLine = content.split("\n").find((l) => l.trim() && !l.startsWith("---")) ?? file;
           matches.push(`  ${file.padEnd(30)} ${firstLine.slice(0, 50)}`);
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
     if (matches.length === 0) return { output: `No memories matching "${term}".`, handled: true };
     return { output: `Memories matching "${term}":\n${matches.join("\n")}`, handled: true };
@@ -461,9 +470,9 @@ register("memory", "View and search memories in .oh/memory/", (args) => {
 
 register("companion", "Toggle companion visibility (off/on)", (args) => {
   const arg = args.trim().toLowerCase();
-  if (arg === 'off') return { output: '__COMPANION_OFF__', handled: true };
-  if (arg === 'on') return { output: '__COMPANION_ON__', handled: true };
-  return { output: 'Usage: /companion off or /companion on', handled: true };
+  if (arg === "off") return { output: "__COMPANION_OFF__", handled: true };
+  if (arg === "on") return { output: "__COMPANION_ON__", handled: true };
+  return { output: "Usage: /companion off or /companion on", handled: true };
 });
 
 register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · status · rename · reset", (args) => {
@@ -476,22 +485,26 @@ register("roles", "List available agent specialization roles", () => {
   const lines = ["Available agent roles:\n"];
   for (const role of roles) {
     lines.push(`  ${role.id.padEnd(18)} ${role.name}`);
-    lines.push(`  ${''.padEnd(18)} ${role.description}`);
+    lines.push(`  ${"".padEnd(18)} ${role.description}`);
     if (role.suggestedTools?.length) {
-      lines.push(`  ${''.padEnd(18)} Tools: ${role.suggestedTools.join(', ')}`);
+      lines.push(`  ${"".padEnd(18)} Tools: ${role.suggestedTools.join(", ")}`);
     }
-    lines.push('');
+    lines.push("");
   }
   lines.push("Usage: Agent({ subagent_type: 'code-reviewer', prompt: '...' })");
   return { output: lines.join("\n"), handled: true };
 });
 
 register("agents", "Discover running openHarness agents on this machine", () => {
-  const { discoverAgents } = require('../services/a2a.js');
+  const { discoverAgents } = require("../services/a2a.js");
   const agents = discoverAgents();
 
   if (agents.length === 0) {
-    return { output: "No other openHarness agents running on this machine.\n\nOther oh sessions will appear here automatically via the A2A protocol.", handled: true };
+    return {
+      output:
+        "No other openHarness agents running on this machine.\n\nOther oh sessions will appear here automatically via the A2A protocol.",
+      handled: true,
+    };
   }
 
   const lines = [`Running Agents (${agents.length}):\n`];
@@ -499,12 +512,12 @@ register("agents", "Discover running openHarness agents on this machine", () => 
     const age = Math.round((Date.now() - agent.registeredAt) / 60_000);
     lines.push(`  ${agent.name}`);
     lines.push(`    ID:       ${agent.id}`);
-    lines.push(`    Provider: ${agent.provider ?? 'unknown'} / ${agent.model ?? 'unknown'}`);
-    lines.push(`    Dir:      ${agent.workingDir ?? 'unknown'}`);
-    lines.push(`    Endpoint: ${agent.endpoint.type}${agent.endpoint.port ? ':' + agent.endpoint.port : ''}`);
+    lines.push(`    Provider: ${agent.provider ?? "unknown"} / ${agent.model ?? "unknown"}`);
+    lines.push(`    Dir:      ${agent.workingDir ?? "unknown"}`);
+    lines.push(`    Endpoint: ${agent.endpoint.type}${agent.endpoint.port ? `:${agent.endpoint.port}` : ""}`);
     lines.push(`    Uptime:   ${age}m`);
-    lines.push(`    Caps:     ${agent.capabilities.map((c: any) => c.name).join(', ')}`);
-    lines.push('');
+    lines.push(`    Caps:     ${agent.capabilities.map((c: any) => c.name).join(", ")}`);
+    lines.push("");
   }
 
   lines.push("Send messages with: Agent({ prompt: 'ask the other agent...', allowed_tools: ['SendMessage'] })");
@@ -554,15 +567,18 @@ register("keys", "Show keyboard shortcuts", () => {
 });
 
 register("sandbox", "Show sandbox status and restrictions", () => {
-  const { sandboxStatus } = require('../harness/sandbox.js');
-  return { output: sandboxStatus() + '\n\nConfigure in .oh/config.yaml under sandbox:', handled: true };
+  const { sandboxStatus } = require("../harness/sandbox.js");
+  return { output: `${sandboxStatus()}\n\nConfigure in .oh/config.yaml under sandbox:`, handled: true };
 });
 
 register("effort", "Set reasoning effort level (low/medium/high/max)", (args) => {
   const level = args.trim().toLowerCase();
-  const valid = ['low', 'medium', 'high', 'max'];
+  const valid = ["low", "medium", "high", "max"];
   if (!valid.includes(level)) {
-    return { output: `Usage: /effort <${valid.join('|')}>\n\nlow    — fast, minimal reasoning\nmedium — balanced (default)\nhigh   — thorough reasoning\nmax    — maximum depth (Opus only)`, handled: true };
+    return {
+      output: `Usage: /effort <${valid.join("|")}>\n\nlow    — fast, minimal reasoning\nmedium — balanced (default)\nhigh   — thorough reasoning\nmax    — maximum depth (Opus only)`,
+      handled: true,
+    };
   }
   return { output: `Effort level set to: ${level}`, handled: true };
 });
@@ -580,6 +596,43 @@ register("btw", "Ask a side question (ephemeral, no tools, not saved to history)
   };
 });
 
+register("loop", "Run a prompt repeatedly with self-paced timing", (args) => {
+  const input = args.trim();
+  if (!input) {
+    return {
+      output:
+        "Usage: /loop [interval] <prompt or /command>\n\nExamples:\n  /loop check if the build passed\n  /loop 5m /review\n\nOmit the interval to let the model self-pace via ScheduleWakeup.",
+      handled: true,
+    };
+  }
+
+  // Check for optional interval prefix like "5m", "30s", "2h"
+  const intervalMatch = input.match(/^(\d+)(s|m|h)\s+(.+)$/);
+  let intervalMs: number | null = null;
+  let prompt: string;
+
+  if (intervalMatch) {
+    const [, num, unit, rest] = intervalMatch;
+    const multipliers: Record<string, number> = { s: 1000, m: 60000, h: 3600000 };
+    intervalMs = parseInt(num, 10) * multipliers[unit];
+    prompt = rest;
+  } else {
+    prompt = input;
+  }
+
+  const mode = intervalMs
+    ? `Fixed interval: ${intervalMatch![1]}${intervalMatch![2]}`
+    : "Dynamic (model self-paces via ScheduleWakeup)";
+
+  return {
+    output: `[loop] ${mode}\nPrompt: ${prompt}`,
+    handled: false,
+    prependToPrompt: intervalMs
+      ? `You are in LOOP MODE (fixed interval: ${intervalMs / 1000}s). Execute this task, then use ScheduleWakeup with delaySeconds=${intervalMs / 1000} to schedule the next iteration.\n\nTask: ${prompt}`
+      : `You are in LOOP MODE (dynamic pacing). Execute this task, then use ScheduleWakeup to schedule the next iteration at an appropriate interval. Choose your delay based on what you're waiting for. Omit the ScheduleWakeup call to end the loop.\n\nTask: ${prompt}`,
+  };
+});
+
 register("plan", "Enter plan mode", (_args, _ctx) => {
   const task = _args.trim();
   if (!task) {
@@ -588,7 +641,7 @@ register("plan", "Enter plan mode", (_args, _ctx) => {
   return {
     output: `[plan mode] ${task}`,
     handled: false,
-    prependToPrompt: `You are in PLAN MODE. Do NOT write any code yet. Instead, produce a detailed implementation plan as a numbered list covering: files to create/modify, key functions/types, data flow, and edge cases. Only after the plan is approved should you implement anything.\n\nTask: ${task}`,
+    prependToPrompt: `You are in PLAN MODE. Do NOT write any code yet.\n\n1. Call EnterPlanMode to create a plan file in .oh/plans/\n2. Write your detailed implementation plan to that file (files to create/modify, key functions/types, data flow, edge cases)\n3. When the plan is complete, call ExitPlanMode to signal readiness for review\n\nTask: ${task}`,
   };
 });
 
@@ -677,32 +730,38 @@ register("doctor", "Run diagnostic health checks", (_args, ctx) => {
     const ohDir = join(homedir(), ".oh");
     if (existsSync(ohDir)) {
       const sessionsDir = join(ohDir, "sessions");
-      const sessCount = existsSync(sessionsDir) ? readdirSync(sessionsDir).filter(f => f.endsWith('.json')).length : 0;
+      const sessCount = existsSync(sessionsDir)
+        ? readdirSync(sessionsDir).filter((f) => f.endsWith(".json")).length
+        : 0;
       lines.push(`  Sessions:      ${sessCount} saved`);
       if (sessCount > 80) issues.push(`${sessCount} saved sessions. Consider cleaning old ones.`);
 
       // Memory stats
       const memDir = join(ohDir, "memory");
-      const memCount = existsSync(memDir) ? readdirSync(memDir).filter(f => f.endsWith('.md')).length : 0;
+      const memCount = existsSync(memDir) ? readdirSync(memDir).filter((f) => f.endsWith(".md")).length : 0;
       lines.push(`  Memories:      ${memCount} global`);
 
       // Cron stats
       const cronDir = join(ohDir, "crons");
-      const cronCount = existsSync(cronDir) ? readdirSync(cronDir).filter(f => f.endsWith('.json')).length : 0;
+      const cronCount = existsSync(cronDir) ? readdirSync(cronDir).filter((f) => f.endsWith(".json")).length : 0;
       lines.push(`  Cron tasks:    ${cronCount}`);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Project-level stats
   try {
     const projMemDir = join(".oh", "memory");
-    const projMemCount = existsSync(projMemDir) ? readdirSync(projMemDir).filter(f => f.endsWith('.md')).length : 0;
+    const projMemCount = existsSync(projMemDir) ? readdirSync(projMemDir).filter((f) => f.endsWith(".md")).length : 0;
     if (projMemCount > 0) lines.push(`  Project mems:  ${projMemCount}`);
 
     const skillsDir = join(".oh", "skills");
-    const skillCount = existsSync(skillsDir) ? readdirSync(skillsDir).filter(f => f.endsWith('.md')).length : 0;
+    const skillCount = existsSync(skillsDir) ? readdirSync(skillsDir).filter((f) => f.endsWith(".md")).length : 0;
     if (skillCount > 0) lines.push(`  Skills:        ${skillCount}`);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Global config
   const globalCfg = existsSync(join(homedir(), ".oh", "config.yaml"));
@@ -710,22 +769,24 @@ register("doctor", "Run diagnostic health checks", (_args, ctx) => {
 
   // Verification config
   try {
-    const { getVerificationConfig } = require('../harness/verification.js');
+    const { getVerificationConfig } = require("../harness/verification.js");
     const vCfg = getVerificationConfig();
     if (vCfg?.enabled) {
       lines.push(`  Verification:  ✓ (${vCfg.rules.length} rules, mode: ${vCfg.mode})`);
     } else {
       lines.push(`  Verification:  off (no rules detected)`);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // Tools
   lines.push("");
-  lines.push(`  Tools:         ${ctx.messages.length > 0 ? 'ready' : 'loaded'}`);
+  lines.push(`  Tools:         ${ctx.messages.length > 0 ? "ready" : "loaded"}`);
 
   // Node.js version
   lines.push(`  Node.js:       ${process.version}`);
-  const [major] = process.version.slice(1).split('.').map(Number);
+  const [major] = process.version.slice(1).split(".").map(Number);
   if (major && major < 18) issues.push(`Node.js ${process.version} is below minimum (18+). Upgrade Node.js.`);
 
   // Issues summary
@@ -747,14 +808,25 @@ register("context", "Show context window usage breakdown", (_args, ctx) => {
   const ctxWindow = getContextWindow(ctx.model);
 
   // Categorize messages by type
-  let userTokens = 0, assistantTokens = 0, toolTokens = 0, systemTokens = 0;
+  let userTokens = 0,
+    assistantTokens = 0,
+    toolTokens = 0,
+    systemTokens = 0;
   for (const msg of ctx.messages) {
     const tokens = Math.ceil((msg.content?.length ?? 0) / 4);
     switch (msg.role) {
-      case 'user': userTokens += tokens; break;
-      case 'assistant': assistantTokens += tokens; break;
-      case 'tool': toolTokens += tokens; break;
-      case 'system': systemTokens += tokens; break;
+      case "user":
+        userTokens += tokens;
+        break;
+      case "assistant":
+        assistantTokens += tokens;
+        break;
+      case "tool":
+        toolTokens += tokens;
+        break;
+      case "system":
+        systemTokens += tokens;
+        break;
     }
   }
   const totalTokens = userTokens + assistantTokens + toolTokens + systemTokens;
@@ -764,34 +836,38 @@ register("context", "Show context window usage breakdown", (_args, ctx) => {
   // Visual bar (30 chars wide)
   const barWidth = 30;
   const filled = Math.round(usage * barWidth);
-  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barWidth - filled);
+  const bar = "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
 
   const pct = (n: number) => `${((n / ctxWindow) * 100).toFixed(1)}%`;
   const pad = (s: string, n: number) => s.padEnd(n);
 
   const lines = [
     `Context Window (${ctxWindow.toLocaleString()} tokens):`,
-    '',
-    `  ${pad('User messages:', 20)} ${userTokens.toLocaleString().padStart(8)} tokens  (${pct(userTokens)})`,
-    `  ${pad('Assistant:', 20)} ${assistantTokens.toLocaleString().padStart(8)} tokens  (${pct(assistantTokens)})`,
-    `  ${pad('Tool results:', 20)} ${toolTokens.toLocaleString().padStart(8)} tokens  (${pct(toolTokens)})`,
-    `  ${pad('System/info:', 20)} ${systemTokens.toLocaleString().padStart(8)} tokens  (${pct(systemTokens)})`,
-    '',
-    `  ${pad('Total used:', 20)} ${totalTokens.toLocaleString().padStart(8)} tokens  (${pct(totalTokens)})`,
-    `  ${pad('Free:', 20)} ${freeTokens.toLocaleString().padStart(8)} tokens  (${pct(freeTokens)})`,
-    '',
+    "",
+    `  ${pad("User messages:", 20)} ${userTokens.toLocaleString().padStart(8)} tokens  (${pct(userTokens)})`,
+    `  ${pad("Assistant:", 20)} ${assistantTokens.toLocaleString().padStart(8)} tokens  (${pct(assistantTokens)})`,
+    `  ${pad("Tool results:", 20)} ${toolTokens.toLocaleString().padStart(8)} tokens  (${pct(toolTokens)})`,
+    `  ${pad("System/info:", 20)} ${systemTokens.toLocaleString().padStart(8)} tokens  (${pct(systemTokens)})`,
+    "",
+    `  ${pad("Total used:", 20)} ${totalTokens.toLocaleString().padStart(8)} tokens  (${pct(totalTokens)})`,
+    `  ${pad("Free:", 20)} ${freeTokens.toLocaleString().padStart(8)} tokens  (${pct(freeTokens)})`,
+    "",
     `  ${bar}  ${Math.round(usage * 100)}%`,
-    '',
+    "",
     `  Messages: ${ctx.messages.length}  |  Compress at: ${Math.round(ctxWindow * 0.8).toLocaleString()} (80%)`,
   ];
 
-  return { output: lines.join('\n'), handled: true };
+  return { output: lines.join("\n"), handled: true };
 });
 
 register("mcp", "Show MCP server status", () => {
   const mcp = connectedMcpServers();
   if (mcp.length === 0) {
-    return { output: "No MCP servers connected.\nConfigure in .oh/config.yaml under mcpServers.\nRun /mcp-registry to browse available servers.", handled: true };
+    return {
+      output:
+        "No MCP servers connected.\nConfigure in .oh/config.yaml under mcpServers.\nRun /mcp-registry to browse available servers.",
+      handled: true,
+    };
   }
   const lines = [`MCP Servers (${mcp.length} connected):\n`];
   for (const name of mcp) {
@@ -802,12 +878,12 @@ register("mcp", "Show MCP server status", () => {
 });
 
 register("mcp-registry", "Browse and add MCP servers from the curated registry", (args) => {
-  const { searchRegistry, formatRegistry, generateConfigBlock, MCP_REGISTRY } = require('../mcp/registry.js');
+  const { searchRegistry, formatRegistry, generateConfigBlock, MCP_REGISTRY } = require("../mcp/registry.js");
   const query = args.trim();
 
   if (!query) {
     // Show full registry
-    const output = `MCP Server Registry (${MCP_REGISTRY.length} servers)\n${'─'.repeat(50)}\n\n${formatRegistry()}\n\nUsage:\n  /mcp-registry <name>    Show install config for a server\n  /mcp-registry <keyword> Search by name, description, or category`;
+    const output = `MCP Server Registry (${MCP_REGISTRY.length} servers)\n${"─".repeat(50)}\n\n${formatRegistry()}\n\nUsage:\n  /mcp-registry <name>    Show install config for a server\n  /mcp-registry <keyword> Search by name, description, or category`;
     return { output, handled: true };
   }
 
@@ -822,10 +898,10 @@ register("mcp-registry", "Browse and add MCP servers from the curated registry",
     const entry = results[0]!;
     const config = generateConfigBlock(entry);
     const envNote = entry.envVars?.length
-      ? `\n\nRequired environment variables:\n${entry.envVars.map((v: string) => `  - ${v}`).join('\n')}`
-      : '';
+      ? `\n\nRequired environment variables:\n${entry.envVars.map((v: string) => `  - ${v}`).join("\n")}`
+      : "";
     return {
-      output: `${entry.name} — ${entry.description}\nPackage: ${entry.package}\nRisk: ${entry.riskLevel ?? 'medium'}${envNote}\n\nAdd to .oh/config.yaml under mcpServers:\n\n${config}`,
+      output: `${entry.name} — ${entry.description}\nPackage: ${entry.package}\nRisk: ${entry.riskLevel ?? "medium"}${envNote}\n\nAdd to .oh/config.yaml under mcpServers:\n\n${config}`,
       handled: true,
     };
   }
@@ -836,15 +912,13 @@ register("mcp-registry", "Browse and add MCP servers from the curated registry",
 
 function setPinned(args: string, ctx: CommandContext, pinned: boolean): CommandResult {
   const idx = parseInt(args.trim(), 10);
-  if (isNaN(idx) || idx < 1 || idx > ctx.messages.length) {
-    return { output: `Usage: /${pinned ? 'pin' : 'unpin'} <message-number> (1-${ctx.messages.length})`, handled: true };
+  if (Number.isNaN(idx) || idx < 1 || idx > ctx.messages.length) {
+    return { output: `Usage: /${pinned ? "pin" : "unpin"} <message-number> (1-${ctx.messages.length})`, handled: true };
   }
   // Immutable update — replace message with updated meta
-  const updatedMessages = ctx.messages.map((m, i) =>
-    i === idx - 1 ? { ...m, meta: { ...m.meta, pinned } } : m
-  );
+  const updatedMessages = ctx.messages.map((m, i) => (i === idx - 1 ? { ...m, meta: { ...m.meta, pinned } } : m));
   return {
-    output: `Message #${idx} ${pinned ? 'pinned' : 'unpinned'}.`,
+    output: `Message #${idx} ${pinned ? "pinned" : "unpinned"}.`,
     handled: true,
     compactedMessages: updatedMessages,
   };
@@ -854,60 +928,79 @@ register("pin", "Pin a message (survives /compact)", (args, ctx) => setPinned(ar
 register("unpin", "Unpin a message", (args, ctx) => setPinned(args, ctx, false));
 
 register("plugins", "Manage plugins: list, search, install, uninstall, marketplace", (args) => {
-  const { discoverPlugins, discoverSkills } = require('../harness/plugins.js');
+  const { discoverPlugins, discoverSkills } = require("../harness/plugins.js");
   const {
-    searchMarketplace, installPlugin, uninstallPlugin,
-    getInstalledPlugins, listMarketplaces, addMarketplace, removeMarketplace,
-    formatMarketplaceSearch, formatInstalledPlugins,
-  } = require('../harness/marketplace.js');
+    searchMarketplace,
+    installPlugin,
+    uninstallPlugin,
+    getInstalledPlugins,
+    listMarketplaces,
+    addMarketplace,
+    removeMarketplace,
+    formatMarketplaceSearch,
+    formatInstalledPlugins,
+  } = require("../harness/marketplace.js");
 
   const parts = args.trim().split(/\s+/);
-  const subcommand = parts[0] ?? '';
-  const rest = parts.slice(1).join(' ');
+  const subcommand = parts[0] ?? "";
+  const rest = parts.slice(1).join(" ");
 
   // /plugins marketplace add <source>
-  if (subcommand === 'marketplace') {
+  if (subcommand === "marketplace") {
     const action = parts[1];
-    const source = parts.slice(2).join(' ');
-    if (action === 'add' && source) {
+    const source = parts.slice(2).join(" ");
+    if (action === "add" && source) {
       const mp = addMarketplace(source);
       if (mp) return { output: `Added marketplace "${mp.name}" (${mp.plugins.length} plugins)`, handled: true };
       return { output: `Failed to add marketplace from "${source}"`, handled: true };
     }
-    if (action === 'remove' && source) {
-      return { output: removeMarketplace(source) ? `Removed marketplace "${source}"` : `Marketplace "${source}" not found`, handled: true };
+    if (action === "remove" && source) {
+      return {
+        output: removeMarketplace(source) ? `Removed marketplace "${source}"` : `Marketplace "${source}" not found`,
+        handled: true,
+      };
     }
     // List marketplaces
     const mps = listMarketplaces();
     if (mps.length === 0) {
-      return { output: 'No marketplaces configured.\n\nAdd one:\n  /plugins marketplace add owner/repo\n  /plugins marketplace add https://example.com/plugins', handled: true };
+      return {
+        output:
+          "No marketplaces configured.\n\nAdd one:\n  /plugins marketplace add owner/repo\n  /plugins marketplace add https://example.com/plugins",
+        handled: true,
+      };
     }
     const lines = [`Marketplaces (${mps.length}):\n`];
     for (const mp of mps) {
       lines.push(`  ${mp.name} — ${mp.plugins.length} plugins`);
     }
-    return { output: lines.join('\n'), handled: true };
+    return { output: lines.join("\n"), handled: true };
   }
 
   // /plugins search <query>
-  if (subcommand === 'search') {
-    const query = rest || 'all';
-    const results = searchMarketplace(query === 'all' ? '' : query);
+  if (subcommand === "search") {
+    const query = rest || "all";
+    const results = searchMarketplace(query === "all" ? "" : query);
     return { output: formatMarketplaceSearch(results), handled: true };
   }
 
   // /plugins install <name>
-  if (subcommand === 'install' && rest) {
-    const [name, marketplace] = rest.split('@');
+  if (subcommand === "install" && rest) {
+    const [name, marketplace] = rest.split("@");
     const result = installPlugin(name!, marketplace);
     if (result) {
-      return { output: `Installed ${result.name}@${result.version} from ${result.marketplace}\nCached at: ${result.cachePath}`, handled: true };
+      return {
+        output: `Installed ${result.name}@${result.version} from ${result.marketplace}\nCached at: ${result.cachePath}`,
+        handled: true,
+      };
     }
-    return { output: `Failed to install "${rest}". Is it listed in a marketplace?\nRun /plugins search ${name} to check.`, handled: true };
+    return {
+      output: `Failed to install "${rest}". Is it listed in a marketplace?\nRun /plugins search ${name} to check.`,
+      handled: true,
+    };
   }
 
   // /plugins uninstall <name>
-  if (subcommand === 'uninstall' && rest) {
+  if (subcommand === "uninstall" && rest) {
     return { output: uninstallPlugin(rest) ? `Uninstalled "${rest}"` : `Plugin "${rest}" not found`, handled: true };
   }
 
@@ -919,38 +1012,116 @@ register("plugins", "Manage plugins: list, search, install, uninstall, marketpla
 
   if (marketplacePlugins.length > 0) {
     lines.push(formatInstalledPlugins(marketplacePlugins));
-    lines.push('');
+    lines.push("");
   }
 
   if (plugins.length > 0) {
     lines.push(`Local Plugins (${plugins.length}):`);
     for (const p of plugins) {
-      lines.push(`  ${p.name}@${p.version} — ${p.description || 'no description'}`);
+      lines.push(`  ${p.name}@${p.version} — ${p.description || "no description"}`);
     }
-    lines.push('');
+    lines.push("");
   }
 
   if (skills.length > 0) {
     lines.push(`Skills (${skills.length}):`);
     for (const s of skills) {
-      lines.push(`  ${s.source}:${s.name} — ${s.description || ''}`);
+      lines.push(`  ${s.source}:${s.name} — ${s.description || ""}`);
     }
-    lines.push('');
+    lines.push("");
   }
 
   if (lines.length === 0) {
-    lines.push('No plugins or skills installed.');
+    lines.push("No plugins or skills installed.");
   }
 
-  lines.push('');
-  lines.push('Commands:');
-  lines.push('  /plugins search <query>          Search marketplaces');
-  lines.push('  /plugins install <name>          Install from marketplace');
-  lines.push('  /plugins uninstall <name>        Remove a plugin');
-  lines.push('  /plugins marketplace add <src>   Add a marketplace');
-  lines.push('  /plugins marketplace             List marketplaces');
+  lines.push("");
+  lines.push("Commands:");
+  lines.push("  /plugins search <query>          Search marketplaces");
+  lines.push("  /plugins install <name>          Install from marketplace");
+  lines.push("  /plugins uninstall <name>        Remove a plugin");
+  lines.push("  /plugins marketplace add <src>   Add a marketplace");
+  lines.push("  /plugins marketplace             List marketplaces");
 
-  return { output: lines.join('\n'), handled: true };
+  return { output: lines.join("\n"), handled: true };
+});
+
+// ── Project Init ──
+
+register("init", "Initialize project with .oh/ config", () => {
+  const ohDir = join(process.cwd(), ".oh");
+  if (existsSync(ohDir)) {
+    return { output: ".oh/ directory already exists. Project is already initialized.", handled: true };
+  }
+
+  mkdirSync(ohDir, { recursive: true });
+
+  const rulesPath = join(ohDir, "RULES.md");
+  if (!existsSync(rulesPath)) {
+    writeFileSync(
+      rulesPath,
+      `# Project Rules
+
+<!-- Add project-specific instructions here. These are loaded into every session. -->
+<!-- Examples: coding conventions, testing requirements, deployment guidelines. -->
+`,
+    );
+  }
+
+  const configPath = join(ohDir, "config.yaml");
+  if (!existsSync(configPath)) {
+    writeFileSync(
+      configPath,
+      `# OpenHarness project config
+# provider: ollama
+# model: llama3
+# permissionMode: ask
+`,
+    );
+  }
+
+  return {
+    output: `Initialized .oh/ with:\n  .oh/RULES.md — project rules\n  .oh/config.yaml — project config\n\nEdit these files to customize your project.`,
+    handled: true,
+  };
+});
+
+// ── Permissions ──
+
+register("permissions", "View or change permission mode", (args, ctx) => {
+  const mode = args.trim().toLowerCase();
+  if (!mode) {
+    return {
+      output: `Current permission mode: ${ctx.permissionMode}\n\nAvailable modes:\n  ask            Prompt for medium/high risk (default)\n  trust          Auto-approve everything\n  deny           Only low-risk read-only\n  acceptEdits    Auto-approve file edits\n  plan           Read-only mode\n  auto           Auto-approve, block dangerous bash\n  bypassPermissions  CI/CD only`,
+      handled: true,
+    };
+  }
+  const valid = ["ask", "trust", "deny", "acceptedits", "plan", "auto", "bypasspermissions"];
+  if (!valid.includes(mode)) {
+    return { output: `Unknown mode: ${mode}. Valid: ${valid.join(", ")}`, handled: true };
+  }
+  return {
+    output: `Permission mode set to: ${mode}\n(Note: takes effect for new tool calls in this session)`,
+    handled: true,
+  };
+});
+
+register("allowed-tools", "View tool permission rules", () => {
+  const config = readOhConfig();
+  const rules = config?.toolPermissions;
+  if (!rules || rules.length === 0) {
+    return {
+      output:
+        'No custom tool permission rules configured.\n\nAdd rules to .oh/config.yaml:\n\ntoolPermissions:\n  - tool: Bash\n    action: ask\n    pattern: "^rm .*"',
+      handled: true,
+    };
+  }
+  const lines = rules.map((r: any) => {
+    const parts = [`  ${r.tool}: ${r.action}`];
+    if (r.pattern) parts.push(`(pattern: ${r.pattern})`);
+    return parts.join(" ");
+  });
+  return { output: `Tool permission rules:\n${lines.join("\n")}`, handled: true };
 });
 
 // ── Command Parser ──
@@ -968,7 +1139,10 @@ export function processSlashCommand(input: string, context: CommandContext): Com
 
   // Resolve aliases
   const aliases: Record<string, string> = {
-    h: 'help', c: 'commit', m: 'model', s: 'status',
+    h: "help",
+    c: "commit",
+    m: "model",
+    s: "status",
   };
   const resolved = aliases[name] ?? name;
   const cmd = commands.get(resolved);

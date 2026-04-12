@@ -1,9 +1,9 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSession, saveSession, loadSession, listSessions } from "./session.js";
+import test from "node:test";
+import { createSession, listSessions, loadSession, saveSession } from "./session.js";
 
 test("createSession() creates with id and empty messages", () => {
   const s = createSession("openai", "gpt-4o");

@@ -3,37 +3,35 @@
  * Uses node:test + node:assert/strict.
  */
 
-import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-
-import { makeTmpDir, writeFile, mockFetch, createMockTool } from "../test-helpers.js";
+import { afterEach, describe, it } from "node:test";
 import type { ToolContext } from "../Tool.js";
-
+import { createMockTool, makeTmpDir, mockFetch, writeFile } from "../test-helpers.js";
+import { AgentTool } from "./AgentTool/index.js";
+import { AskUserTool } from "./AskUserTool/index.js";
 // Tool imports
 import { BashTool } from "./BashTool/index.js";
+import { DiagnosticsTool } from "./DiagnosticsTool/index.js";
+import { EnterPlanModeTool } from "./EnterPlanModeTool/index.js";
+import { ExitPlanModeTool } from "./ExitPlanModeTool/index.js";
 import { FileReadTool } from "./FileReadTool/index.js";
 import { FileWriteTool } from "./FileWriteTool/index.js";
 import { GlobTool } from "./GlobTool/index.js";
 import { GrepTool } from "./GrepTool/index.js";
-import { LSTool } from "./LSTool/index.js";
-import { WebSearchTool } from "./WebSearchTool/index.js";
-import { TaskCreateTool } from "./TaskCreateTool/index.js";
-import { TaskUpdateTool } from "./TaskUpdateTool/index.js";
-import { TaskListTool } from "./TaskListTool/index.js";
-import { TaskGetTool } from "./TaskGetTool/index.js";
-import { TaskStopTool } from "./TaskStopTool/index.js";
-import { TaskOutputTool } from "./TaskOutputTool/index.js";
-import { AskUserTool } from "./AskUserTool/index.js";
-import { SkillTool } from "./SkillTool/index.js";
-import { AgentTool } from "./AgentTool/index.js";
-import { EnterPlanModeTool } from "./EnterPlanModeTool/index.js";
-import { ExitPlanModeTool } from "./ExitPlanModeTool/index.js";
-import { NotebookEditTool } from "./NotebookEditTool/index.js";
 import { ImageReadTool } from "./ImageReadTool/index.js";
-import { DiagnosticsTool } from "./DiagnosticsTool/index.js";
+import { LSTool } from "./LSTool/index.js";
+import { NotebookEditTool } from "./NotebookEditTool/index.js";
 import { ParallelAgentTool } from "./ParallelAgentTool/index.js";
+import { SkillTool } from "./SkillTool/index.js";
+import { TaskCreateTool } from "./TaskCreateTool/index.js";
+import { TaskGetTool } from "./TaskGetTool/index.js";
+import { TaskListTool } from "./TaskListTool/index.js";
+import { TaskOutputTool } from "./TaskOutputTool/index.js";
+import { TaskStopTool } from "./TaskStopTool/index.js";
+import { TaskUpdateTool } from "./TaskUpdateTool/index.js";
 import { ToolSearchTool } from "./ToolSearchTool/index.js";
+import { WebSearchTool } from "./WebSearchTool/index.js";
 
 function ctx(tmpdir: string, extra: Partial<ToolContext> = {}): ToolContext {
   return { workingDir: tmpdir, ...extra };
@@ -66,10 +64,7 @@ describe("tools-basic", () => {
   it("FileWriteTool — writes a file", async () => {
     const tmp = makeTmpDir();
     const filePath = join(tmp, "output.txt");
-    const result = await FileWriteTool.call(
-      { file_path: filePath, content: "test content" },
-      ctx(tmp),
-    );
+    const result = await FileWriteTool.call({ file_path: filePath, content: "test content" }, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes(filePath));
   });
@@ -117,10 +112,7 @@ describe("tools-basic", () => {
 
   it("TaskCreateTool — creates a task", async () => {
     const tmp = makeTmpDir();
-    const result = await TaskCreateTool.call(
-      { subject: "test task", description: "a test description" },
-      ctx(tmp),
-    );
+    const result = await TaskCreateTool.call({ subject: "test task", description: "a test description" }, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("Task #1"));
   });
@@ -128,24 +120,15 @@ describe("tools-basic", () => {
   it("TaskUpdateTool — updates an existing task", async () => {
     const tmp = makeTmpDir();
     // Create a task first
-    await TaskCreateTool.call(
-      { subject: "task to update", description: "original desc" },
-      ctx(tmp),
-    );
-    const result = await TaskUpdateTool.call(
-      { taskId: 1, status: "completed" },
-      ctx(tmp),
-    );
+    await TaskCreateTool.call({ subject: "task to update", description: "original desc" }, ctx(tmp));
+    const result = await TaskUpdateTool.call({ taskId: 1, status: "completed" }, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("completed"));
   });
 
   it("TaskListTool — lists tasks", async () => {
     const tmp = makeTmpDir();
-    await TaskCreateTool.call(
-      { subject: "listed task", description: "desc" },
-      ctx(tmp),
-    );
+    await TaskCreateTool.call({ subject: "listed task", description: "desc" }, ctx(tmp));
     const result = await TaskListTool.call({}, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("listed task"));
@@ -153,10 +136,7 @@ describe("tools-basic", () => {
 
   it("AskUserTool — headless fallback", async () => {
     const tmp = makeTmpDir();
-    const result = await AskUserTool.call(
-      { question: "What color?" },
-      ctx(tmp),
-    );
+    const result = await AskUserTool.call({ question: "What color?" }, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("What color?"));
   });
@@ -169,19 +149,27 @@ describe("tools-basic", () => {
 
   it("AgentTool — errors without provider in context", async () => {
     const tmp = makeTmpDir();
-    const result = await AgentTool.call(
-      { prompt: "do something" },
-      ctx(tmp),
-    );
+    const result = await AgentTool.call({ prompt: "do something" }, ctx(tmp));
     assert.equal(result.isError, true);
     assert.ok(result.output.includes("unavailable"));
   });
 
-  it("EnterPlanModeTool — creates plan mode", async () => {
+  it("EnterPlanModeTool — creates plan file in .oh/plans/", async () => {
     const tmp = makeTmpDir();
     const result = await EnterPlanModeTool.call({}, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("Plan mode entered"));
+    assert.ok(result.output.includes(".oh"));
+    assert.ok(result.output.includes("plans"));
+    // Verify file was actually created
+    const { readdirSync } = await import("node:fs");
+    const plansDir = join(tmp, ".oh", "plans");
+    const files = readdirSync(plansDir);
+    assert.equal(files.length, 1);
+    assert.ok(files[0].endsWith(".md"));
+    // Verify filename matches adjective-verb-noun pattern
+    const name = files[0].replace(".md", "");
+    assert.ok(name.split("-").length === 3, `Expected 3-part name, got: ${name}`);
   });
 
   it("ExitPlanModeTool — exits plan mode", async () => {
@@ -191,12 +179,26 @@ describe("tools-basic", () => {
     assert.ok(result.output.includes("Plan mode exited"));
   });
 
+  it("ExitPlanModeTool — accepts allowedPrompts", async () => {
+    const tmp = makeTmpDir();
+    const result = await ExitPlanModeTool.call(
+      {
+        allowedPrompts: [
+          { tool: "Bash" as const, prompt: "run tests" },
+          { tool: "Bash" as const, prompt: "install dependencies" },
+        ],
+      },
+      ctx(tmp),
+    );
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("run tests"));
+    assert.ok(result.output.includes("install dependencies"));
+  });
+
   it("NotebookEditTool — edits a notebook cell", async () => {
     const tmp = makeTmpDir();
     const notebook = {
-      cells: [
-        { cell_type: "code", source: ["print('old')"], metadata: {}, outputs: [] },
-      ],
+      cells: [{ cell_type: "code", source: ["print('old')"], metadata: {}, outputs: [] }],
       metadata: {},
       nbformat: 4,
       nbformat_minor: 2,
@@ -220,20 +222,14 @@ describe("tools-basic", () => {
 
   it("DiagnosticsTool — errors without LSP server", async () => {
     const tmp = makeTmpDir();
-    const result = await DiagnosticsTool.call(
-      { file_path: "/nonexistent/file.txt", action: "diagnostics" },
-      ctx(tmp),
-    );
+    const result = await DiagnosticsTool.call({ file_path: "/nonexistent/file.txt", action: "diagnostics" }, ctx(tmp));
     assert.equal(result.isError, true);
     assert.ok(result.output.includes("No language server"));
   });
 
   it("ParallelAgentTool — errors without provider in context", async () => {
     const tmp = makeTmpDir();
-    const result = await ParallelAgentTool.call(
-      { tasks: [{ id: "a", prompt: "test" }] },
-      ctx(tmp),
-    );
+    const result = await ParallelAgentTool.call({ tasks: [{ id: "a", prompt: "test" }] }, ctx(tmp));
     assert.equal(result.isError, true);
     assert.ok(result.output.includes("unavailable"));
   });
@@ -241,10 +237,7 @@ describe("tools-basic", () => {
   it("ToolSearchTool — finds a mock tool by name", async () => {
     const tmp = makeTmpDir();
     const mock = createMockTool("MockAlpha");
-    const result = await ToolSearchTool.call(
-      { query: "Mock", maxResults: 5 },
-      ctx(tmp, { tools: [mock] }),
-    );
+    const result = await ToolSearchTool.call({ query: "Mock", maxResults: 5 }, ctx(tmp, { tools: [mock] }));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("MockAlpha"));
   });
@@ -389,7 +382,7 @@ describe("tools-basic", () => {
     writeFile(tmp, "f3.txt", "match");
     const result = await GrepTool.call({ pattern: "match", path: tmp, head_limit: 2 }, ctx(tmp));
     assert.equal(result.isError, false);
-    const fileCount = result.output.split("\n").filter(l => l.trim()).length;
+    const fileCount = result.output.split("\n").filter((l) => l.trim()).length;
     assert.ok(fileCount <= 2);
   });
 
@@ -466,5 +459,157 @@ describe("tools-basic", () => {
     const result = await FileWriteTool.call({ file_path: fp, content: "new" }, ctx(tmp));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("Overwrote"));
+  });
+
+  // ── ScheduleWakeupTool ──
+
+  it("ScheduleWakeupTool — schedules a wakeup and clamps delay", async () => {
+    const { ScheduleWakeupTool, consumeWakeup, cancelWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const tmp = makeTmpDir();
+
+    // Schedule a wakeup with delay under minimum (should clamp to 60)
+    const result = await ScheduleWakeupTool.call(
+      {
+        delaySeconds: 10,
+        reason: "checking build",
+        prompt: "check build status",
+      },
+      ctx(tmp),
+    );
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("60s"));
+    assert.ok(result.output.includes("checking build"));
+
+    // Consume the wakeup
+    const wakeup = consumeWakeup();
+    assert.ok(wakeup);
+    assert.equal(wakeup!.delaySeconds, 60);
+    assert.equal(wakeup!.prompt, "check build status");
+
+    // Second consume returns null (already consumed)
+    assert.equal(consumeWakeup(), null);
+  });
+
+  it("ScheduleWakeupTool — clamps delay to max 3600", async () => {
+    const { ScheduleWakeupTool, consumeWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const tmp = makeTmpDir();
+    await ScheduleWakeupTool.call(
+      {
+        delaySeconds: 9999,
+        reason: "long wait",
+        prompt: "check again",
+      },
+      ctx(tmp),
+    );
+    const wakeup = consumeWakeup();
+    assert.ok(wakeup);
+    assert.equal(wakeup!.delaySeconds, 3600);
+  });
+
+  it("ScheduleWakeupTool — cache warning for 300s boundary", async () => {
+    const { ScheduleWakeupTool, consumeWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const tmp = makeTmpDir();
+    const result = await ScheduleWakeupTool.call(
+      {
+        delaySeconds: 300,
+        reason: "boundary test",
+        prompt: "test",
+      },
+      ctx(tmp),
+    );
+    assert.ok(result.output.includes("cache TTL boundary") || result.output.includes("warning"));
+    consumeWakeup(); // cleanup
+  });
+
+  // ── suggestDelay utility ──
+
+  it("suggestDelay — short wait stays in cache window", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    const delay = suggestDelay(120);
+    assert.ok(delay >= 60 && delay <= 270, `Expected 60-270, got ${delay}`);
+  });
+
+  it("suggestDelay — avoids 300s boundary", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    const delay = suggestDelay(300);
+    assert.equal(delay, 270, "Should drop to 270 to avoid cache boundary");
+  });
+
+  it("suggestDelay — idle polling returns 1200", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    const delay = suggestDelay(0, true);
+    assert.equal(delay, 1200);
+  });
+
+  it("suggestDelay — long wait capped at 3600", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    const delay = suggestDelay(9999);
+    assert.equal(delay, 3600);
+  });
+
+  it("ScheduleWakeupTool — output shows cache zone label", async () => {
+    const { ScheduleWakeupTool, consumeWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const tmp = makeTmpDir();
+    const result = await ScheduleWakeupTool.call(
+      {
+        delaySeconds: 120,
+        reason: "checking CI",
+        prompt: "check CI",
+      },
+      ctx(tmp),
+    );
+    assert.ok(result.output.includes("cache:warm"));
+    consumeWakeup();
+  });
+
+  // ── Agent Continuation Registry ──
+
+  it("AgentMessageBus — registers and completes background agents", async () => {
+    const { AgentMessageBus } = await import("../services/agent-messaging.js");
+    const bus = new AgentMessageBus();
+
+    bus.registerBackgroundAgent("bg-1", "code-reviewer");
+    const agent = bus.getBackgroundAgent("bg-1");
+    assert.ok(agent);
+    assert.equal(agent!.status, "running");
+    assert.equal(agent!.role, "code-reviewer");
+
+    // Send message to background agent
+    assert.equal(bus.sendToBackgroundAgent("bg-1", "how's it going?"), true);
+    assert.equal(bus.sendToBackgroundAgent("bg-999", "hello"), false);
+
+    // Drain messages
+    const msgs = bus.drainBackgroundMessages("bg-1");
+    assert.equal(msgs.length, 1);
+    assert.equal(msgs[0], "how's it going?");
+    assert.equal(bus.drainBackgroundMessages("bg-1").length, 0);
+
+    // Complete the agent
+    bus.completeBackgroundAgent("bg-1", "review done");
+    const completed = bus.getBackgroundAgent("bg-1");
+    assert.equal(completed!.status, "completed");
+    assert.equal(completed!.result, "review done");
+    assert.ok(completed!.completedAt);
+  });
+
+  it("AgentMessageBus — errors background agents", async () => {
+    const { AgentMessageBus } = await import("../services/agent-messaging.js");
+    const bus = new AgentMessageBus();
+
+    bus.registerBackgroundAgent("bg-err", "debugger");
+    bus.errorBackgroundAgent("bg-err", "timeout");
+    const agent = bus.getBackgroundAgent("bg-err");
+    assert.equal(agent!.status, "error");
+    assert.equal(agent!.result, "timeout");
+  });
+
+  it("AgentMessageBus — lists all background agents", async () => {
+    const { AgentMessageBus } = await import("../services/agent-messaging.js");
+    const bus = new AgentMessageBus();
+
+    bus.registerBackgroundAgent("a1", "reviewer");
+    bus.registerBackgroundAgent("a2", "tester");
+    const agents = bus.getBackgroundAgents();
+    assert.equal(agents.length, 2);
   });
 });

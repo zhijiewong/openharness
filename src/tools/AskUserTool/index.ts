@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Tool, ToolResult, ToolContext } from "../../Tool.js";
+import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
   question: z.string(),
@@ -29,7 +29,7 @@ export const AskUserTool: Tool<typeof inputSchema> = {
     // Headless fallback — return question as text so LLM can see it
     let output = `[AskUser] ${input.question}`;
     if (input.options && input.options.length > 0) {
-      output += "\nOptions:\n" + input.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n");
+      output += `\nOptions:\n${input.options.map((o, i) => `  ${i + 1}. ${o}`).join("\n")}`;
     }
     output += "\n(No interactive session available — please answer in your next message.)";
     return { output, isError: false };

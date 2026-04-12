@@ -2,10 +2,10 @@
  * Tests for shared filesystem utilities — walkDir and matchGlob.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { makeTmpDir, writeFile } from "../test-helpers.js";
-import { walkDir, matchGlob } from "./fs.js";
+import { matchGlob, walkDir } from "./fs.js";
 
 describe("walkDir", () => {
   it("finds files in a flat directory", async () => {
@@ -14,8 +14,8 @@ describe("walkDir", () => {
     writeFile(tmp, "b.txt", "b");
     const files = await walkDir(tmp);
     assert.equal(files.length, 2);
-    assert.ok(files.some(f => f.endsWith("a.txt")));
-    assert.ok(files.some(f => f.endsWith("b.txt")));
+    assert.ok(files.some((f) => f.endsWith("a.txt")));
+    assert.ok(files.some((f) => f.endsWith("b.txt")));
   });
 
   it("recurses into subdirectories", async () => {
@@ -25,7 +25,7 @@ describe("walkDir", () => {
     writeFile(tmp, "sub/deep/deeper.txt", "d");
     const files = await walkDir(tmp);
     assert.equal(files.length, 3);
-    assert.ok(files.some(f => f.endsWith("deeper.txt")));
+    assert.ok(files.some((f) => f.endsWith("deeper.txt")));
   });
 
   it("skips dotfiles and dotdirs", async () => {

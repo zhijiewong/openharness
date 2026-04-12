@@ -1,21 +1,21 @@
-import type { CompanionConfig, Needs } from './types.js';
-import type { CybergotchiEventType } from './events.js';
+import type { CybergotchiEventType } from "./events.js";
+import type { CompanionConfig, Needs } from "./types.js";
 
 // Decay rates per hour
 const DECAY_PER_HOUR: Needs = {
-  hunger:    5,
-  energy:    3,
+  hunger: 5,
+  energy: 3,
   happiness: 2,
 };
 
 // Event effects on needs
 const EVENT_EFFECTS: Partial<Record<CybergotchiEventType, Partial<Needs>>> = {
-  toolError:     { happiness: -10 },
-  toolSuccess:   { happiness: +5 },
-  taskComplete:  { happiness: +15 },
-  commit:        { happiness: +10 },
+  toolError: { happiness: -10 },
+  toolSuccess: { happiness: +5 },
+  taskComplete: { happiness: +15 },
+  commit: { happiness: +10 },
   userAddressed: { happiness: +5 },
-  longWait:      { energy: -5 },
+  longWait: { energy: -5 },
 };
 
 function clamp(val: number): number {
@@ -28,8 +28,8 @@ export function decayNeeds(config: CompanionConfig): void {
   const elapsedHours = (now - config.needsUpdatedAt) / 3_600_000;
   if (elapsedHours < 0.001) return; // skip tiny ticks
 
-  config.needs.hunger    = clamp(config.needs.hunger    - DECAY_PER_HOUR.hunger    * elapsedHours);
-  config.needs.energy    = clamp(config.needs.energy    - DECAY_PER_HOUR.energy    * elapsedHours);
+  config.needs.hunger = clamp(config.needs.hunger - DECAY_PER_HOUR.hunger * elapsedHours);
+  config.needs.energy = clamp(config.needs.energy - DECAY_PER_HOUR.energy * elapsedHours);
   config.needs.happiness = clamp(config.needs.happiness - DECAY_PER_HOUR.happiness * elapsedHours);
   config.needsUpdatedAt = now;
 }
@@ -55,24 +55,24 @@ export function applyEvent(config: CompanionConfig, type: CybergotchiEventType):
   let milestoneSpeech: string | null = null;
 
   // Streak tracking
-  if (type === 'toolSuccess') {
+  if (type === "toolSuccess") {
     config.currentStreak += 1;
     if (config.currentStreak > config.lifetime.longestStreak) {
       config.lifetime.longestStreak = config.currentStreak;
       if (STREAK_MILESTONES.includes(config.currentStreak)) {
         milestoneSpeech = `🔥 ${config.currentStreak} streak! New record!`;
-        process.stdout.write('\x07'); // terminal bell
+        process.stdout.write("\x07"); // terminal bell
       }
     } else if (STREAK_MILESTONES.includes(config.currentStreak)) {
       milestoneSpeech = `🔥 ${config.currentStreak} in a row!`;
-      process.stdout.write('\x07');
+      process.stdout.write("\x07");
     }
-  } else if (type === 'toolError') {
+  } else if (type === "toolError") {
     config.currentStreak = 0;
     config.lifetime.totalErrors += 1;
-  } else if (type === 'commit') {
+  } else if (type === "commit") {
     config.lifetime.totalCommits += 1;
-  } else if (type === 'taskComplete') {
+  } else if (type === "taskComplete") {
     config.lifetime.totalTasksCompleted += 1;
   }
 
@@ -82,9 +82,7 @@ export function applyEvent(config: CompanionConfig, type: CybergotchiEventType):
   const newStage: 0 | 1 | 2 = stage2 ? 2 : stage1 ? 1 : 0;
   if (newStage > config.evolutionStage) {
     config.evolutionStage = newStage;
-    milestoneSpeech = newStage === 2
-      ? "LEGENDARY FORM UNLOCKED!"
-      : "I'm... evolving?!";
+    milestoneSpeech = newStage === 2 ? "LEGENDARY FORM UNLOCKED!" : "I'm... evolving?!";
   }
 
   return milestoneSpeech;

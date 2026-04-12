@@ -5,8 +5,8 @@
  * State is modified via setState() which notifies subscribers.
  */
 
-import type { Message } from '../types/message.js';
-import type { Session } from './session.js';
+import type { Message } from "../types/message.js";
+import type { Session } from "./session.js";
 
 export type REPLState = {
   // Core conversation
@@ -21,7 +21,7 @@ export type REPLState = {
   historyIndex: number;
 
   // UI modes
-  vimMode: 'normal' | 'insert' | null;
+  vimMode: "normal" | "insert" | null;
   fastMode: boolean;
   companionVisible: boolean;
 
@@ -44,8 +44,8 @@ export function createInitialState(overrides?: Partial<REPLState>): REPLState {
   return {
     messages: [],
     loading: false,
-    currentModel: '',
-    inputText: '',
+    currentModel: "",
+    inputText: "",
     inputCursor: 0,
     inputHistory: [],
     historyIndex: -1,
@@ -89,14 +89,16 @@ export function createStore(initial?: Partial<REPLState>): Store {
     getState: () => state,
 
     setState(partial) {
-      const updates = typeof partial === 'function' ? partial(state) : partial;
+      const updates = typeof partial === "function" ? partial(state) : partial;
       state = { ...state, ...updates };
       for (const fn of subscribers) fn(state);
     },
 
     subscribe(fn) {
       subscribers.add(fn);
-      return () => { subscribers.delete(fn); };
+      return () => {
+        subscribers.delete(fn);
+      };
     },
   };
 }

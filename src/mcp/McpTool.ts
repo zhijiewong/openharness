@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import type { Tool, ToolResult, ToolContext } from '../Tool.js';
-import type { McpClient } from './client.js';
-import type { McpToolDef } from './types.js';
+import { z } from "zod";
+import type { Tool, ToolContext, ToolResult } from "../Tool.js";
+import type { McpClient } from "./client.js";
+import type { McpToolDef } from "./types.js";
 
 /** Wraps an MCP tool as an OpenHarness Tool */
 export class McpTool implements Tool<z.ZodType> {
@@ -25,14 +25,18 @@ export class McpTool implements Tool<z.ZodType> {
     const required = new Set(def.inputSchema.required ?? []);
     const shape: Record<string, z.ZodType> = {};
     for (const [key, val] of Object.entries(props)) {
-      const base: z.ZodType = val.type === 'number' ? z.number() : val.type === 'boolean' ? z.boolean() : z.string();
+      const base: z.ZodType = val.type === "number" ? z.number() : val.type === "boolean" ? z.boolean() : z.string();
       shape[key] = required.has(key) ? base : base.optional();
     }
     this.inputSchema = z.object(shape);
   }
 
-  isReadOnly(_input: unknown): boolean { return false; }
-  isConcurrencySafe(_input: unknown): boolean { return false; }
+  isReadOnly(_input: unknown): boolean {
+    return false;
+  }
+  isConcurrencySafe(_input: unknown): boolean {
+    return false;
+  }
 
   async call(input: Record<string, unknown>, _context: ToolContext): Promise<ToolResult> {
     try {

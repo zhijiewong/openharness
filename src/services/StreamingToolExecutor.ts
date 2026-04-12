@@ -3,10 +3,10 @@
  * with permission checks and queue management.
  */
 
-import type { ToolCall } from "../types/message.js";
-import type { Tool, ToolResult, ToolContext, Tools } from "../Tool.js";
+import type { ToolContext, ToolResult, Tools } from "../Tool.js";
 import { findToolByName } from "../Tool.js";
-import type { PermissionMode, AskUserFn } from "../types/permissions.js";
+import type { ToolCall } from "../types/message.js";
+import type { AskUserFn, PermissionMode } from "../types/permissions.js";
 import { checkPermission } from "../types/permissions.js";
 
 type ToolStatus = "queued" | "executing" | "completed" | "yielded";
@@ -81,11 +81,7 @@ export class StreamingToolExecutor {
     if (!perm.allowed && perm.reason === "needs-approval" && this.askUser) {
       const { formatToolArgs } = await import("../utils/tool-summary.js");
       const description = formatToolArgs(tool.name, tracked.toolCall.arguments as Record<string, unknown>);
-      const allowed = await this.askUser(
-        tool.name,
-        description,
-        tool.riskLevel,
-      );
+      const allowed = await this.askUser(tool.name, description, tool.riskLevel);
       if (!allowed) {
         tracked.result = { output: "Permission denied.", isError: true };
         tracked.status = "completed";
@@ -118,15 +114,19 @@ export class StreamingToolExecutor {
       ...this.context,
       callId,
       abortSignal: this.abortSignal,
-      onOutputChunk: (id, chunk) => { this.outputChunks.push({ callId: id, chunk }); },
+      onOutputChunk: (id, chunk) => {
+        this.outputChunks.push({ callId: id, chunk });
+      },
     };
     try {
       tracked.result = await tool.call(parsed.data, callContext);
 
       // Verification loop: auto-run lint/typecheck after file-modifying tools
-      if (tracked.result && !tracked.result.isError && ['Edit', 'Write', 'MultiEdit'].includes(tool.name)) {
+      if (tracked.result && !tracked.result.isError && ["Edit", "Write", "MultiEdit"].includes(tool.name)) {
         try {
-          const { runVerificationForFiles, getVerificationConfig, extractFilePaths } = await import('../harness/verification.js');
+          const { runVerificationForFiles, getVerificationConfig, extractFilePaths } = await import(
+            "../harness/verification.js"
+          );
           const vConfig = getVerificationConfig();
           if (vConfig?.enabled) {
             const filePaths = extractFilePaths(tool.name, tracked.toolCall.arguments as Record<string, unknown>);
@@ -135,19 +135,21 @@ export class StreamingToolExecutor {
               if (vResult.ran) {
                 if (!vResult.passed) {
                   tracked.result = {
-                    output: tracked.result.output + `\n\n[Verification FAILED]\n${vResult.summary}`,
-                    isError: vConfig.mode === 'block',
+                    output: `${tracked.result.output}\n\n[Verification FAILED]\n${vResult.summary}`,
+                    isError: vConfig.mode === "block",
                   };
                 } else {
                   tracked.result = {
-                    output: tracked.result.output + '\n\n[Verification passed]',
+                    output: `${tracked.result.output}\n\n[Verification passed]`,
                     isError: false,
                   };
                 }
               }
             }
           }
-        } catch { /* verification should never break tool execution */ }
+        } catch {
+          /* verification should never break tool execution */
+        }
       }
     } catch (err) {
       tracked.result = {

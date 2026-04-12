@@ -1,10 +1,10 @@
-import { hostname, userInfo } from 'node:os';
-import type { CompanionBones, Rarity, Stat } from './types.js';
-import { RARITY_TIERS } from './types.js';
-import { SPECIES } from './species.js';
+import { hostname, userInfo } from "node:os";
+import { SPECIES } from "./species.js";
+import type { CompanionBones, Rarity, Stat } from "./types.js";
+import { RARITY_TIERS } from "./types.js";
 
-const SALT = 'openharness-2026';
-const STAT_KEYS: Stat[] = ['DEBUGGING', 'PATIENCE', 'CHAOS', 'WISDOM', 'SNARK'];
+const SALT = "openharness-2026";
+const STAT_KEYS: Stat[] = ["DEBUGGING", "PATIENCE", "CHAOS", "WISDOM", "SNARK"];
 
 /** FNV-1a 32-bit hash */
 function fnv1a(str: string): number {
@@ -20,7 +20,7 @@ function fnv1a(str: string): number {
 function mulberry32(seed: number): () => number {
   let state = seed | 0;
   return () => {
-    state = (state + 0x6D2B79F5) | 0;
+    state = (state + 0x6d2b79f5) | 0;
     let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -35,7 +35,7 @@ function rollRarity(rand: () => number): Rarity {
     acc += tier.weight;
     if (roll < acc) return tier.rarity;
   }
-  return 'common';
+  return "common";
 }
 
 /** Generate stats with one peak, one dump, rest scattered */
@@ -80,7 +80,7 @@ export function roll(seed: string): CompanionBones {
 
   // Rarity
   const rarity = rollRarity(rand);
-  const floor = RARITY_TIERS.find(t => t.rarity === rarity)!.statFloor;
+  const floor = RARITY_TIERS.find((t) => t.rarity === rarity)!.statFloor;
 
   // Shiny (1% independent chance)
   const isShiny = rand() < 0.01;

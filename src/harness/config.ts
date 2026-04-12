@@ -2,9 +2,9 @@
  * .oh/config.yaml — provider, model, permissionMode and other persisted settings.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import type { PermissionMode } from "../types/permissions.js";
 
@@ -18,11 +18,11 @@ export type McpServerConfig = {
 };
 
 export type HookDef = {
-  command?: string;      // shell command hook
-  http?: string;         // HTTP POST hook (URL)
-  prompt?: string;       // LLM prompt hook (yes/no question)
-  match?: string;        // tool name pattern filter
-  timeout?: number;      // timeout in ms (default 10000)
+  command?: string; // shell command hook
+  http?: string; // HTTP POST hook (URL)
+  prompt?: string; // LLM prompt hook (yes/no question)
+  match?: string; // tool name pattern filter
+  timeout?: number; // timeout in ms (default 10000)
 };
 
 export type HooksConfig = {
@@ -41,9 +41,9 @@ export type HooksConfig = {
 };
 
 export type ToolPermissionRule = {
-  tool: string;       // tool name or glob pattern (e.g. "Bash", "File*")
+  tool: string; // tool name or glob pattern (e.g. "Bash", "File*")
   action: "allow" | "deny" | "ask";
-  pattern?: string;   // regex pattern to match against tool input (e.g. Bash command content)
+  pattern?: string; // regex pattern to match against tool input (e.g. Bash command content)
 };
 
 export type VerificationRuleConfig = {
@@ -56,7 +56,7 @@ export type OhConfig = {
   provider: string;
   model: string;
   permissionMode: PermissionMode;
-  theme?: 'dark' | 'light';
+  theme?: "dark" | "light";
   apiKey?: string;
   baseUrl?: string;
   mcpServers?: McpServerConfig[];
@@ -65,26 +65,26 @@ export type OhConfig = {
   statusLineFormat?: string; // Template: {model} {tokens} {cost} {ctx}
   /** Verification loops — auto-run lint/typecheck after file edits */
   verification?: {
-    enabled?: boolean;          // default true (auto-detect)
-    mode?: 'warn' | 'block';   // default 'warn'
+    enabled?: boolean; // default true (auto-detect)
+    mode?: "warn" | "block"; // default 'warn'
     rules?: VerificationRuleConfig[];
   };
   /** Memory consolidation settings */
   memory?: {
-    consolidateOnExit?: boolean;  // default true
+    consolidateOnExit?: boolean; // default true
   };
   /** Multi-model router — use different models for different task types */
   modelRouter?: {
-    fast?: string;        // fast/cheap model for exploration (e.g., "ollama/qwen2.5:7b")
-    balanced?: string;    // balanced model for general use (e.g., "gpt-4o-mini")
-    powerful?: string;    // strongest model for final output (e.g., "claude-sonnet-4-6")
+    fast?: string; // fast/cheap model for exploration (e.g., "ollama/qwen2.5:7b")
+    balanced?: string; // balanced model for general use (e.g., "gpt-4o-mini")
+    powerful?: string; // strongest model for final output (e.g., "claude-sonnet-4-6")
   };
   /** Effort level for LLM reasoning depth */
-  effortLevel?: 'low' | 'medium' | 'high' | 'max';
+  effortLevel?: "low" | "medium" | "high" | "max";
   /** Opt-in telemetry (default: off) */
   telemetry?: {
-    enabled?: boolean;     // default false
-    endpoint?: string;     // where to POST events (optional)
+    enabled?: boolean; // default false
+    endpoint?: string; // where to POST events (optional)
   };
   /** Sandbox — filesystem and network restrictions */
   sandbox?: {
@@ -96,9 +96,9 @@ export type OhConfig = {
   };
   /** Remote server security settings */
   remote?: {
-    tokens?: string[];           // allowed bearer tokens (empty = open access)
-    rateLimit?: number;          // max requests/minute per IP (default 60)
-    allowedTools?: string[];     // tool whitelist for remote callers
+    tokens?: string[]; // allowed bearer tokens (empty = open access)
+    rateLimit?: number; // max requests/minute per IP (default 60)
+    allowedTools?: string[]; // tool whitelist for remote callers
   };
 };
 
@@ -121,7 +121,7 @@ export function invalidateConfigCache(): void {
 
 /** Path to global config: ~/.oh/config.yaml */
 function globalConfigPath(): string {
-  return join(homedir(), '.oh', 'config.yaml');
+  return join(homedir(), ".oh", "config.yaml");
 }
 
 /** Read global config as fallback defaults */
@@ -129,8 +129,10 @@ function readGlobalConfig(): Partial<OhConfig> | null {
   const p = globalConfigPath();
   if (!existsSync(p)) return null;
   try {
-    return parse(readFileSync(p, 'utf-8')) as Partial<OhConfig>;
-  } catch { return null; }
+    return parse(readFileSync(p, "utf-8")) as Partial<OhConfig>;
+  } catch {
+    return null;
+  }
 }
 
 export function readOhConfig(root?: string): OhConfig | null {
@@ -147,12 +149,15 @@ export function readOhConfig(root?: string): OhConfig | null {
   if (existsSync(p)) {
     try {
       projectCfg = parse(readFileSync(p, "utf-8")) as OhConfig;
-    } catch { /* ignore malformed project config */ }
+    } catch {
+      /* ignore malformed project config */
+    }
   }
 
   // If neither exists, no config
   if (!globalCfg && !projectCfg) {
-    _configCache = null; _configCacheRoot = effectiveRoot;
+    _configCache = null;
+    _configCacheRoot = effectiveRoot;
     return null;
   }
 
@@ -166,20 +171,28 @@ export function readOhConfig(root?: string): OhConfig | null {
       const local = parse(readFileSync(localPath, "utf-8")) as Partial<OhConfig>;
       if (local) {
         const merged = { ...base, ...local } as OhConfig;
-        _configCache = merged; _configCacheRoot = effectiveRoot;
+        _configCache = merged;
+        _configCacheRoot = effectiveRoot;
         return merged;
       }
-    } catch { /* ignore malformed local config */ }
+    } catch {
+      /* ignore malformed local config */
+    }
   }
 
-  _configCache = base; _configCacheRoot = effectiveRoot;
+  _configCache = base;
+  _configCacheRoot = effectiveRoot;
   return base;
 }
 
 export function writeOhConfig(cfg: OhConfig, root?: string): void {
   invalidateConfigCache();
   // Emit configChange hook (lazy import to avoid circular dependency)
-  try { require('./hooks.js').emitHook('configChange', {}); } catch { /* ignore */ }
+  try {
+    require("./hooks.js").emitHook("configChange", {});
+  } catch {
+    /* ignore */
+  }
   const p = configPath(root);
   mkdirSync(join(root ?? ".", ".oh"), { recursive: true });
 
@@ -208,7 +221,7 @@ export function writeOhConfig(cfg: OhConfig, root?: string): void {
       // fall back to stringify for mcpServers since it's complex
       lines.push("", stringify({ mcpServers: cfg.mcpServers }).trim());
     }
-    writeFileSync(p, lines.join("\n") + "\n");
+    writeFileSync(p, `${lines.join("\n")}\n`);
     return;
   }
 
