@@ -622,4 +622,11 @@ describe("tools-basic", () => {
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("No matching sessions"));
   });
+
+  it("SkillTool — path traversal blocked", async () => {
+    const tmp = makeTmpDir();
+    const result = await SkillTool.call({ skill: "test", path: "../../../etc/passwd" }, ctx(tmp));
+    assert.equal(result.isError, true);
+    assert.ok(result.output.includes("Path traversal"));
+  });
 });

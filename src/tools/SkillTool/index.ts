@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
 import { discoverSkills, findSkill } from "../../harness/plugins.js";
 import type { Tool, ToolResult } from "../../Tool.js";
@@ -5,6 +7,7 @@ import type { Tool, ToolResult } from "../../Tool.js";
 const inputSchema = z.object({
   skill: z.string(),
   args: z.string().optional(),
+  path: z.string().optional().describe("Path to a supporting file within the skill directory (Level 2)"),
 });
 
 export const SkillTool: Tool<typeof inputSchema> = {
@@ -24,6 +27,11 @@ export const SkillTool: Tool<typeof inputSchema> = {
     // Path traversal protection
     if (input.skill.includes("..") || input.skill.includes("/") || input.skill.includes("\\")) {
       return { output: "Error: Invalid skill name.", isError: true };
+    }
+
+    // Early path traversal check for Level 2
+    if (input.path && input.path.includes("..")) {
+      return { output: "Error: Path traversal not allowed.", isError: true };
     }
 
     // List skills if "list" or "ls"
@@ -47,12 +55,25 @@ export const SkillTool: Tool<typeof inputSchema> = {
       };
     }
 
+    // Level 2: supporting file access
+    if (input.path) {
+      const skillDir = skill.filePath.replace(/\.md$/, "");
+      const filePath = join(skillDir, input.path);
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        return { output: content, isError: false };
+      } catch {
+        return { output: `File not found: ${input.path} (looked in ${skillDir}/)`, isError: true };
+      }
+    }
+
     return { output: skill.content, isError: false };
   },
 
   prompt() {
     return `Execute a skill by loading its definition. Skills are searched in .oh/skills/ (project) and ~/.oh/skills/ (global). Parameters:
 - skill (string, required): The skill name (or "list" to see available skills).
-- args (string, optional): Arguments to pass to the skill.`;
+- args (string, optional): Arguments to pass to the skill.
+- path (string, optional): Path to a supporting file within the skill's directory (for reference docs, scripts, templates).`;
   },
 };
