@@ -612,4 +612,14 @@ describe("tools-basic", () => {
     const agents = bus.getBackgroundAgents();
     assert.equal(agents.length, 2);
   });
+
+  // ── SessionSearchTool ──
+
+  it("SessionSearchTool — returns no results for empty DB", async () => {
+    const { SessionSearchTool } = await import("./SessionSearchTool/index.js");
+    const tmp = makeTmpDir();
+    const result = await SessionSearchTool.call({ query: "authentication" }, ctx(tmp));
+    assert.equal(result.isError, false);
+    assert.ok(result.output.includes("No matching sessions"));
+  });
 });

@@ -36,6 +36,8 @@ import { PowerShellTool } from "./tools/PowerShellTool/index.js";
 import { RemoteTriggerTool } from "./tools/RemoteTriggerTool/index.js";
 import { ScheduleWakeupTool } from "./tools/ScheduleWakeupTool/index.js";
 import { SendMessageTool } from "./tools/SendMessageTool/index.js";
+// Extended tools — deferred loading (minimal prompt until first use)
+import { SessionSearchTool } from "./tools/SessionSearchTool/index.js";
 import { SkillTool } from "./tools/SkillTool/index.js";
 import { TaskCreateTool } from "./tools/TaskCreateTool/index.js";
 import { TaskGetTool } from "./tools/TaskGetTool/index.js";
@@ -44,7 +46,6 @@ import { TaskOutputTool } from "./tools/TaskOutputTool/index.js";
 import { TaskStopTool } from "./tools/TaskStopTool/index.js";
 import { TaskUpdateTool } from "./tools/TaskUpdateTool/index.js";
 import { ToolSearchTool } from "./tools/ToolSearchTool/index.js";
-// Extended tools — deferred loading (minimal prompt until first use)
 import { WebFetchTool } from "./tools/WebFetchTool/index.js";
 import { WebSearchTool } from "./tools/WebSearchTool/index.js";
 
@@ -106,6 +107,7 @@ export function getAllTools(): Tools {
     PowerShellTool,
     MonitorTool,
     ScheduleWakeupTool,
+    SessionSearchTool,
   ];
 
   return [...core, ...extended.map((t) => new DeferredTool(t))];

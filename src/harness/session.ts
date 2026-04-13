@@ -58,6 +58,20 @@ export function saveSession(session: Session, dir?: string): string {
   const path = join(sessionDir, `${session.id}.json`);
   session.updatedAt = Date.now();
   writeFileSync(path, JSON.stringify(session, null, 2));
+  // Index session for FTS5 search (fire-and-forget, don't block save)
+  import("./session-db.js")
+    .then(({ openSessionDb, indexSession: idx, sessionToIndexEntry, closeSessionDb }) => {
+      try {
+        const db = openSessionDb();
+        idx(db, sessionToIndexEntry(session));
+        closeSessionDb(db);
+      } catch {
+        /* session search is optional */
+      }
+    })
+    .catch(() => {
+      /* ignore if session-db unavailable */
+    });
   // Evict old sessions (with lock to prevent concurrent eviction)
   if (!_evicting) {
     _evicting = true;

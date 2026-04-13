@@ -1124,6 +1124,21 @@ register("allowed-tools", "View tool permission rules", () => {
   return { output: `Tool permission rules:\n${lines.join("\n")}`, handled: true };
 });
 
+register("rebuild-sessions", "Rebuild session search index", () => {
+  // Fire async rebuild, return immediately with status
+  import("../harness/session-db.js")
+    .then(({ openSessionDb, rebuildIndex, closeSessionDb }) => {
+      const db = openSessionDb();
+      const count = rebuildIndex(db);
+      closeSessionDb(db);
+      console.log(`Rebuilt session search index: ${count} sessions indexed.`);
+    })
+    .catch((err) => {
+      console.log(`Failed to rebuild index: ${err.message}`);
+    });
+  return { output: "Rebuilding session search index...", handled: true };
+});
+
 // ── Command Parser ──
 
 /**
