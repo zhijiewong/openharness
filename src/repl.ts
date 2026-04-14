@@ -696,10 +696,41 @@ export async function startREPL(config: REPLConfig): Promise<void> {
       } catch {
         /* ignore */
       }
+      // Post-session learning: extract skills + update user profile
+      try {
+        const { runExtraction } = await import("./services/SkillExtractor.js");
+        const { updateUserProfile, loadUserProfile, detectMemories } = await import("./harness/memory.js");
+
+        // Skill extraction (async, may take a few seconds)
+        const extracted = await runExtraction(config.provider, messages, session.id, currentModel);
+        if (extracted.length > 0) {
+          console.log(`[learn] Extracted ${extracted.length} skill(s) from this session.`);
+        }
+
+        // User profile update
+        if (messages.length >= 6) {
+          const detected = await detectMemories(config.provider, messages, currentModel);
+          const profileUpdates = detected.filter((d) => d.type === "user");
+          if (profileUpdates.length > 0) {
+            const currentProfile = loadUserProfile();
+            const newObservations = profileUpdates.map((d) => d.content).join("\n");
+            const merged = currentProfile
+              ? `${currentProfile}\n\n## Recent Observations\n${newObservations}`
+              : newObservations;
+            updateUserProfile(merged);
+          }
+        }
+      } catch {
+        /* learning is optional — don't block exit */
+      }
       // Emit sessionEnd hook
       try {
         const { emitHookAsync } = await import("./harness/hooks.js");
-        await emitHookAsync("sessionEnd", {});
+        await emitHookAsync("sessionEnd", {
+          sessionId: session.id,
+          model: currentModel,
+          provider: config.provider.name,
+        });
       } catch {
         /* ignore */
       }
