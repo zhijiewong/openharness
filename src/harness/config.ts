@@ -79,6 +79,8 @@ export type OhConfig = {
     balanced?: string; // balanced model for general use (e.g., "gpt-4o-mini")
     powerful?: string; // strongest model for final output (e.g., "claude-sonnet-4-6")
   };
+  /** Fallback providers — tried in order when primary fails */
+  fallbackProviders?: Array<{ provider: string; model?: string; apiKey?: string; baseUrl?: string }>;
   /** Effort level for LLM reasoning depth */
   effortLevel?: "low" | "medium" | "high" | "max";
   /** Opt-in telemetry (default: off) */

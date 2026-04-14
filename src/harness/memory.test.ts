@@ -195,12 +195,12 @@ test("updateUserProfile creates USER.md with content", () => {
   });
 });
 
-test("updateUserProfile truncates to 2000 chars", () => {
+test("updateUserProfile truncates to 1375 chars (Hermes-aligned)", () => {
   withTmpCwd(() => {
     const longContent = "x".repeat(3000);
     updateUserProfile(longContent);
     const profile = loadUserProfile();
-    assert.ok(profile.length <= 2000);
+    assert.ok(profile.length <= 1375);
   });
 });
 

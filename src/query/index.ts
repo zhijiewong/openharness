@@ -83,6 +83,13 @@ export async function* query(
     }
   } catch { /* skills optional */ }
 
+  // Track memory version for live injection
+  let lastMemoryVer = 0;
+  try {
+    const { memoryVersion } = await import("../harness/memory.js");
+    lastMemoryVer = memoryVersion();
+  } catch { /* ignore */ }
+
   const state: QueryLoopState = {
     messages: [...existingMessages, createUserMessage(userMessage)],
     turn: 0,
@@ -128,6 +135,35 @@ export async function* query(
       }
     }
 
+    // ── Dynamic prompt: refresh memories if changed, inject warnings ──
+    try {
+      const { memoryVersion, loadActiveMemories, memoriesToPrompt } = await import("../harness/memory.js");
+      const currentVer = memoryVersion();
+      if (currentVer > lastMemoryVer) {
+        const fresh = memoriesToPrompt(loadActiveMemories());
+        // Replace or append memory section in fullSystemPrompt
+        if (fullSystemPrompt.includes("# Remembered Context")) {
+          fullSystemPrompt = fullSystemPrompt.replace(/# Remembered Context[\s\S]*?(?=\n# |$)/, fresh);
+        } else if (fresh) {
+          fullSystemPrompt += `\n\n${fresh}`;
+        }
+        lastMemoryVer = currentVer;
+      }
+    } catch { /* memory refresh optional */ }
+
+    let turnPrompt = fullSystemPrompt;
+    if (config.maxCost && config.maxCost > 0) {
+      const pct = state.totalCost / config.maxCost;
+      if (pct >= 0.9) {
+        turnPrompt += `\n\n⚠️ BUDGET CRITICAL: Only $${(config.maxCost - state.totalCost).toFixed(4)} remaining. Provide final response NOW.`;
+      } else if (pct >= 0.7) {
+        turnPrompt += `\n\n⚠️ BUDGET WARNING: ${Math.round((1 - pct) * 100)}% budget remaining. Start consolidating.`;
+      }
+    }
+    if (state.turn >= maxTurns * 0.9 && maxTurns > 1) {
+      turnPrompt += `\n\n⚠️ TURN LIMIT: ${maxTurns - state.turn} turn(s) remaining. Wrap up.`;
+    }
+
     // ── LLM call with streaming ──
     let assistantContent = "";
     const toolCalls: ToolCall[] = [];
@@ -142,7 +178,7 @@ export async function* query(
     );
 
     try {
-      for await (const event of config.provider.stream(state.messages, fullSystemPrompt, apiTools, config.model)) {
+      for await (const event of config.provider.stream(state.messages, turnPrompt, apiTools, config.model)) {
         if (config.abortSignal?.aborted) break;
 
         switch (event.type) {

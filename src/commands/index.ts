@@ -1139,6 +1139,79 @@ register("rebuild-sessions", "Rebuild session search index", () => {
   return { output: "Rebuilding session search index...", handled: true };
 });
 
+// ── Skill Management ──
+
+register("skill-create", "Create a new skill file", (args) => {
+  const name = args.trim();
+  if (!name) return { output: "Usage: /skill-create <name>", handled: true };
+  if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+    return { output: "Error: Invalid skill name.", handled: true };
+  }
+
+  const dir = join(process.cwd(), ".oh", "skills");
+  mkdirSync(dir, { recursive: true });
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const filePath = join(dir, `${slug}.md`);
+
+  if (existsSync(filePath)) {
+    return { output: `Skill "${slug}" already exists at ${filePath}`, handled: true };
+  }
+
+  const template = `---
+name: ${slug}
+description: TODO — describe what this skill does
+trigger: ${slug}
+---
+
+# ${name}
+
+## When to Use
+Describe when this skill should be triggered.
+
+## Procedure
+1. Step one
+2. Step two
+3. Step three
+
+## Pitfalls
+- Common mistakes to avoid
+
+## Verification
+How to confirm the skill worked correctly.
+`;
+
+  writeFileSync(filePath, template);
+  return { output: `Created skill: ${filePath}\nEdit the file to customize it.`, handled: true };
+});
+
+register("skill-delete", "Delete a skill file", (args) => {
+  const name = args.trim();
+  if (!name) return { output: "Usage: /skill-delete <name>", handled: true };
+
+  const { findSkill } = require("../harness/plugins.js") as typeof import("../harness/plugins.js");
+  const skill = findSkill(name);
+  if (!skill) return { output: `Skill "${name}" not found.`, handled: true };
+
+  try {
+    const { unlinkSync } = require("node:fs");
+    unlinkSync(skill.filePath);
+    return { output: `Deleted skill: ${skill.filePath}`, handled: true };
+  } catch (err: any) {
+    return { output: `Error deleting skill: ${err.message}`, handled: true };
+  }
+});
+
+register("skill-edit", "Show skill file path for editing", (args) => {
+  const name = args.trim();
+  if (!name) return { output: "Usage: /skill-edit <name>", handled: true };
+
+  const { findSkill } = require("../harness/plugins.js") as typeof import("../harness/plugins.js");
+  const skill = findSkill(name);
+  if (!skill) return { output: `Skill "${name}" not found.`, handled: true };
+
+  return { output: `Skill file: ${skill.filePath}\nEdit this file to update the skill.`, handled: true };
+});
+
 // ── Command Parser ──
 
 /**

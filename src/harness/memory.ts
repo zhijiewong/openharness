@@ -18,6 +18,12 @@ import { createUserMessage } from "../types/message.js";
 const PROJECT_MEMORY_DIR = join(".oh", "memory");
 const GLOBAL_MEMORY_DIR = join(homedir(), ".oh", "memory");
 
+// Version counter — incremented on every save, used by query loop for live injection
+let _memoryVersion = 0;
+export function memoryVersion(): number {
+  return _memoryVersion;
+}
+
 /**
  * Memory types — supports both legacy and Claude Code-compatible names.
  * Legacy: convention, preference, project, debugging
@@ -94,11 +100,17 @@ function parseMemory(raw: string, filePath: string): MemoryEntry | null {
   };
 }
 
-/** Build a system prompt section from loaded memories */
+/** Build a system prompt section from loaded memories (capped at MEMORY_PROMPT_MAX_CHARS) */
 export function memoriesToPrompt(memories: MemoryEntry[]): string {
   if (memories.length === 0) return "";
-  const lines = memories.map((m) => `- **${m.name}** (${m.type}): ${m.content.slice(0, 200)}`);
-  return `# Remembered Context\n${lines.join("\n")}`;
+  const header = "# Remembered Context\n";
+  let result = header;
+  for (const m of memories) {
+    const line = `- **${m.name}** (${m.type}): ${m.content.slice(0, 200)}\n`;
+    if (result.length + line.length > MEMORY_PROMPT_MAX_CHARS) break;
+    result += line;
+  }
+  return result.trimEnd();
 }
 
 /** Save a memory entry to the project memory directory */
@@ -133,6 +145,7 @@ ${content}
 `;
 
   writeFileSync(filePath, md);
+  _memoryVersion++;
   updateMemoryIndex(dir);
   return filePath;
 }
@@ -341,7 +354,8 @@ export function consolidateMemories(): ConsolidationResult {
 // ── User Profile ──
 
 const USER_PROFILE_FILE = "USER.md";
-const USER_PROFILE_MAX_CHARS = 2000;
+const USER_PROFILE_MAX_CHARS = 1375; // Matches Hermes USER.md limit
+const MEMORY_PROMPT_MAX_CHARS = 2200; // Matches Hermes MEMORY.md limit
 
 /** Load the user profile from .oh/memory/USER.md */
 export function loadUserProfile(): string {
@@ -374,6 +388,7 @@ updatedAt: ${Date.now()}
 ${truncated}
 `;
   writeFileSync(join(PROJECT_MEMORY_DIR, USER_PROFILE_FILE), md);
+  _memoryVersion++;
 }
 
 /** Format user profile for system prompt injection */
