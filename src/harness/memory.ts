@@ -329,6 +329,46 @@ export function consolidateMemories(): ConsolidationResult {
   return { total: all.length, pruned: prunedCount, decayed: decayedCount };
 }
 
+// ── User Profile ──
+
+const USER_PROFILE_FILE = "USER.md";
+const USER_PROFILE_MAX_CHARS = 2000;
+
+/** Load the user profile from .oh/memory/USER.md */
+export function loadUserProfile(): string {
+  const filePath = join(PROJECT_MEMORY_DIR, USER_PROFILE_FILE);
+  if (!existsSync(filePath)) return "";
+  try {
+    const raw = readFileSync(filePath, "utf-8");
+    const fmEnd = raw.indexOf("---", raw.indexOf("---") + 3);
+    return fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : raw.trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Update the user profile, truncating to max chars */
+export function updateUserProfile(content: string): void {
+  mkdirSync(PROJECT_MEMORY_DIR, { recursive: true });
+  const truncated = content.slice(0, USER_PROFILE_MAX_CHARS);
+  const md = `---
+name: User Profile
+type: user_profile
+updatedAt: ${Date.now()}
+---
+
+${truncated}
+`;
+  writeFileSync(join(PROJECT_MEMORY_DIR, USER_PROFILE_FILE), md);
+}
+
+/** Format user profile for system prompt injection */
+export function userProfileToPrompt(): string {
+  const profile = loadUserProfile();
+  if (!profile) return "";
+  return `# User Profile\n${profile}`;
+}
+
 /**
  * Detect if recent assistant messages contain learnable patterns.
  * Returns structured memories to save, or empty array.

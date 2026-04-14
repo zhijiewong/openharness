@@ -6,10 +6,13 @@ import { makeTmpDir } from "../test-helpers.js";
 import {
   boostRelevance,
   loadMemories,
+  loadUserProfile,
   memoriesToPrompt,
   saveMemory,
   touchMemory,
   updateMemoryIndex,
+  updateUserProfile,
+  userProfileToPrompt,
 } from "./memory.js";
 
 function withTmpCwd(fn: (dir: string) => void) {
@@ -171,5 +174,47 @@ test("saveMemory accepts new type names (user, feedback, reference)", () => {
 
     const p3 = saveMemory("linear-board", "reference", "Bug tracker", "Bugs in Linear INGEST");
     assert.ok(readFileSync(p3, "utf-8").includes("type: reference"));
+  });
+});
+
+// ── User Profile ──
+
+test("loadUserProfile returns empty string when USER.md does not exist", () => {
+  withTmpCwd(() => {
+    const profile = loadUserProfile();
+    assert.equal(profile, "");
+  });
+});
+
+test("updateUserProfile creates USER.md with content", () => {
+  withTmpCwd(() => {
+    updateUserProfile("## Role\nSenior engineer\n\n## Preferences\nTerse responses");
+    const profile = loadUserProfile();
+    assert.ok(profile.includes("Senior engineer"));
+    assert.ok(profile.includes("Terse responses"));
+  });
+});
+
+test("updateUserProfile truncates to 2000 chars", () => {
+  withTmpCwd(() => {
+    const longContent = "x".repeat(3000);
+    updateUserProfile(longContent);
+    const profile = loadUserProfile();
+    assert.ok(profile.length <= 2000);
+  });
+});
+
+test("userProfileToPrompt formats correctly", () => {
+  withTmpCwd(() => {
+    updateUserProfile("## Role\nData scientist");
+    const prompt = userProfileToPrompt();
+    assert.ok(prompt.includes("# User Profile"));
+    assert.ok(prompt.includes("Data scientist"));
+  });
+});
+
+test("userProfileToPrompt returns empty string when no profile", () => {
+  withTmpCwd(() => {
+    assert.equal(userProfileToPrompt(), "");
   });
 });
