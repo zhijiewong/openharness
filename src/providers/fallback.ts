@@ -1,8 +1,15 @@
 /**
  * FallbackProvider — wraps a primary provider with fallback chain.
  *
- * When the primary provider fails (rate limit, 5xx, auth), transparently
+ * When the primary provider fails (rate limit, 5xx, network), transparently
  * tries the next provider in the chain. Matches Hermes Agent pattern.
+ *
+ * Design notes:
+ * - Streaming fallback only activates if primary fails BEFORE yielding events.
+ *   Once events are streaming, partial output can't be un-sent, so we don't
+ *   catch mid-stream errors (they propagate to the caller for retry).
+ * - 401/403 are NOT retriable (they're permanent auth failures). Different
+ *   providers have different keys, so this is handled at the config level.
  */
 
 import type { APIToolDef, ModelInfo, Provider } from "./base.js";
@@ -16,64 +23,73 @@ export type FallbackConfig = {
 
 /**
  * Create a provider that falls back to alternatives on failure.
- * The primary provider is tried first. If it fails with a retriable error,
- * each fallback is tried in order.
+ * The primary provider is tried first. If it fails with a retriable error
+ * BEFORE streaming begins, each fallback is tried in order.
  */
 export function createFallbackProvider(
   primary: Provider,
   fallbacks: FallbackConfig[],
-): Provider & { activeFallback: string | null } {
-  let activeFallback: string | null = null;
+): Provider & { readonly activeFallback: string | null } {
+  let _activeFallback: string | null = null;
 
-  return {
+  const obj: Provider & { readonly activeFallback: string | null } = {
     name: primary.name,
-    activeFallback,
+
+    get activeFallback() {
+      return _activeFallback;
+    },
 
     async *stream(messages, systemPrompt, tools?, model?) {
-      // Try primary first
-      try {
-        yield* primary.stream(messages, systemPrompt, tools, model);
-        activeFallback = null;
-        return;
-      } catch (err) {
-        if (!isRetriableError(err)) throw err;
-      }
+      // Collect first event to detect early failure vs mid-stream failure.
+      // If the provider fails before ANY event, try fallback.
+      // If it fails mid-stream, propagate the error (partial output already sent).
+      const providers: Array<{ provider: Provider; model?: string }> = [
+        { provider: primary, model },
+        ...fallbacks.map((fb) => ({ provider: fb.provider, model: fb.model ?? model })),
+      ];
 
-      // Try fallbacks in order
-      for (const fb of fallbacks) {
+      for (let i = 0; i < providers.length; i++) {
+        const p = providers[i]!;
         try {
-          activeFallback = fb.provider.name;
-          yield* fb.provider.stream(messages, systemPrompt, tools, fb.model ?? model);
+          let hasYielded = false;
+          for await (const event of p.provider.stream(messages, systemPrompt, tools, p.model)) {
+            hasYielded = true;
+            yield event;
+          }
+          _activeFallback = i === 0 ? null : p.provider.name;
           return;
         } catch (err) {
-          if (!isRetriableError(err)) throw err;
+          // Mid-stream failure: can't un-send events, propagate error
+          if (i > 0 || !isRetriableError(err)) throw err;
+          // Pre-stream failure on primary: try next provider
+          _activeFallback = null;
+          continue;
         }
       }
 
-      // All failed
-      activeFallback = null;
+      _activeFallback = null;
       throw new Error("All providers failed (primary + fallbacks)");
     },
 
     async complete(messages, systemPrompt, tools?, model?) {
-      try {
-        const result = await primary.complete(messages, systemPrompt, tools, model);
-        activeFallback = null;
-        return result;
-      } catch (err) {
-        if (!isRetriableError(err)) throw err;
-      }
+      // complete() is atomic — safe to retry with any provider
+      const providers: Array<{ provider: Provider; model?: string }> = [
+        { provider: primary, model },
+        ...fallbacks.map((fb) => ({ provider: fb.provider, model: fb.model ?? model })),
+      ];
 
-      for (const fb of fallbacks) {
+      for (let i = 0; i < providers.length; i++) {
+        const p = providers[i]!;
         try {
-          activeFallback = fb.provider.name;
-          return await fb.provider.complete(messages, systemPrompt, tools, fb.model ?? model);
+          const result = await p.provider.complete(messages, systemPrompt, tools, p.model);
+          _activeFallback = i === 0 ? null : p.provider.name;
+          return result;
         } catch (err) {
           if (!isRetriableError(err)) throw err;
         }
       }
 
-      activeFallback = null;
+      _activeFallback = null;
       throw new Error("All providers failed (primary + fallbacks)");
     },
 
@@ -92,8 +108,11 @@ export function createFallbackProvider(
     estimateTokens: primary.estimateTokens?.bind(primary),
     getModelInfo: primary.getModelInfo?.bind(primary),
   };
+
+  return obj;
 }
 
+/** Check if an error is worth retrying with a different provider */
 function isRetriableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
@@ -107,8 +126,9 @@ function isRetriableError(err: unknown): boolean {
     msg.includes("service unavailable") ||
     msg.includes("econnrefused") ||
     msg.includes("network") ||
-    msg.includes("timeout") ||
-    msg.includes("401") ||
-    msg.includes("403")
+    msg.includes("timeout")
+    // Note: 401/403 are NOT retriable — they're permanent auth failures.
+    // Different providers use different API keys, so auth issues don't
+    // benefit from fallback. The user should fix their API key.
   );
 }
