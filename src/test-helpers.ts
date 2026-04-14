@@ -16,8 +16,10 @@ import { createAssistantMessage } from "./types/message.js";
 
 export function createMockProvider(
   streamEvents: StreamEvent[][] = [[]], // one array per turn
+  completeResponses: string[] = [], // one response string per complete() call
 ): Provider & { calls: Array<{ messages: Message[]; systemPrompt: string }> } {
   let turnIndex = 0;
+  let completeIndex = 0;
   const calls: Array<{ messages: Message[]; systemPrompt: string }> = [];
 
   return {
@@ -35,7 +37,8 @@ export function createMockProvider(
 
     async complete(messages, systemPrompt, _tools?, _model?) {
       calls.push({ messages, systemPrompt });
-      return createAssistantMessage("mock response");
+      const content = completeResponses[completeIndex++] ?? "mock response";
+      return createAssistantMessage(content);
     },
 
     listModels(): ModelInfo[] {
