@@ -21,7 +21,7 @@ AI coding agent in your terminal. Works with any LLM -- free local models or clo
   <img src="assets/openharness_v0.11.1_4.gif" alt="OpenHarness demo" width="800" />
 </p>
 
-[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![tests](https://img.shields.io/badge/tests-749-brightgreen) ![tools](https://img.shields.io/badge/tools-36-blue) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
+[![npm version](https://img.shields.io/npm/v/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![npm downloads](https://img.shields.io/npm/dm/@zhijiewang/openharness)](https://www.npmjs.com/package/@zhijiewang/openharness) [![license](https://img.shields.io/npm/l/@zhijiewang/openharness)](LICENSE) ![tests](https://img.shields.io/badge/tests-769-brightgreen) ![tools](https://img.shields.io/badge/tools-37-blue) ![Node.js 18+](https://img.shields.io/badge/node-18%2B-green) ![TypeScript](https://img.shields.io/badge/typescript-strict-blue) [![GitHub stars](https://img.shields.io/github/stars/zhijiewong/openharness)](https://github.com/zhijiewong/openharness) [![GitHub issues](https://img.shields.io/github/issues-raw/zhijiewong/openharness)](https://github.com/zhijiewong/openharness/issues) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/zhijiewong/openharness/pulls)
 
 ---
 
@@ -84,7 +84,7 @@ Most AI coding agents are locked to one provider or cost $20+/month. OpenHarness
 |---|---|---|---|---|
 | Any LLM | Yes (Ollama, OpenAI, Anthropic, OpenRouter, any OpenAI-compatible) | Anthropic only | Yes | Yes |
 | Free local models | Ollama native | No | Yes | Yes |
-| Tools | 36 with permission gates | 43+ | File-focused | 20+ |
+| Tools | 37 with permission gates | 43+ | File-focused | 20+ |
 | Permission modes | 7 (ask, trust, deny, acceptEdits, plan, auto, bypass) | 7 | Basic | Basic |
 | Git integration | Auto-commit + /undo + /rewind checkpoints | Yes | Deep git | Basic |
 | Slash commands | 42+ built-in | 80+ | Some | Some |

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.3.0 (2026-04-14) — Self-Evolving Agent
+
+### Added
+- **Self-Evolving Skills**: Agent automatically extracts reusable skill files from sessions with 5+ tool calls. Skills persist to `.oh/skills/auto/` with YAML frontmatter (`source: auto`, version tracking, session provenance). Powered by `SkillExtractor` service with LLM-based pattern analysis.
+- **Session Search (SQLite FTS5)**: Cross-session full-text search via `SessionSearchTool`. Sessions indexed into `~/.oh/sessions.db` on every save. BM25-ranked results with snippet highlighting. `/rebuild-sessions` command for index maintenance.
+- **Progressive Skill Disclosure**: Skills now use 3-level loading — Level 0 (name+description, ~30 tokens) in system prompt, Level 1 (full content) on `Skill(name)`, Level 2 (supporting files) on `Skill(name, path)`. 94% token reduction at 100+ skills.
+- **User Modeling (USER.md)**: Auto-maintained user profile at `.oh/memory/USER.md` (2000 char max). Curates role, preferences, and workflows across sessions. Injected into system prompt as `# User Profile`.
+- **`findSimilarSkill()`**: Fuzzy name/description matching for patch-vs-create decisions in skill extraction.
+- **`/rebuild-sessions`**: Slash command to rebuild FTS5 search index from session JSON files.
+
+### Changed
+- `saveSession()` now indexes sessions into SQLite FTS5 (fire-and-forget, non-blocking)
+- `sessionEnd` hook now receives session metadata (sessionId, model, provider)
+- `SkillTool` accepts optional `path` parameter for Level 2 supporting file access
+- New dependency: `better-sqlite3` for session search
+
+### Summary
+Hermes-inspired self-evolving agent features. The agent now learns from every session — extracting reusable skills, searching past sessions for context, and building a persistent user profile. 769 tests (was 749).
+
 ## 2.2.0 (2026-04-12) — Gap Closer
 
 ### Added
