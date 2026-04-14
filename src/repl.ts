@@ -707,17 +707,31 @@ export async function startREPL(config: REPLConfig): Promise<void> {
           console.log(`[learn] Extracted ${extracted.length} skill(s) from this session.`);
         }
 
-        // User profile update
+        // User profile update with LLM consolidation
         if (messages.length >= 6) {
           const detected = await detectMemories(config.provider, messages, currentModel);
           const profileUpdates = detected.filter((d) => d.type === "user");
           if (profileUpdates.length > 0) {
             const currentProfile = loadUserProfile();
             const newObservations = profileUpdates.map((d) => d.content).join("\n");
-            const merged = currentProfile
-              ? `${currentProfile}\n\n## Recent Observations\n${newObservations}`
-              : newObservations;
-            updateUserProfile(merged);
+            if (currentProfile) {
+              // LLM-assisted merge: consolidate instead of blind append
+              const { createUserMessage: makeMsg } = await import("./types/message.js");
+              try {
+                const consolidated = await config.provider.complete(
+                  [makeMsg(`Merge this user profile with new observations into a single cohesive profile. Keep the most important and recent information. Remove duplicates. Stay under 2000 characters. Return ONLY the merged profile text.\n\nCurrent profile:\n${currentProfile}\n\nNew observations:\n${newObservations}`)],
+                  "You are a profile curator. Return ONLY the merged profile, no commentary.",
+                  undefined,
+                  currentModel,
+                );
+                updateUserProfile(consolidated.content);
+              } catch {
+                // Fallback to simple append if LLM fails
+                updateUserProfile(`${currentProfile}\n\n${newObservations}`);
+              }
+            } else {
+              updateUserProfile(newObservations);
+            }
           }
         }
       } catch {

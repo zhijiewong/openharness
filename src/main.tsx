@@ -20,6 +20,8 @@ import { readOhConfig } from "./harness/config.js";
 import { emitHook } from "./harness/hooks.js";
 import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { createRulesFile, loadRules, loadRulesAsPrompt } from "./harness/rules.js";
+import { loadActiveMemories, memoriesToPrompt, userProfileToPrompt } from "./harness/memory.js";
+import { discoverSkills, skillsToPrompt } from "./harness/plugins.js";
 import { listSessions } from "./harness/session.js";
 import { connectedMcpServers, disconnectMcpClients, getMcpInstructions, loadMcpTools } from "./mcp/loader.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
@@ -89,6 +91,20 @@ function buildSystemPrompt(model?: string): string {
 
   const rulesPrompt = loadRulesAsPrompt();
   if (rulesPrompt) parts.push(rulesPrompt);
+
+  // User profile (highest priority personal context)
+  const userProfile = userProfileToPrompt();
+  if (userProfile) parts.push(userProfile);
+
+  // Remembered context from past sessions
+  const memories = loadActiveMemories();
+  const memoriesPrompt = memoriesToPrompt(memories);
+  if (memoriesPrompt) parts.push(memoriesPrompt);
+
+  // Available skills (Level 0 — names + descriptions only)
+  const skills = discoverSkills();
+  const skillsPrompt = skillsToPrompt(skills);
+  if (skillsPrompt) parts.push(skillsPrompt);
 
   // MCP server instructions (sandboxed — treat as untrusted)
   const mcpInstructions = getMcpInstructions();

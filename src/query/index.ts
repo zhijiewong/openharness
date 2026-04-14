@@ -42,7 +42,7 @@ export async function* query(
 ): AsyncGenerator<StreamEvent, void> {
   const maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
   const toolContext: ToolContext = {
-    workingDir: process.cwd(),
+    workingDir: config.workingDir ?? process.cwd(),
     abortSignal: config.abortSignal,
     provider: config.provider,
     model: config.model,
@@ -69,9 +69,19 @@ export async function* query(
     }
   }
 
-  const fullSystemPrompt = toolPrompts
+  let fullSystemPrompt = toolPrompts
     ? `${config.systemPrompt}\n\n# Available Tools\n\n${toolPrompts}`
     : config.systemPrompt;
+
+  // Auto-trigger skills matching user message
+  try {
+    const { findTriggeredSkills } = await import("../harness/plugins.js");
+    const triggered = findTriggeredSkills(userMessage);
+    if (triggered.length > 0) {
+      const hints = triggered.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+      fullSystemPrompt += `\n\n# Suggested Skills\nThese skills match your request. Use Skill tool to load them:\n${hints}`;
+    }
+  } catch { /* skills optional */ }
 
   const state: QueryLoopState = {
     messages: [...existingMessages, createUserMessage(userMessage)],

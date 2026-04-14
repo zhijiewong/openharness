@@ -146,6 +146,33 @@ ${candidate.verification}
   return filePath;
 }
 
+/** Quick LLM quality check — is this skill worth keeping? */
+async function isSkillWorthy(
+  provider: Provider,
+  candidate: SkillCandidate,
+  model?: string,
+): Promise<boolean> {
+  try {
+    const prompt = `Is this extracted skill worth saving for future reuse? Answer YES or NO (one word only).
+
+Name: ${candidate.name}
+Description: ${candidate.description}
+Procedure: ${candidate.procedure}
+
+Criteria: Is it reusable (not a one-off)? Is the procedure clear and complete? Would it save time in future sessions?`;
+
+    const response = await provider.complete(
+      [createUserMessage(prompt)],
+      "Answer YES or NO only.",
+      undefined,
+      model,
+    );
+    return response.content.trim().toUpperCase().startsWith("YES");
+  } catch {
+    return true; // On error, allow the skill through
+  }
+}
+
 /**
  * Orchestrate the full extraction pipeline:
  * 1. Check if extraction is warranted
@@ -171,8 +198,12 @@ export async function runExtraction(
 
   for (const candidate of candidates) {
     const similar = findSimilarSkill(candidate.name, candidate.description, existingSkills);
-    // Skip if a very similar skill already exists (avoid duplicates)
     if (similar) continue;
+
+    // Quality gate: quick LLM check before persisting
+    const worthy = await isSkillWorthy(provider, candidate, model);
+    if (!worthy) continue;
+
     const filePath = persistSkill(candidate, sessionId);
     written.push(filePath);
   }

@@ -18,6 +18,8 @@ export type QueryConfig = {
   maxCost?: number;
   model?: string;
   abortSignal?: AbortSignal;
+  /** Working directory for tool execution (defaults to process.cwd()) */
+  workingDir?: string;
 };
 
 export type TransitionReason = "next_turn" | "retry_network" | "retry_prompt_too_long" | "retry_max_output_tokens";

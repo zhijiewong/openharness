@@ -174,3 +174,41 @@ test("rebuildIndex repopulates from session JSON files", () => {
 
   closeSessionDb(db);
 });
+
+// ── FTS5 Edge Cases ──
+
+test("searchSessions handles empty query gracefully", () => {
+  const tmp = makeTmpDir();
+  const db = openSessionDb(join(tmp, "edge.db"));
+  indexSession(db, {
+    sessionId: "e1",
+    content: "some content",
+    toolsUsed: [],
+    model: "test",
+    messageCount: 1,
+    cost: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  const results = searchSessions(db, "");
+  assert.ok(Array.isArray(results));
+  closeSessionDb(db);
+});
+
+test("searchSessions handles special characters in query", () => {
+  const tmp = makeTmpDir();
+  const db = openSessionDb(join(tmp, "special.db"));
+  indexSession(db, {
+    sessionId: "s1",
+    content: "Fixed the authentication bug in src/auth.ts",
+    toolsUsed: ["Edit"],
+    model: "test",
+    messageCount: 2,
+    cost: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  const results = searchSessions(db, "src/auth.ts");
+  assert.ok(Array.isArray(results));
+  closeSessionDb(db);
+});

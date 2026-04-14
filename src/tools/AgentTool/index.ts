@@ -99,6 +99,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
       model: agentModel,
       maxTurns: 20,
       abortSignal: context.abortSignal,
+      workingDir: agentWorkingDir,
     };
 
     const agentId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -112,26 +113,11 @@ export const AgentTool: Tool<typeof inputSchema> = {
 
       const runAgent = async () => {
         let finalText = "";
-        const originalCwd = process.cwd();
         try {
-          if (worktreePath) {
-            try {
-              process.chdir(agentWorkingDir);
-            } catch {
-              /* ignore */
-            }
-          }
           for await (const event of query(input.prompt, config)) {
             if (event.type === "text_delta") finalText += event.content;
           }
         } finally {
-          if (worktreePath) {
-            try {
-              process.chdir(originalCwd);
-            } catch {
-              /* ignore */
-            }
-          }
           // Clean up worktree only if no changes were made
           if (worktreePath) {
             const hasChanges = hasWorktreeChanges(worktreePath);
@@ -167,16 +153,6 @@ export const AgentTool: Tool<typeof inputSchema> = {
     let finalText = "";
 
     try {
-      // Override process.cwd for the sub-agent by setting workingDir in tool context
-      const originalCwd = process.cwd();
-      if (worktreePath) {
-        try {
-          process.chdir(agentWorkingDir);
-        } catch {
-          /* ignore */
-        }
-      }
-
       try {
         for await (const event of query(input.prompt, config)) {
           if (event.type === "text_delta") {
@@ -195,14 +171,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
           }
         }
       } finally {
-        // Restore original working directory
-        if (worktreePath) {
-          try {
-            process.chdir(originalCwd);
-          } catch {
-            /* ignore */
-          }
-        }
+        /* workingDir passed via config — no process.chdir cleanup needed */
       }
     } catch (err) {
       return {

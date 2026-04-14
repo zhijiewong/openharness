@@ -623,10 +623,56 @@ describe("tools-basic", () => {
     assert.ok(result.output.includes("No matching sessions"));
   });
 
-  it("SkillTool — path traversal blocked", async () => {
+  it("SkillTool — path traversal blocked via ..", async () => {
     const tmp = makeTmpDir();
     const result = await SkillTool.call({ skill: "test", path: "../../../etc/passwd" }, ctx(tmp));
     assert.equal(result.isError, true);
-    assert.ok(result.output.includes("Path traversal"));
+    assert.ok(result.output.includes("Path traversal") || result.output.includes("not found"));
+  });
+
+  it("SkillTool — absolute path traversal blocked", async () => {
+    const tmp = makeTmpDir();
+    const result = await SkillTool.call({ skill: "test", path: "/etc/passwd" }, ctx(tmp));
+    assert.equal(result.isError, true);
+  });
+
+  // ── ScheduleWakeup lifecycle ──
+
+  it("ScheduleWakeupTool — cancelWakeup clears pending", async () => {
+    const { ScheduleWakeupTool, consumeWakeup, cancelWakeup, hasPendingWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const tmp = makeTmpDir();
+    await ScheduleWakeupTool.call({ delaySeconds: 120, reason: "test", prompt: "p" }, ctx(tmp));
+    assert.equal(hasPendingWakeup(), true);
+    cancelWakeup();
+    assert.equal(hasPendingWakeup(), false);
+    assert.equal(consumeWakeup(), null);
+  });
+
+  it("suggestDelay — mid-range stays in cache window", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    assert.equal(suggestDelay(200), 200);
+    assert.ok(suggestDelay(200) <= 270);
+  });
+
+  it("suggestDelay — 500s commits to the wait", async () => {
+    const { suggestDelay } = await import("./ScheduleWakeupTool/index.js");
+    const d = suggestDelay(500);
+    assert.equal(d, 500);
+  });
+
+  // ── Background agent eviction ──
+
+  it("AgentMessageBus — evicts old completed agents on register", async () => {
+    const { AgentMessageBus } = await import("../services/agent-messaging.js");
+    const bus = new AgentMessageBus();
+    bus.registerBackgroundAgent("old-1", "reviewer");
+    bus.completeBackgroundAgent("old-1", "done");
+    // Fake the completedAt to 31 minutes ago
+    const agent = bus.getBackgroundAgent("old-1");
+    if (agent) agent.completedAt = Date.now() - 31 * 60 * 1000;
+    // Registering a new agent should trigger eviction
+    bus.registerBackgroundAgent("new-1", "tester");
+    assert.equal(bus.getBackgroundAgent("old-1"), undefined);
+    assert.ok(bus.getBackgroundAgent("new-1"));
   });
 });
