@@ -11,9 +11,9 @@
  * 3. node_modules packages with "openharness-plugin" keyword
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 
 export type SkillMetadata = {
   name: string;
@@ -24,6 +24,8 @@ export type SkillMetadata = {
   content: string;
   filePath: string;
   source: "project" | "global" | "plugin";
+  /** When false, skill is hidden from system prompt until explicitly invoked */
+  invokeModel: boolean;
 };
 
 export type PluginManifest = {
@@ -69,25 +71,53 @@ function parseSkillFrontmatter(content: string): Partial<SkillMetadata> {
   const toolsMatch = frontmatter.match(/^tools:\s*\[(.+)\]$/m);
   if (toolsMatch) result.tools = toolsMatch[1]!.split(",").map((t) => t.trim());
 
+  // Also parse allowedTools (used by built-in skills) and merge with tools
+  const allowedToolsMatch = frontmatter.match(/^allowedTools:\s*\[(.+)\]$/m);
+  if (allowedToolsMatch) {
+    const allowed = allowedToolsMatch[1]!.split(",").map((t) => t.trim());
+    result.tools = result.tools ? [...new Set([...result.tools, ...allowed])] : allowed;
+  }
+
   const argsMatch = frontmatter.match(/^args:\s*\[(.+)\]$/m);
   if (argsMatch) result.args = argsMatch[1]!.split(",").map((a) => a.trim());
+
+  // invokeModel: false OR disable-model-invocation: true → hidden from system prompt
+  if (frontmatter.match(/^invokeModel:\s*false$/m) || frontmatter.match(/^disable-model-invocation:\s*true$/m)) {
+    result.invokeModel = false;
+  }
 
   return result;
 }
 
-/** Load skills from a directory */
-function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillMetadata[] {
+/** Recursively collect all .md files from a directory tree */
+function walkMdFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    try {
+      if (statSync(full).isDirectory()) {
+        results.push(...walkMdFiles(full));
+      } else if (entry.endsWith(".md")) {
+        results.push(full);
+      }
+    } catch { /* skip unreadable */ }
+  }
+  return results;
+}
 
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".md"))
-    .map((f) => {
-      const filePath = join(dir, f);
+/** Load skills from a directory (recursively walks subdirectories) */
+function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillMetadata[] {
+  const files = walkMdFiles(dir);
+  return files
+    .map((filePath) => {
       try {
         const content = readFileSync(filePath, "utf-8");
         const meta = parseSkillFrontmatter(content);
+        // Derive name from relative path if not in frontmatter
+        const relName = relative(dir, filePath).replace(/\.md$/, "").replace(/\\/g, "/");
         return {
-          name: meta.name || basename(f, ".md"),
+          name: meta.name || relName,
           description: meta.description || "",
           trigger: meta.trigger,
           tools: meta.tools,
@@ -95,6 +125,7 @@ function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillM
           content,
           filePath,
           source,
+          invokeModel: meta.invokeModel ?? true,
         };
       } catch {
         return null;
@@ -212,7 +243,9 @@ export function discoverPlugins(): PluginManifest[] {
 
 /** Build a prompt listing available skills for the LLM */
 export function skillsToPrompt(skills: SkillMetadata[]): string {
-  if (skills.length === 0) return "";
-  const lines = skills.map((s) => `- ${s.name}: ${s.description}${s.trigger ? ` (auto-trigger: "${s.trigger}")` : ""}`);
+  // Only include skills with invokeModel !== false (hidden skills excluded from prompt)
+  const visible = skills.filter((s) => s.invokeModel !== false);
+  if (visible.length === 0) return "";
+  const lines = visible.map((s) => `- ${s.name}: ${s.description}${s.trigger ? ` (auto-trigger: "${s.trigger}")` : ""}`);
   return `# Available Skills\nUse the Skill tool to invoke these:\n${lines.join("\n")}`;
 }

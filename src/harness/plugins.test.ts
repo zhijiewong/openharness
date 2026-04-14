@@ -92,12 +92,43 @@ test("skillsToPrompt formats as markdown list", () => {
       content: "",
       filePath: "/tmp/deploy.md",
       source: "project",
+      invokeModel: true,
     },
   ];
   const prompt = skillsToPrompt(skills);
   assert.ok(prompt.includes("# Available Skills"));
   assert.ok(prompt.includes("- deploy: Deploy the app"));
   assert.ok(prompt.includes('(auto-trigger: "deploy")'));
+});
+
+test("skillsToPrompt hides skills with invokeModel: false", () => {
+  const skills: SkillMetadata[] = [
+    {
+      name: "visible",
+      description: "Visible skill",
+      trigger: undefined,
+      tools: undefined,
+      args: undefined,
+      content: "",
+      filePath: "/tmp/visible.md",
+      source: "project",
+      invokeModel: true,
+    },
+    {
+      name: "hidden",
+      description: "Hidden skill",
+      trigger: undefined,
+      tools: undefined,
+      args: undefined,
+      content: "",
+      filePath: "/tmp/hidden.md",
+      source: "project",
+      invokeModel: false,
+    },
+  ];
+  const prompt = skillsToPrompt(skills);
+  assert.ok(prompt.includes("visible"));
+  assert.ok(!prompt.includes("hidden"));
 });
 
 test("skillsToPrompt returns empty string for empty array", () => {
