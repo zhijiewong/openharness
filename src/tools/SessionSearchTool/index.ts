@@ -1,7 +1,5 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
-import { closeSessionDb, openSessionDb, searchSessions } from "../../harness/session-db.js";
+import { getSessionDb, searchSessions } from "../../harness/session-db.js";
 import type { Tool, ToolContext, ToolResult } from "../../Tool.js";
 
 const inputSchema = z.object({
@@ -23,10 +21,8 @@ export const SessionSearchTool: Tool<typeof inputSchema> = {
 
   async call(input, _context: ToolContext): Promise<ToolResult> {
     try {
-      const dbPath = join(homedir(), ".oh", "sessions.db");
-      const db = openSessionDb(dbPath);
+      const db = getSessionDb();
       const results = searchSessions(db, input.query, input.limit ?? 5);
-      closeSessionDb(db);
 
       if (results.length === 0) {
         return { output: `No matching sessions found for "${input.query}".`, isError: false };

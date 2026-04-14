@@ -170,8 +170,9 @@ export async function runExtraction(
   const written: string[] = [];
 
   for (const candidate of candidates) {
-    // Check for similar existing skill — if found, still persist (patch scenario)
-    findSimilarSkill(candidate.name, candidate.description, existingSkills);
+    const similar = findSimilarSkill(candidate.name, candidate.description, existingSkills);
+    // Skip if a very similar skill already exists (avoid duplicates)
+    if (similar) continue;
     const filePath = persistSkill(candidate, sessionId);
     written.push(filePath);
   }

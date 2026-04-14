@@ -134,9 +134,12 @@ export function searchSessions(db: Database.Database, query: string, limit = 20)
       updatedAt: row.updated_at,
       rank: row.rank,
     }));
-  } catch {
-    /* skip — invalid query syntax etc. */
-    return [];
+  } catch (err) {
+    // Only swallow FTS5 syntax errors; rethrow DB corruption or other issues
+    if (err instanceof Error && (err.message.includes("fts5") || err.message.includes("syntax"))) {
+      return [];
+    }
+    throw err;
   }
 }
 
@@ -197,4 +200,26 @@ export function rebuildIndex(db: Database.Database, sessionsDir?: string): numbe
   }
 
   return count;
+}
+
+// ── Singleton Connection ──
+
+let _singletonDb: Database.Database | null = null;
+
+/** Get a shared DB connection (opens once, reuses thereafter) */
+export function getSessionDb(): Database.Database {
+  if (!_singletonDb) {
+    _singletonDb = openSessionDb();
+  }
+  return _singletonDb;
+}
+
+/** Close the singleton connection (call on process exit) */
+export function closeGlobalSessionDb(): void {
+  if (_singletonDb) {
+    try {
+      _singletonDb.close();
+    } catch { /* ignore */ }
+    _singletonDb = null;
+  }
 }

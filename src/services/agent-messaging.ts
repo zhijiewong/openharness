@@ -113,6 +113,14 @@ export class AgentMessageBus {
       startedAt: Date.now(),
       pendingMessages: [],
     });
+    // Evict completed/errored agents older than 30 minutes to prevent unbounded growth
+    const EVICT_AGE_MS = 30 * 60 * 1000;
+    const now = Date.now();
+    for (const [agentId, agent] of this.backgroundAgents) {
+      if (agent.status !== "running" && agent.completedAt && now - agent.completedAt > EVICT_AGE_MS) {
+        this.backgroundAgents.delete(agentId);
+      }
+    }
   }
 
   /** Mark a background agent as completed with its result */

@@ -183,16 +183,25 @@ export function touchMemory(entry: MemoryEntry): void {
     const now = Date.now();
     const newCount = (entry.accessCount ?? 0) + 1;
 
-    // Update or insert metadata fields in frontmatter
+    // Update existing fields in frontmatter, or insert before closing ---
     if (raw.match(/^lastAccessed:/m)) {
       raw = raw.replace(/^lastAccessed:\s*\d+$/m, `lastAccessed: ${now}`);
     } else {
-      raw = raw.replace(/^---\s*$/m, `lastAccessed: ${now}\n---`);
+      // Insert before the CLOSING --- (second occurrence)
+      const firstIdx = raw.indexOf("---");
+      const closingIdx = raw.indexOf("---", firstIdx + 3);
+      if (closingIdx > 0) {
+        raw = `${raw.slice(0, closingIdx)}lastAccessed: ${now}\n${raw.slice(closingIdx)}`;
+      }
     }
     if (raw.match(/^accessCount:/m)) {
       raw = raw.replace(/^accessCount:\s*\d+$/m, `accessCount: ${newCount}`);
     } else {
-      raw = raw.replace(/^---\s*$/m, `accessCount: ${newCount}\n---`);
+      const firstIdx = raw.indexOf("---");
+      const closingIdx = raw.indexOf("---", firstIdx + 3);
+      if (closingIdx > 0) {
+        raw = `${raw.slice(0, closingIdx)}accessCount: ${newCount}\n${raw.slice(closingIdx)}`;
+      }
     }
 
     writeFileSync(entry.filePath, raw);
@@ -350,7 +359,12 @@ export function loadUserProfile(): string {
 /** Update the user profile, truncating to max chars */
 export function updateUserProfile(content: string): void {
   mkdirSync(PROJECT_MEMORY_DIR, { recursive: true });
-  const truncated = content.slice(0, USER_PROFILE_MAX_CHARS);
+  // Truncate at last newline before max chars to avoid cutting mid-sentence
+  let truncated = content;
+  if (truncated.length > USER_PROFILE_MAX_CHARS) {
+    const lastNewline = content.lastIndexOf("\n", USER_PROFILE_MAX_CHARS);
+    truncated = lastNewline > 0 ? content.slice(0, lastNewline) : content.slice(0, USER_PROFILE_MAX_CHARS);
+  }
   const md = `---
 name: User Profile
 type: user_profile

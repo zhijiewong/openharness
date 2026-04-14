@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { discoverSkills, findSkill } from "../../harness/plugins.js";
 import type { Tool, ToolResult } from "../../Tool.js";
@@ -57,8 +57,12 @@ export const SkillTool: Tool<typeof inputSchema> = {
 
     // Level 2: supporting file access
     if (input.path) {
-      const skillDir = skill.filePath.replace(/\.md$/, "");
-      const filePath = join(skillDir, input.path);
+      const skillDir = resolve(skill.filePath.replace(/\.md$/, ""));
+      const filePath = resolve(skillDir, input.path);
+      // Block path traversal via absolute paths, .., or any escape from skillDir
+      if (!filePath.startsWith(skillDir)) {
+        return { output: "Error: Path traversal not allowed.", isError: true };
+      }
       try {
         const content = readFileSync(filePath, "utf-8");
         return { output: content, isError: false };

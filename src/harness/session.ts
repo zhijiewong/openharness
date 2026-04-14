@@ -58,13 +58,11 @@ export function saveSession(session: Session, dir?: string): string {
   const path = join(sessionDir, `${session.id}.json`);
   session.updatedAt = Date.now();
   writeFileSync(path, JSON.stringify(session, null, 2));
-  // Index session for FTS5 search (fire-and-forget, don't block save)
+  // Index session for FTS5 search (fire-and-forget, singleton connection)
   import("./session-db.js")
-    .then(({ openSessionDb, indexSession: idx, sessionToIndexEntry, closeSessionDb }) => {
+    .then(({ getSessionDb, indexSession: idx, sessionToIndexEntry }) => {
       try {
-        const db = openSessionDb();
-        idx(db, sessionToIndexEntry(session));
-        closeSessionDb(db);
+        idx(getSessionDb(), sessionToIndexEntry(session));
       } catch {
         /* session search is optional */
       }
