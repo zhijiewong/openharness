@@ -219,7 +219,9 @@ export function closeGlobalSessionDb(): void {
   if (_singletonDb) {
     try {
       _singletonDb.close();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     _singletonDb = null;
   }
 }

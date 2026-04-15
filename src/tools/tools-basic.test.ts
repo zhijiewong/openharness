@@ -639,7 +639,9 @@ describe("tools-basic", () => {
   // ── ScheduleWakeup lifecycle ──
 
   it("ScheduleWakeupTool — cancelWakeup clears pending", async () => {
-    const { ScheduleWakeupTool, consumeWakeup, cancelWakeup, hasPendingWakeup } = await import("./ScheduleWakeupTool/index.js");
+    const { ScheduleWakeupTool, consumeWakeup, cancelWakeup, hasPendingWakeup } = await import(
+      "./ScheduleWakeupTool/index.js"
+    );
     const tmp = makeTmpDir();
     await ScheduleWakeupTool.call({ delaySeconds: 120, reason: "test", prompt: "p" }, ctx(tmp));
     assert.equal(hasPendingWakeup(), true);

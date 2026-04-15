@@ -149,11 +149,7 @@ ${candidate.verification}
 }
 
 /** Quick LLM quality check — is this skill worth keeping? */
-async function isSkillWorthy(
-  provider: Provider,
-  candidate: SkillCandidate,
-  model?: string,
-): Promise<boolean> {
+async function isSkillWorthy(provider: Provider, candidate: SkillCandidate, model?: string): Promise<boolean> {
   try {
     const prompt = `Is this extracted skill worth saving for future reuse? Answer YES or NO (one word only).
 
@@ -163,12 +159,7 @@ Procedure: ${candidate.procedure}
 
 Criteria: Is it reusable (not a one-off)? Is the procedure clear and complete? Would it save time in future sessions?`;
 
-    const response = await provider.complete(
-      [createUserMessage(prompt)],
-      "Answer YES or NO only.",
-      undefined,
-      model,
-    );
+    const response = await provider.complete([createUserMessage(prompt)], "Answer YES or NO only.", undefined, model);
     return response.content.trim().toUpperCase().startsWith("YES");
   } catch {
     return true; // On error, allow the skill through

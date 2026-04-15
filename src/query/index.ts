@@ -82,14 +82,18 @@ export async function* query(
       const hints = triggered.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
       fullSystemPrompt += `\n\n# Suggested Skills\nThese skills match your request. Use Skill tool to load them:\n${hints}`;
     }
-  } catch { /* skills optional */ }
+  } catch {
+    /* skills optional */
+  }
 
   // Track memory version for live injection
   let lastMemoryVer = 0;
   try {
     const { memoryVersion } = await import("../harness/memory.js");
     lastMemoryVer = memoryVersion();
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const state: QueryLoopState = {
     messages: [...existingMessages, createUserMessage(userMessage)],
@@ -170,7 +174,9 @@ export async function* query(
         }
         lastMemoryVer = currentVer;
       }
-    } catch { /* memory refresh optional */ }
+    } catch {
+      /* memory refresh optional */
+    }
 
     let turnPrompt = fullSystemPrompt;
     if (config.maxCost && config.maxCost > 0) {

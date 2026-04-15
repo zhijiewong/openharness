@@ -13,7 +13,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { join, relative } from "node:path";
 
 export type SkillMetadata = {
   name: string;
@@ -101,7 +101,9 @@ function walkMdFiles(dir: string): string[] {
       } else if (entry.endsWith(".md")) {
         results.push(full);
       }
-    } catch { /* skip unreadable */ }
+    } catch {
+      /* skip unreadable */
+    }
   }
   return results;
 }
@@ -246,6 +248,8 @@ export function skillsToPrompt(skills: SkillMetadata[]): string {
   // Only include skills with invokeModel !== false (hidden skills excluded from prompt)
   const visible = skills.filter((s) => s.invokeModel !== false);
   if (visible.length === 0) return "";
-  const lines = visible.map((s) => `- ${s.name}: ${s.description}${s.trigger ? ` (auto-trigger: "${s.trigger}")` : ""}`);
+  const lines = visible.map(
+    (s) => `- ${s.name}: ${s.description}${s.trigger ? ` (auto-trigger: "${s.trigger}")` : ""}`,
+  );
   return `# Available Skills\nUse the Skill tool to invoke these:\n${lines.join("\n")}`;
 }

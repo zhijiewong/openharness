@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { z } from "zod";
 import { discoverSkills, findSkill } from "../../harness/plugins.js";
 import type { Tool, ToolResult } from "../../Tool.js";
@@ -30,7 +30,7 @@ export const SkillTool: Tool<typeof inputSchema> = {
     }
 
     // Early path traversal check for Level 2
-    if (input.path && input.path.includes("..")) {
+    if (input.path?.includes("..")) {
       return { output: "Error: Path traversal not allowed.", isError: true };
     }
 
@@ -76,7 +76,7 @@ export const SkillTool: Tool<typeof inputSchema> = {
       let raw = readFileSync(skill.filePath, "utf-8");
       const now = Date.now();
       const usedMatch = raw.match(/^timesUsed:\s*(\d+)$/m);
-      const count = usedMatch ? parseInt(usedMatch[1]!) + 1 : 1;
+      const count = usedMatch ? parseInt(usedMatch[1]!, 10) + 1 : 1;
       if (usedMatch) {
         raw = raw.replace(/^timesUsed:\s*\d+$/m, `timesUsed: ${count}`);
       } else {
@@ -90,7 +90,9 @@ export const SkillTool: Tool<typeof inputSchema> = {
         raw = raw.replace(/^lastUsed:\s*\d+$/m, `lastUsed: ${now}`);
       }
       writeFileSync(skill.filePath, raw);
-    } catch { /* don't block on tracking failure */ }
+    } catch {
+      /* don't block on tracking failure */
+    }
 
     return { output: skill.content, isError: false };
   },

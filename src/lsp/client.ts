@@ -5,7 +5,6 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 type LspMessage = {
   jsonrpc: "2.0";
@@ -35,6 +34,7 @@ export class LspClient {
   private buffer = "";
   private contentLength = -1;
   private diagnostics = new Map<string, Diagnostic[]>();
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: set via Object.assign in static factory
   private ready = false;
 
   private constructor(proc: ChildProcess) {
@@ -65,7 +65,7 @@ export class LspClient {
           this.buffer = this.buffer.slice(headerEnd + 4);
           continue;
         }
-        this.contentLength = parseInt(match[1]!);
+        this.contentLength = parseInt(match[1]!, 10);
         this.buffer = this.buffer.slice(headerEnd + 4);
       }
 

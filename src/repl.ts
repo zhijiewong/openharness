@@ -719,7 +719,11 @@ export async function startREPL(config: REPLConfig): Promise<void> {
               const { createUserMessage: makeMsg } = await import("./types/message.js");
               try {
                 const consolidated = await config.provider.complete(
-                  [makeMsg(`Merge this user profile with new observations into a single cohesive profile. Keep the most important and recent information. Remove duplicates. Stay under 2000 characters. Return ONLY the merged profile text.\n\nCurrent profile:\n${currentProfile}\n\nNew observations:\n${newObservations}`)],
+                  [
+                    makeMsg(
+                      `Merge this user profile with new observations into a single cohesive profile. Keep the most important and recent information. Remove duplicates. Stay under 2000 characters. Return ONLY the merged profile text.\n\nCurrent profile:\n${currentProfile}\n\nNew observations:\n${newObservations}`,
+                    ),
+                  ],
                   "You are a profile curator. Return ONLY the merged profile, no commentary.",
                   undefined,
                   currentModel,

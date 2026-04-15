@@ -195,7 +195,9 @@ test("/init returns handled result", () => {
   assert.ok(result);
   assert.equal(result.handled, true);
   // Either "already exists" (local dev) or "Initialized" (CI) — both valid
-  assert.ok(result.output.includes("already") || result.output.includes("Initialized") || result.output.includes(".oh"));
+  assert.ok(
+    result.output.includes("already") || result.output.includes("Initialized") || result.output.includes(".oh"),
+  );
 });
 
 // ── /permissions ──

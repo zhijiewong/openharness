@@ -9,6 +9,7 @@ export class McpClient {
   private proc: ChildProcess;
   private nextId = 1;
   private pending = new Map<number, { resolve: (r: JsonRpcResponse) => void; reject: (e: Error) => void }>();
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: set via Object.assign in static factory
   private ready = false;
   private dead = false;
   private cfg: McpServerConfig;
@@ -155,7 +156,7 @@ export class McpClient {
       const id = this.nextId++;
       const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
       this.pending.set(id, { resolve, reject });
-      this.proc.stdin!.write(JSON.stringify(req) + "\n");
+      this.proc.stdin!.write(`${JSON.stringify(req)}\n`);
     });
   }
 

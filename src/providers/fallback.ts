@@ -12,9 +12,7 @@
  *   providers have different keys, so this is handled at the config level.
  */
 
-import type { APIToolDef, ModelInfo, Provider } from "./base.js";
-import type { StreamEvent } from "../types/events.js";
-import type { Message } from "../types/message.js";
+import type { Provider } from "./base.js";
 
 export type FallbackConfig = {
   provider: Provider;
@@ -51,9 +49,9 @@ export function createFallbackProvider(
       for (let i = 0; i < providers.length; i++) {
         const p = providers[i]!;
         try {
-          let hasYielded = false;
+          let _hasYielded = false;
           for await (const event of p.provider.stream(messages, systemPrompt, tools, p.model)) {
-            hasYielded = true;
+            _hasYielded = true;
             yield event;
           }
           _activeFallback = i === 0 ? null : p.provider.name;
@@ -63,7 +61,6 @@ export function createFallbackProvider(
           if (i > 0 || !isRetriableError(err)) throw err;
           // Pre-stream failure on primary: try next provider
           _activeFallback = null;
-          continue;
         }
       }
 

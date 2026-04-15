@@ -64,3 +64,25 @@ test("MCP server: unknown method returns error", async () => {
   assert.equal(res.error.code, -32601);
   assert.ok(res.error.message.includes("foo/bar"));
 });
+
+test("MCP server-mode: startMcpServer tool list covers all registered tools", async () => {
+  const { getAllTools } = await import("../tools.js");
+  const { zodToJsonSchemaSimple } = await import("./schema.js");
+  const tools = getAllTools();
+  const toolList = tools.map((t) => ({
+    name: t.name,
+    description: t.prompt().slice(0, 200),
+    inputSchema: zodToJsonSchemaSimple(t.inputSchema),
+  }));
+  // Should have more than 30 tools registered
+  assert.ok(toolList.length > 30, `Expected >30 tools, got ${toolList.length}`);
+  // Core tools must be present
+  const names = toolList.map((t) => t.name);
+  assert.ok(names.includes("Bash"), "Bash tool missing");
+  assert.ok(names.includes("Read"), "Read tool missing");
+  // Every entry must have a name and inputSchema
+  for (const t of toolList) {
+    assert.ok(t.name, "Tool entry missing name");
+    assert.ok(t.inputSchema, `Tool ${t.name} missing inputSchema`);
+  }
+});

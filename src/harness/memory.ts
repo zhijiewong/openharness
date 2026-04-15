@@ -359,16 +359,20 @@ export function consolidateMemories(): ConsolidationResult {
           const raw = readFileSync(join(skillsAutoDir, file), "utf-8");
           const usedMatch = raw.match(/^timesUsed:\s*(\d+)$/m);
           const extractedMatch = raw.match(/^extractedAt:\s*(\d+)$/m);
-          const timesUsed = usedMatch ? parseInt(usedMatch[1]!) : 0;
-          const extractedAt = extractedMatch ? parseInt(extractedMatch[1]!) : Date.now();
+          const timesUsed = usedMatch ? parseInt(usedMatch[1]!, 10) : 0;
+          const extractedAt = extractedMatch ? parseInt(extractedMatch[1]!, 10) : Date.now();
           if (timesUsed < 2 && Date.now() - extractedAt > SKILL_DECAY_MS) {
             unlinkSync(join(skillsAutoDir, file));
             prunedSkills++;
           }
-        } catch { /* skip unreadable skill files */ }
+        } catch {
+          /* skip unreadable skill files */
+        }
       }
     }
-  } catch { /* skill pruning is optional */ }
+  } catch {
+    /* skill pruning is optional */
+  }
 
   return { total: all.length, pruned: prunedCount + prunedSkills, decayed: decayedCount };
 }

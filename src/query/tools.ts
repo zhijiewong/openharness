@@ -153,7 +153,9 @@ export async function executeSingleTool(
         const { autoCommitAIEdits } = await import("../git/index.js");
         const filePaths = getAffectedFiles(tool.name, parsed.data as Record<string, unknown>);
         autoCommitAIEdits(tool.name, filePaths);
-      } catch { /* auto-commit is optional */ }
+      } catch {
+        /* auto-commit is optional */
+      }
     }
 
     // Strip ANSI and cap output, then append verification suffix

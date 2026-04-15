@@ -13,7 +13,7 @@
 
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { writeOhConfig } from "../harness/config.js";
 import CybergotchiSetup from "./CybergotchiSetup.js";
 
@@ -106,7 +106,7 @@ export default function InitWizard({ onDone }: Props) {
   const [testStatus, setTestStatus] = useState<"testing" | "ok" | "fail">("testing");
   const [testError, setTestError] = useState("");
   const [permIdx, setPermIdx] = useState(0);
-  const [hatchGotchi, setHatchGotchi] = useState(false);
+  const [_hatchGotchi, setHatchGotchi] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [suggestedMcp, setSuggestedMcp] = useState<string[]>([]);
   const [selectedMcp, setSelectedMcp] = useState<Set<string>>(new Set());
@@ -190,7 +190,8 @@ export default function InitWizard({ onDone }: Props) {
           if (input === "n" || input === "N") writeFinal();
         }
       },
-      [step, providerIdx, provider, modelIdx, availableModels, model],
+      // biome-ignore lint/correctness/useExhaustiveDependencies: runTest/writeFinal declared below, providerIdx intentionally omitted
+      [step, providerIdx, provider, modelIdx, availableModels, model, suggestedMcp, mcpIdx],
     ),
   );
 
@@ -256,7 +257,7 @@ export default function InitWizard({ onDone }: Props) {
     });
     setStep("done");
     setTimeout(() => onDone?.(), 1500);
-  }, [provider, model, availableModels, modelIdx, permIdx, apiKey, baseUrl, selectedMcp]);
+  }, [provider, model, availableModels, modelIdx, permIdx, apiKey, baseUrl, selectedMcp, onDone]);
 
   // ── Render ──
 

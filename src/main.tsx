@@ -18,10 +18,10 @@ import { Command, Option } from "commander";
 import { render } from "ink";
 import { readOhConfig } from "./harness/config.js";
 import { emitHook } from "./harness/hooks.js";
-import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
-import { createRulesFile, loadRules, loadRulesAsPrompt } from "./harness/rules.js";
 import { loadActiveMemories, memoriesToPrompt, userProfileToPrompt } from "./harness/memory.js";
+import { detectProject, projectContextToPrompt } from "./harness/onboarding.js";
 import { discoverSkills, skillsToPrompt } from "./harness/plugins.js";
+import { createRulesFile, loadRules, loadRulesAsPrompt } from "./harness/rules.js";
 import { listSessions } from "./harness/session.js";
 import { connectedMcpServers, disconnectMcpClients, getMcpInstructions, loadMcpTools } from "./mcp/loader.js";
 import type { Provider, ProviderConfig } from "./providers/base.js";
@@ -773,6 +773,15 @@ program
     const context = { workingDir: process.cwd() };
     const server = new McpServer(tools, context);
     server.start();
+  });
+
+// ── mcp-server (alias for serve, standard MCP server mode) ──
+program
+  .command("mcp-server")
+  .description("Start as MCP server (stdio JSON-RPC) — alias for serve")
+  .action(async () => {
+    const { startMcpServer } = await import("./mcp/server-mode.js");
+    await startMcpServer();
   });
 
 // ── schedule ──
