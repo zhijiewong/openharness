@@ -147,6 +147,15 @@ export async function executeSingleTool(
       }
     }
 
+    // Auto-commit per tool (if enabled and file was modified)
+    if (!result.isError && context.gitCommitPerTool && !tool.isReadOnly(parsed.data)) {
+      try {
+        const { autoCommitAIEdits } = await import("../git/index.js");
+        const filePaths = getAffectedFiles(tool.name, parsed.data as Record<string, unknown>);
+        autoCommitAIEdits(tool.name, filePaths);
+      } catch { /* auto-commit is optional */ }
+    }
+
     // Strip ANSI and cap output, then append verification suffix
     let output = result.output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "") + verificationSuffix;
     if (output.length > MAX_TOOL_RESULT_CHARS) {

@@ -50,6 +50,7 @@ export async function* query(
     systemPrompt: config.systemPrompt,
     permissionMode: config.permissionMode,
     askUserQuestion: config.askUserQuestion,
+    gitCommitPerTool: config.gitCommitPerTool,
   };
   const estimateTokens = makeTokenEstimator(config.provider);
   const contextManager = new ContextManager(undefined, config.model);

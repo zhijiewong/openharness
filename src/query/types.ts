@@ -20,6 +20,8 @@ export type QueryConfig = {
   abortSignal?: AbortSignal;
   /** Working directory for tool execution (defaults to process.cwd()) */
   workingDir?: string;
+  /** Auto-commit after each file-modifying tool */
+  gitCommitPerTool?: boolean;
 };
 
 export type TransitionReason = "next_turn" | "retry_network" | "retry_prompt_too_long" | "retry_max_output_tokens";

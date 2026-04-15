@@ -81,6 +81,8 @@ export type OhConfig = {
   };
   /** Fallback providers — tried in order when primary fails */
   fallbackProviders?: Array<{ provider: string; model?: string; apiKey?: string; baseUrl?: string }>;
+  /** Auto-commit after each file-modifying tool execution */
+  gitCommitPerTool?: boolean;
   /** Effort level for LLM reasoning depth */
   effortLevel?: "low" | "medium" | "high" | "max";
   /** Opt-in telemetry (default: off) */

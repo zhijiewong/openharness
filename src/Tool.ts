@@ -26,6 +26,8 @@ export type ToolContext = {
   permissionMode?: PermissionMode;
   /** Ask the user a question; resolves with their answer string */
   askUserQuestion?: (question: string, options?: string[]) => Promise<string>;
+  /** Auto-commit after file-modifying tools */
+  gitCommitPerTool?: boolean;
 };
 
 export type Tool<Input extends z.ZodType = z.ZodType> = {
