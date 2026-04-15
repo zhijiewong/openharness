@@ -348,7 +348,29 @@ export function consolidateMemories(): ConsolidationResult {
   updateMemoryIndex(PROJECT_MEMORY_DIR);
   updateMemoryIndex(GLOBAL_MEMORY_DIR);
 
-  return { total: all.length, pruned: prunedCount, decayed: decayedCount };
+  // Skill decay: prune auto-extracted skills unused for 60 days
+  let prunedSkills = 0;
+  try {
+    const skillsAutoDir = join(".oh", "skills", "auto");
+    if (existsSync(skillsAutoDir)) {
+      const SKILL_DECAY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+      for (const file of readdirSync(skillsAutoDir).filter((f) => f.endsWith(".md"))) {
+        try {
+          const raw = readFileSync(join(skillsAutoDir, file), "utf-8");
+          const usedMatch = raw.match(/^timesUsed:\s*(\d+)$/m);
+          const extractedMatch = raw.match(/^extractedAt:\s*(\d+)$/m);
+          const timesUsed = usedMatch ? parseInt(usedMatch[1]!) : 0;
+          const extractedAt = extractedMatch ? parseInt(extractedMatch[1]!) : Date.now();
+          if (timesUsed < 2 && Date.now() - extractedAt > SKILL_DECAY_MS) {
+            unlinkSync(join(skillsAutoDir, file));
+            prunedSkills++;
+          }
+        } catch { /* skip unreadable skill files */ }
+      }
+    }
+  } catch { /* skill pruning is optional */ }
+
+  return { total: all.length, pruned: prunedCount + prunedSkills, decayed: decayedCount };
 }
 
 // ── User Profile ──

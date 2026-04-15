@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { discoverSkills, findSkill } from "../../harness/plugins.js";
@@ -70,6 +70,27 @@ export const SkillTool: Tool<typeof inputSchema> = {
         return { output: `File not found: ${input.path} (looked in ${skillDir}/)`, isError: true };
       }
     }
+
+    // Track usage (fire-and-forget, don't block skill invocation)
+    try {
+      let raw = readFileSync(skill.filePath, "utf-8");
+      const now = Date.now();
+      const usedMatch = raw.match(/^timesUsed:\s*(\d+)$/m);
+      const count = usedMatch ? parseInt(usedMatch[1]!) + 1 : 1;
+      if (usedMatch) {
+        raw = raw.replace(/^timesUsed:\s*\d+$/m, `timesUsed: ${count}`);
+      } else {
+        const first = raw.indexOf("---");
+        const closing = raw.indexOf("---", first + 3);
+        if (closing > 0) {
+          raw = `${raw.slice(0, closing)}timesUsed: ${count}\nlastUsed: ${now}\n${raw.slice(closing)}`;
+        }
+      }
+      if (raw.match(/^lastUsed:/m)) {
+        raw = raw.replace(/^lastUsed:\s*\d+$/m, `lastUsed: ${now}`);
+      }
+      writeFileSync(skill.filePath, raw);
+    } catch { /* don't block on tracking failure */ }
 
     return { output: skill.content, isError: false };
   },

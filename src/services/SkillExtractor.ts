@@ -127,6 +127,8 @@ source: auto
 extractedFrom: ${sessionId}
 extractedAt: ${now}
 version: ${version}
+timesUsed: 0
+lastUsed: 0
 ---
 
 ## Procedure
