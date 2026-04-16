@@ -206,25 +206,28 @@ describe("MonitorTool", async () => {
   });
 
   test("respects maxLines limit", async () => {
-    const result = await MonitorTool.call(
-      { command: "echo line1 && echo line2 && echo line3 && echo line4 && echo line5", maxLines: 2, timeout: 5000 },
-      ctx("."),
-    );
+    const cmd =
+      process.platform === "win32"
+        ? "echo line1 && echo line2 && echo line3 && echo line4 && echo line5"
+        : "printf 'line1\\nline2\\nline3\\nline4\\nline5\\n'";
+    const result = await MonitorTool.call({ command: cmd, maxLines: 2, timeout: 5000 }, ctx("."));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("2 lines"));
   });
 
   test("filters output by pattern", async () => {
-    const result = await MonitorTool.call(
-      { command: "echo hello && echo world && echo hello-again", pattern: "hello", timeout: 5000 },
-      ctx("."),
-    );
+    // Use printf for cross-platform reliability (echo behavior varies)
+    const cmd =
+      process.platform === "win32"
+        ? "echo hello && echo world && echo hello-again"
+        : "printf 'hello\\nworld\\nhello-again\\n'";
+    const result = await MonitorTool.call({ command: cmd, pattern: "hello", timeout: 5000 }, ctx("."));
     assert.equal(result.isError, false);
     assert.ok(result.output.includes("hello"));
-    // "world" shouldn't match the pattern
-    const lines = result.output.split("\n").filter((l) => l.trim() && !l.startsWith("["));
-    for (const line of lines) {
-      if (line.trim()) assert.ok(line.includes("hello") || line === "", `Unexpected unfiltered line: ${line}`);
+    // "world" alone shouldn't appear in filtered output (only in [Process exited...] trailer)
+    const contentLines = result.output.split("\n").filter((l) => l.trim() && !l.startsWith("[") && !l.startsWith("  "));
+    for (const line of contentLines) {
+      if (line.trim()) assert.ok(line.includes("hello"), `Unexpected unfiltered line: "${line}"`);
     }
   });
 });
