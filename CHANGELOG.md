@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.0 (2026-04-16) — Full Test Coverage
+
+### Added
+- **25 integration tests**: MultiEdit (4 tests, atomic failure), WebFetch SSRF (7 tests covering localhost/private/protocol blocking), Cron lifecycle (3 tests), Monitor (3 tests with pattern filtering), PowerShell (2 platform-aware tests), SendMessage (2 tests), Worktree error handling (2 tests), Pipeline/RemoteTrigger error paths (2 tests)
+
+### Summary
+890 tests, 42 tools, 78 commands. All tool directories now have test coverage. Zero Biome warnings.
+
 ## 2.7.0 (2026-04-16) — Full Parity
 
 ### Added
