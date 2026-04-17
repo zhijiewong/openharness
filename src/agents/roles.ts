@@ -22,6 +22,10 @@ export type AgentRole = {
   model?: string;
   /** Isolation mode for sub-agent execution. Default: inherits parent. */
   isolation?: "none" | "worktree";
+  /** Per-agent MCP servers injected only when this agent runs (parsed via raw passthrough; dispatcher wiring is a future task). */
+  mcpServers?: Record<string, unknown>;
+  /** Per-agent hooks (parsed via raw passthrough; dispatcher wiring is a future task). */
+  hooks?: Record<string, unknown>;
 };
 
 const roles: AgentRole[] = [
@@ -241,6 +245,11 @@ function parseAgentMarkdown(raw: string, filePath: string): AgentRole | null {
   const isolation = isolationMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
   const validIsolation = isolation === "worktree" || isolation === "none" ? isolation : undefined;
 
+  // Parse optional inline-JSON fields (mcpServers, hooks). These are block fields in
+  // Anthropic's YAML but we support single-line JSON for lightweight frontmatter use.
+  const mcpServersMatch = fm.match(/^mcpServers:\s*(\{[\s\S]*?\})\s*$/m);
+  const hooksMatch = fm.match(/^hooks:\s*(\{[\s\S]*?\})\s*$/m);
+
   return {
     id,
     name: nameMatch?.[1]?.trim() ?? id,
@@ -250,7 +259,18 @@ function parseAgentMarkdown(raw: string, filePath: string): AgentRole | null {
     disallowedTools: disallowedMatch ? parseAgentList(disallowedMatch[1]!) : undefined,
     model: modelMatch?.[1]?.trim().replace(/^["']|["']$/g, ""),
     isolation: validIsolation,
+    mcpServers: mcpServersMatch ? tryParseJson(mcpServersMatch[1]!) : undefined,
+    hooks: hooksMatch ? tryParseJson(hooksMatch[1]!) : undefined,
   };
+}
+
+function tryParseJson(raw: string): Record<string, unknown> | undefined {
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Load agent roles from a directory of .md files */

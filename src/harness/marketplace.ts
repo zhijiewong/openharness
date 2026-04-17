@@ -188,6 +188,23 @@ export function getPluginHooks(cachePath: string): Record<string, unknown> | nul
   }
 }
 
+/** Discover plugin-shipped LSP servers from `cachePath/.lsp.json`. Returns raw config for the runtime to register. */
+export function getPluginLspServers(cachePath: string): Record<string, unknown> | null {
+  const path = join(cachePath, ".lsp.json");
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    if (data && typeof data === "object") {
+      if ("lspServers" in data && typeof data.lspServers === "object")
+        return data.lspServers as Record<string, unknown>;
+      return data as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Marketplace Management ──
 
 /** Add a marketplace from a URL, GitHub repo, or local path.

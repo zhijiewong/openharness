@@ -151,4 +151,29 @@ describe("agent roles", () => {
       assert.equal(agents[0]!.name, "From OH");
     });
   });
+
+  it("parses inline-JSON mcpServers + hooks fields", () => {
+    withTmpCwd((dir) => {
+      writeFile(
+        dir,
+        ".oh/agents/with-mcp.md",
+        `---\nname: WithMcp\ndescription: x\nmcpServers: {"excel":{"command":"npx"}}\nhooks: {"PreToolUse":[{"command":"echo pre"}]}\n---\nbody\n`,
+      );
+      const a = discoverMarkdownAgents().find((r) => r.id === "with-mcp");
+      assert.ok(a);
+      assert.ok(a!.mcpServers);
+      assert.ok("excel" in (a!.mcpServers as object));
+      assert.ok(a!.hooks);
+      assert.ok("PreToolUse" in (a!.hooks as object));
+    });
+  });
+
+  it("silently ignores malformed JSON in mcpServers/hooks", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/bad-json.md", `---\nname: BadJson\ndescription: x\nmcpServers: {not json}\n---\n`);
+      const a = discoverMarkdownAgents().find((r) => r.id === "bad-json");
+      assert.ok(a);
+      assert.equal(a!.mcpServers, undefined);
+    });
+  });
 });

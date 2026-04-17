@@ -4,6 +4,7 @@ import { makeTmpDir, writeFile } from "../test-helpers.js";
 import {
   ccMarketplaceToOh,
   getPluginHooks,
+  getPluginLspServers,
   getPluginMcpServers,
   parseCcPluginManifest,
   parseMarketplaceJson,
@@ -177,4 +178,24 @@ test("getPluginHooks reads hooks/hooks.json", () => {
 test("getPluginHooks returns null when absent", () => {
   const dir = makeTmpDir();
   assert.equal(getPluginHooks(dir), null);
+});
+
+test("getPluginLspServers reads { lspServers: {...} } shape", () => {
+  const dir = makeTmpDir();
+  writeFile(dir, ".lsp.json", JSON.stringify({ lspServers: { typescript: { command: "tsserver" } } }));
+  const lsp = getPluginLspServers(dir);
+  assert.ok(lsp);
+  assert.ok("typescript" in lsp!);
+});
+
+test("getPluginLspServers also accepts bare server map", () => {
+  const dir = makeTmpDir();
+  writeFile(dir, ".lsp.json", JSON.stringify({ typescript: { command: "tsserver" } }));
+  const lsp = getPluginLspServers(dir);
+  assert.ok(lsp);
+  assert.ok("typescript" in lsp!);
+});
+
+test("getPluginLspServers returns null when absent", () => {
+  assert.equal(getPluginLspServers(makeTmpDir()), null);
 });

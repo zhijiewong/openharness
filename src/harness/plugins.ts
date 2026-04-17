@@ -28,6 +28,10 @@ export type SkillMetadata = {
   license: string | undefined;
   /** Glob patterns scoping skill auto-surfacing to specific file paths */
   paths: string[] | undefined;
+  /** Execution context: "default" runs in the current agent, "fork" spawns a sub-agent (Anthropic extension) */
+  context: "default" | "fork" | undefined;
+  /** When `context: fork`, the sub-agent type to spawn (must match an AgentRole id) */
+  agent: string | undefined;
   content: string;
   filePath: string;
   source: "bundled" | "project" | "global" | "plugin";
@@ -124,6 +128,17 @@ function parseSkillFrontmatter(content: string): Partial<SkillMetadata> {
   const pathsMatch = frontmatter.match(/^paths:\s*(.+)$/m);
   if (pathsMatch) result.paths = parseListValue(pathsMatch[1]!);
 
+  // context: "default" | "fork" — when "fork", skill runs in a new sub-agent context
+  const contextMatch = frontmatter.match(/^context:\s*(.+)$/m);
+  if (contextMatch) {
+    const v = contextMatch[1]!.trim().replace(/^["']|["']$/g, "");
+    if (v === "fork" || v === "default") result.context = v;
+  }
+
+  // agent: sub-agent type name (only meaningful when context: fork)
+  const agentMatch = frontmatter.match(/^agent:\s*(.+)$/m);
+  if (agentMatch) result.agent = agentMatch[1]!.trim().replace(/^["']|["']$/g, "");
+
   return result;
 }
 
@@ -182,6 +197,8 @@ function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillM
           whenToUse: meta.whenToUse,
           license: meta.license,
           paths: meta.paths,
+          context: meta.context,
+          agent: meta.agent,
           content,
           filePath,
           source,

@@ -92,6 +92,8 @@ test("skillsToPrompt formats as markdown list", () => {
       whenToUse: undefined,
       license: undefined,
       paths: undefined,
+      context: undefined,
+      agent: undefined,
       content: "",
       filePath: "/tmp/deploy.md",
       source: "project",
@@ -115,6 +117,8 @@ test("skillsToPrompt hides skills with invokeModel: false", () => {
       whenToUse: undefined,
       license: undefined,
       paths: undefined,
+      context: undefined,
+      agent: undefined,
       content: "",
       filePath: "/tmp/visible.md",
       source: "project",
@@ -129,6 +133,8 @@ test("skillsToPrompt hides skills with invokeModel: false", () => {
       whenToUse: undefined,
       license: undefined,
       paths: undefined,
+      context: undefined,
+      agent: undefined,
       content: "",
       filePath: "/tmp/hidden.md",
       source: "project",
@@ -275,6 +281,45 @@ test("flat layout still works alongside directory layout", () => {
     assert.equal(project.length, 2);
     const names = project.map((s) => s.name).sort();
     assert.deepEqual(names, ["dirsk", "flat"]);
+  });
+});
+
+test("parses `context: fork` + `agent: <type>` skill fields", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/fork-skill.md",
+      `---
+name: fork-skill
+description: Delegates to a sub-agent
+context: fork
+agent: code-reviewer
+---
+body
+`,
+    );
+    const s = findSkill("fork-skill");
+    assert.ok(s);
+    assert.equal(s!.context, "fork");
+    assert.equal(s!.agent, "code-reviewer");
+  });
+});
+
+test("invalid context value is silently ignored", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/bad-context.md",
+      `---
+name: bad-context
+description: x
+context: bogus
+---
+`,
+    );
+    const s = findSkill("bad-context");
+    assert.ok(s);
+    assert.equal(s!.context, undefined);
   });
 });
 
