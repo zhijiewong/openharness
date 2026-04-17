@@ -89,7 +89,11 @@ export const MonitorTool: Tool<typeof inputSchema> = {
         for (const line of parts) handleLine(line);
       });
 
-      proc.on("exit", (code) => {
+      // Use "close" rather than "exit": "exit" can fire before stdout data
+      // has been fully drained on fast-exiting commands, causing CI flakiness
+      // where output appears empty. "close" is guaranteed to fire after all
+      // stdio streams have closed.
+      proc.on("close", (code) => {
         if (!settled) {
           settled = true;
           clearTimeout(timer);
