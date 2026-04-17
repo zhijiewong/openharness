@@ -17,6 +17,8 @@
     "dist/**/*.d.ts",
     "!dist/**/*.test.*",
     "!dist/**/test-helpers.*",
+    "data/skills/**/*.md",
+    "data/registry.json",
     "README.md",
     "LICENSE"
   ],

@@ -89,6 +89,9 @@ test("skillsToPrompt formats as markdown list", () => {
       trigger: "deploy",
       tools: ["Bash"],
       args: undefined,
+      whenToUse: undefined,
+      license: undefined,
+      paths: undefined,
       content: "",
       filePath: "/tmp/deploy.md",
       source: "project",
@@ -109,6 +112,9 @@ test("skillsToPrompt hides skills with invokeModel: false", () => {
       trigger: undefined,
       tools: undefined,
       args: undefined,
+      whenToUse: undefined,
+      license: undefined,
+      paths: undefined,
       content: "",
       filePath: "/tmp/visible.md",
       source: "project",
@@ -120,6 +126,9 @@ test("skillsToPrompt hides skills with invokeModel: false", () => {
       trigger: undefined,
       tools: undefined,
       args: undefined,
+      whenToUse: undefined,
+      license: undefined,
+      paths: undefined,
       content: "",
       filePath: "/tmp/hidden.md",
       source: "project",
@@ -133,4 +142,117 @@ test("skillsToPrompt hides skills with invokeModel: false", () => {
 
 test("skillsToPrompt returns empty string for empty array", () => {
   assert.equal(skillsToPrompt([]), "");
+});
+
+// ── Anthropic-style frontmatter alias tests ──
+
+test("parses Anthropic kebab `allowed-tools` (space-separated)", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/cc-style.md",
+      `---
+name: cc-style
+description: Anthropic-style skill
+allowed-tools: Read Glob Grep
+---
+body
+`,
+    );
+    const skill = findSkill("cc-style");
+    assert.ok(skill);
+    assert.deepEqual(skill!.tools, ["Read", "Glob", "Grep"]);
+  });
+});
+
+test("parses `allowed-tools` array form alongside camelCase `allowedTools`", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/dual.md",
+      `---
+name: dual
+description: Mixed style
+allowed-tools: [Bash, Read]
+---
+`,
+    );
+    const skill = findSkill("dual");
+    assert.ok(skill);
+    assert.deepEqual(skill!.tools!.sort(), ["Bash", "Read"]);
+  });
+});
+
+test("`disable-model-invocation: true` sets invokeModel false", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/hidden.md",
+      `---
+name: hidden
+description: Hidden skill
+disable-model-invocation: true
+---
+`,
+    );
+    const skill = findSkill("hidden");
+    assert.ok(skill);
+    assert.equal(skill!.invokeModel, false);
+  });
+});
+
+test("`argument-hint` aliases to args", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/with-args.md",
+      `---
+name: with-args
+description: Has args
+argument-hint: [--prod, --force]
+---
+`,
+    );
+    const skill = findSkill("with-args");
+    assert.ok(skill);
+    assert.deepEqual(skill!.args, ["--prod", "--force"]);
+  });
+});
+
+test("parses `license` and `paths` fields", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/licensed.md",
+      `---
+name: licensed
+description: Has license + paths
+license: MIT
+paths: [src/**/*.ts, tests/**/*.ts]
+---
+`,
+    );
+    const skill = findSkill("licensed");
+    assert.ok(skill);
+    assert.equal(skill!.license, "MIT");
+    assert.deepEqual(skill!.paths, ["src/**/*.ts", "tests/**/*.ts"]);
+  });
+});
+
+test("`whenToUse` (Anthropic style) is parsed and stored", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/whentouse.md",
+      `---
+name: whentouse
+description: x
+when-to-use: When the user asks to refactor legacy code
+---
+`,
+    );
+    const skill = findSkill("whentouse");
+    assert.ok(skill);
+    assert.equal(skill!.whenToUse, "When the user asks to refactor legacy code");
+  });
 });
