@@ -239,6 +239,55 @@ paths: [src/**/*.ts, tests/**/*.ts]
   });
 });
 
+// ── Directory-packaged skill (skill-name/SKILL.md) tests ──
+
+test("directory-packaged skill: SKILL.md surfaces, sibling .md files are companions", () => {
+  withTmpCwd((dir) => {
+    writeFile(
+      dir,
+      ".oh/skills/pdf-vision/SKILL.md",
+      `---
+name: pdf-vision
+description: Extract data from PDF drawings
+---
+Main skill content
+`,
+    );
+    writeFile(dir, ".oh/skills/pdf-vision/reference.md", "# Reference docs (companion, not a skill)\n");
+    writeFile(dir, ".oh/skills/pdf-vision/forms.md", "# Forms guide (companion, not a skill)\n");
+    const skills = discoverSkills();
+    const project = skills.filter((s) => s.source === "project");
+    // Only ONE skill registers, despite 3 .md files in the dir
+    assert.equal(project.length, 1);
+    assert.equal(project[0]!.name, "pdf-vision");
+  });
+});
+
+test("flat layout still works alongside directory layout", () => {
+  withTmpCwd((dir) => {
+    // Flat file
+    writeFile(dir, ".oh/skills/flat.md", `---\nname: flat\ndescription: Flat skill\n---\n`);
+    // Directory-packaged
+    writeFile(dir, ".oh/skills/dirsk/SKILL.md", `---\nname: dirsk\ndescription: Dir skill\n---\n`);
+    writeFile(dir, ".oh/skills/dirsk/notes.md", "# Companion\n");
+    const skills = discoverSkills();
+    const project = skills.filter((s) => s.source === "project");
+    assert.equal(project.length, 2);
+    const names = project.map((s) => s.name).sort();
+    assert.deepEqual(names, ["dirsk", "flat"]);
+  });
+});
+
+test("nested directory without SKILL.md still recurses (legacy behavior)", () => {
+  withTmpCwd((dir) => {
+    writeFile(dir, ".oh/skills/nested/a.md", `---\nname: a\ndescription: A\n---\n`);
+    writeFile(dir, ".oh/skills/nested/b.md", `---\nname: b\ndescription: B\n---\n`);
+    const skills = discoverSkills();
+    const project = skills.filter((s) => s.source === "project");
+    assert.equal(project.length, 2);
+  });
+});
+
 test("`whenToUse` (Anthropic style) is parsed and stored", () => {
   withTmpCwd((dir) => {
     writeFile(

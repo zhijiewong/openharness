@@ -125,7 +125,7 @@ export function registerAICommands(register: (name: string, description: string,
     return { output: lines.join("\n"), handled: true };
   });
 
-  register("plugins", "Manage plugins: list, search, install, uninstall, marketplace", (args) => {
+  const pluginsHandler = (args: string) => {
     const { discoverPlugins, discoverSkills } = require("../harness/plugins.js");
     const {
       searchMarketplace,
@@ -142,6 +142,23 @@ export function registerAICommands(register: (name: string, description: string,
     const parts = args.trim().split(/\s+/);
     const subcommand = parts[0] ?? "";
     const rest = parts.slice(1).join(" ");
+
+    if (subcommand === "info" && rest) {
+      const installed = getInstalledPlugins();
+      const p = installed.find((x: { name: string }) => x.name === rest);
+      if (!p) return { output: `Plugin "${rest}" not found among installed plugins.`, handled: true };
+      const lines = [
+        `${p.name}@${p.version}`,
+        p.description ? `  ${p.description}` : "",
+        p.author ? `  by ${p.author}` : "",
+        p.license ? `  license: ${p.license}` : "",
+        p.homepage ? `  homepage: ${p.homepage}` : "",
+        p.keywords?.length ? `  keywords: ${p.keywords.join(", ")}` : "",
+        `  marketplace: ${p.marketplace}`,
+        `  cachePath: ${p.cachePath}`,
+      ].filter(Boolean);
+      return { output: lines.join("\n"), handled: true };
+    }
 
     if (subcommand === "marketplace") {
       const action = parts[1];
@@ -229,14 +246,18 @@ export function registerAICommands(register: (name: string, description: string,
 
     lines.push("");
     lines.push("Commands:");
-    lines.push("  /plugins search <query>          Search marketplaces");
-    lines.push("  /plugins install <name>          Install from marketplace");
-    lines.push("  /plugins uninstall <name>        Remove a plugin");
-    lines.push("  /plugins marketplace add <src>   Add a marketplace");
-    lines.push("  /plugins marketplace             List marketplaces");
+    lines.push("  /plugin info <name>              Show full manifest for a plugin");
+    lines.push("  /plugin search <query>           Search marketplaces");
+    lines.push("  /plugin install <name>           Install from marketplace");
+    lines.push("  /plugin uninstall <name>         Remove a plugin");
+    lines.push("  /plugin marketplace add <src>    Add a marketplace");
+    lines.push("  /plugin marketplace              List marketplaces");
 
     return { output: lines.join("\n"), handled: true };
-  });
+  };
+
+  register("plugins", "Manage plugins: list, search, install, uninstall, marketplace, info", pluginsHandler);
+  register("plugin", "Alias of /plugins (Claude Code-style singular)", pluginsHandler);
 
   register("cybergotchi", "Manage your cybergotchi — feed · pet · rest · status · rename · reset", (args) => {
     return handleCybergotchiCommand(args);

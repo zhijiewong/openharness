@@ -8,13 +8,16 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 const MARKETPLACE_DIR = join(homedir(), ".oh", "marketplaces");
 const PLUGIN_CACHE_DIR = join(homedir(), ".oh", "plugins", "cache");
 const INSTALLED_PLUGINS_FILE = join(homedir(), ".oh", "plugins", "installed.json");
+
+// Claude Code plugin manifest path relative to plugin root
+const CC_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
 
 // ── Types ──
 
@@ -45,7 +48,40 @@ export type InstalledPlugin = {
   marketplace: string;
   installedAt: number;
   cachePath: string;
+  /** Optional fields populated from `.claude-plugin/plugin.json` if present */
+  description?: string;
+  author?: string;
+  license?: string;
+  homepage?: string;
+  keywords?: string[];
 };
+
+/** Claude Code plugin manifest (`.claude-plugin/plugin.json`).
+ * Required: name, description. All other fields optional.
+ */
+export type CcPluginManifest = {
+  name: string;
+  description: string;
+  version?: string;
+  author?: { name?: string; email?: string } | string;
+  homepage?: string;
+  repository?: string;
+  license?: string;
+  keywords?: string[];
+};
+
+/** Parse a `.claude-plugin/plugin.json` file at the given plugin root, or null if missing/invalid. */
+export function parseCcPluginManifest(pluginRoot: string): CcPluginManifest | null {
+  const path = join(pluginRoot, CC_MANIFEST_PATH);
+  if (!existsSync(path)) return null;
+  try {
+    const m = JSON.parse(readFileSync(path, "utf-8"));
+    if (typeof m?.name !== "string" || typeof m?.description !== "string") return null;
+    return m as CcPluginManifest;
+  } catch {
+    return null;
+  }
+}
 
 // ── Marketplace Management ──
 
@@ -240,14 +276,101 @@ export function uninstallPlugin(name: string): boolean {
   return true;
 }
 
-/** Get all installed plugins */
+/** Get all installed plugins.
+ * Sources merged in priority order:
+ * 1. installed.json (plugins installed via /plugin install or addMarketplace flow)
+ * 2. CC-style plugins discovered in PLUGIN_CACHE_DIR via .claude-plugin/plugin.json
+ *    (covers plugins manually dropped in the cache, or installed by parallel tooling)
+ * Plugins from #1 are enriched with manifest data if their cachePath has one.
+ * De-duplication is by cachePath.
+ */
 export function getInstalledPlugins(): InstalledPlugin[] {
-  if (!existsSync(INSTALLED_PLUGINS_FILE)) return [];
+  const recorded: InstalledPlugin[] = (() => {
+    if (!existsSync(INSTALLED_PLUGINS_FILE)) return [];
+    try {
+      return JSON.parse(readFileSync(INSTALLED_PLUGINS_FILE, "utf-8")) as InstalledPlugin[];
+    } catch {
+      return [];
+    }
+  })();
+
+  // Enrich recorded plugins from their CC manifest if present
+  const enriched = recorded.map((p) => mergeManifest(p, parseCcPluginManifest(p.cachePath)));
+  const seenPaths = new Set(enriched.map((p) => p.cachePath));
+
+  // Discover CC-style plugins in PLUGIN_CACHE_DIR not already recorded
+  const discovered: InstalledPlugin[] = [];
+  if (existsSync(PLUGIN_CACHE_DIR)) {
+    try {
+      for (const nameEntry of readdirSync(PLUGIN_CACHE_DIR)) {
+        const nameDir = join(PLUGIN_CACHE_DIR, nameEntry);
+        if (!safeIsDirectory(nameDir)) continue;
+        // Plugin can sit either at <name>/ or <name>/<version>/
+        const candidates = [nameDir, ...listSubdirs(nameDir)];
+        for (const root of candidates) {
+          if (seenPaths.has(root)) continue;
+          const manifest = parseCcPluginManifest(root);
+          if (!manifest) continue;
+          discovered.push({
+            name: manifest.name,
+            version: manifest.version ?? "0.0.0",
+            marketplace: "discovered",
+            installedAt: tryStatTime(root),
+            cachePath: root,
+            ...projectManifestFields(manifest),
+          });
+          seenPaths.add(root);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return [...enriched, ...discovered];
+}
+
+function safeIsDirectory(path: string): boolean {
   try {
-    return JSON.parse(readFileSync(INSTALLED_PLUGINS_FILE, "utf-8"));
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function listSubdirs(dir: string): string[] {
+  try {
+    return readdirSync(dir)
+      .map((entry) => join(dir, entry))
+      .filter((p) => safeIsDirectory(p));
   } catch {
     return [];
   }
+}
+
+function tryStatTime(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return Date.now();
+  }
+}
+
+function projectManifestFields(
+  m: CcPluginManifest,
+): Pick<InstalledPlugin, "description" | "author" | "license" | "homepage" | "keywords"> {
+  return {
+    description: m.description,
+    author: typeof m.author === "string" ? m.author : m.author?.name,
+    license: m.license,
+    homepage: m.homepage,
+    keywords: m.keywords,
+  };
+}
+
+function mergeManifest(plugin: InstalledPlugin, manifest: CcPluginManifest | null): InstalledPlugin {
+  if (!manifest) return plugin;
+  return { ...plugin, ...projectManifestFields(manifest) };
 }
 
 function saveInstalledPlugin(plugin: InstalledPlugin): void {

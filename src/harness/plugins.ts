@@ -127,11 +127,28 @@ function parseSkillFrontmatter(content: string): Partial<SkillMetadata> {
   return result;
 }
 
-/** Recursively collect all .md files from a directory tree */
+/** Recursively collect skill .md files from a directory tree.
+ * Anthropic / Claude Code convention: a directory containing `SKILL.md` is a single
+ * directory-packaged skill — only the SKILL.md surfaces; sibling .md files are
+ * companion documentation (referenced via Read at runtime). Directories without
+ * SKILL.md fall through to the legacy flat-file behavior (every .md is a skill).
+ */
 function walkMdFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+
+  // Directory-packaged skill: only SKILL.md counts; siblings are companions.
+  if (entries.includes("SKILL.md")) {
+    return [join(dir, "SKILL.md")];
+  }
+
   const results: string[] = [];
-  for (const entry of readdirSync(dir)) {
+  for (const entry of entries) {
     const full = join(dir, entry);
     try {
       if (statSync(full).isDirectory()) {
