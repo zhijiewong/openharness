@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProtocolError, RemoteAuthRequiredError, UnreachableError } from "./transport.js";
+import type { NormalizedConfig } from "./config-normalize.js";
+import { buildTransport, ProtocolError, RemoteAuthRequiredError, UnreachableError } from "./transport.js";
 
 describe("transport error types", () => {
   it("RemoteAuthRequiredError carries name, realm, and instance-of check", () => {
@@ -26,5 +27,42 @@ describe("transport error types", () => {
     assert.ok(err instanceof ProtocolError);
     assert.match(err.message, /svr/);
     assert.match(err.message, /bad frame/);
+  });
+});
+
+// Helper: fabricate a NormalizedConfig without going through normalizeMcpConfig
+function stdio(overrides: Partial<NormalizedConfig> = {}): NormalizedConfig {
+  return { name: "test", type: "stdio", command: "echo", ...overrides } as NormalizedConfig;
+}
+function http(overrides: Partial<NormalizedConfig> = {}): NormalizedConfig {
+  return { name: "test", type: "http", url: "http://127.0.0.1:1/mcp", ...overrides } as NormalizedConfig;
+}
+function sse(overrides: Partial<NormalizedConfig> = {}): NormalizedConfig {
+  return { name: "test", type: "sse", url: "http://127.0.0.1:1/sse", ...overrides } as NormalizedConfig;
+}
+
+describe("buildTransport dispatch", () => {
+  it("stdio config produces a StdioClientTransport-shaped object (has start/close)", async () => {
+    const t = await buildTransport(stdio());
+    assert.equal(typeof (t as any).start, "function");
+    assert.equal(typeof (t as any).close, "function");
+    // Don't actually start it — echo would exit immediately; shape check is enough.
+  });
+
+  it("http config produces a StreamableHTTP transport", async () => {
+    const t = await buildTransport(http());
+    assert.equal(t.constructor.name, "StreamableHTTPClientTransport");
+  });
+
+  it("sse config produces an SSE transport", async () => {
+    const t = await buildTransport(sse());
+    assert.equal(t.constructor.name, "SSEClientTransport");
+  });
+
+  it("rejects unknown type at the type-guard level", async () => {
+    await assert.rejects(
+      () => buildTransport({ name: "bad", type: "ftp" as any, url: "x" } as any),
+      /unknown transport type/i,
+    );
   });
 });
