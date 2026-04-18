@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.11.0 (2026-04-18) — Remote MCP over HTTP/SSE
 
 ### Added
 - Remote MCP over HTTP and SSE transports. Configure with `type: http` or `type: sse` in `.oh/config.yaml`; supports header-based auth with `${ENV}` interpolation. See `docs/mcp-servers.md`. OAuth 2.1 deferred to a follow-up release.
