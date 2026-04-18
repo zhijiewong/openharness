@@ -21,8 +21,21 @@ export type HookDef = {
   command?: string; // shell command hook
   http?: string; // HTTP POST hook (URL)
   prompt?: string; // LLM prompt hook (yes/no question)
-  match?: string; // tool name pattern filter
+  match?: string; // tool name pattern filter — substring, /regex/flags, or glob*
   timeout?: number; // timeout in ms (default 10000)
+  /**
+   * When true (and this hook has a `command`), OH sends a JSON envelope
+   * `{event, ...context}` on stdin and parses a JSON response from stdout.
+   * Response shape (Claude Code compatible):
+   *   { "decision": "allow" | "deny",
+   *     "reason"?: string,
+   *     "hookSpecificOutput"?: {...} }
+   *
+   * When false (default), OH passes context via `OH_EVENT` / `OH_TOOL_NAME`
+   * env vars and gates on the command's exit code (0 = allow). The env-var
+   * mode remains the default for backward compatibility.
+   */
+  jsonIO?: boolean;
 };
 
 export type HooksConfig = {

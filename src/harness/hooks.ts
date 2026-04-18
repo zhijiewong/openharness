@@ -174,6 +174,97 @@ function runCommandHookAsync(command: string, env: Record<string, string>, timeo
   });
 }
 
+/**
+ * Run a JSON-mode command hook (Claude Code convention).
+ *
+ * Sends `{event, ...context}` as JSON on stdin. Parses stdout as JSON
+ * `{ decision: "allow" | "deny", reason?: string, hookSpecificOutput?: any }`.
+ *
+ * Gating logic:
+ *   - `decision: "deny"` → blocks (returns false).
+ *   - `decision: "allow"` or omitted decision → allow (returns true).
+ *   - Non-zero exit code → block.
+ *   - Invalid/empty JSON on stdout → fall back to exit code (0 = allow).
+ *   - Timeout or spawn error → block.
+ */
+function runJsonIoHookAsync(
+  command: string,
+  env: Record<string, string>,
+  event: HookEvent,
+  ctx: HookContext,
+  timeoutMs = 10_000,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const proc = spawn(command, {
+      shell: true,
+      timeout: timeoutMs,
+      stdio: ["pipe", "pipe", "pipe"],
+      env,
+    });
+
+    let settled = false;
+    let stdoutBuf = "";
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill();
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    proc.stdout?.on("data", (chunk) => {
+      stdoutBuf += chunk.toString();
+    });
+
+    // Write the event + context JSON envelope to stdin then close it so the
+    // hook knows there's no more input coming.
+    try {
+      const payload = JSON.stringify({ event, ...ctx });
+      proc.stdin?.end(payload);
+    } catch {
+      /* stdin already closed — ignore */
+    }
+
+    proc.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+
+      // Non-zero exit is always a block, regardless of stdout.
+      if ((code ?? 1) !== 0) {
+        resolve(false);
+        return;
+      }
+
+      // Empty stdout → treat exit code as the signal (allow for exit 0).
+      if (!stdoutBuf.trim()) {
+        resolve(true);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdoutBuf) as { decision?: string };
+        if (parsed.decision === "deny") {
+          resolve(false);
+        } else {
+          resolve(true); // "allow" or omitted → allow
+        }
+      } catch {
+        // Malformed JSON with a zero exit — fail closed conservatively.
+        resolve(false);
+      }
+    });
+
+    proc.on("error", () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(false);
+      }
+    });
+  });
+}
+
 /** Run an HTTP hook. POSTs context as JSON, expects { allowed: true/false }. */
 async function runHttpHook(url: string, event: HookEvent, ctx: HookContext, timeoutMs = 10_000): Promise<boolean> {
   try {
@@ -212,6 +303,12 @@ async function executeHookDef(def: HookDef, event: HookEvent, ctx: HookContext):
 
   if (def.command) {
     const env = buildEnv(event, ctx);
+    // JSON-mode (Claude Code convention): send `{event, ...ctx}` on stdin,
+    // parse `{decision}` from stdout. Env-var mode (legacy default): gate on
+    // exit code.
+    if (def.jsonIO) {
+      return runJsonIoHookAsync(def.command, env, event, ctx, timeout);
+    }
     const code = await runCommandHookAsync(def.command, env, timeout);
     return code === 0;
   }
@@ -246,13 +343,28 @@ export function emitHook(event: HookEvent, ctx: HookContext = {}): boolean {
       if (!matchesHook(def, ctx)) continue;
 
       if (def.command) {
+        const input = def.jsonIO ? JSON.stringify({ event, ...ctx }) : undefined;
         const result = spawnSync(def.command, {
           shell: true,
           timeout: def.timeout ?? 10_000,
           stdio: "pipe",
           env,
+          input,
         });
         if (result.status !== 0 || result.error) return false;
+        // JSON mode: parse stdout for {decision: "deny"} → block. Allow on empty
+        // stdout (exit-code already gated above). Malformed JSON fails closed.
+        if (def.jsonIO) {
+          const out = result.stdout?.toString() ?? "";
+          if (out.trim()) {
+            try {
+              const parsed = JSON.parse(out) as { decision?: string };
+              if (parsed.decision === "deny") return false;
+            } catch {
+              return false;
+            }
+          }
+        }
       }
       // HTTP and prompt hooks for preToolUse are handled in emitHookAsync
     }
