@@ -1,8 +1,16 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Client as SdkClient } from "@modelcontextprotocol/sdk/client/index.js";
+import open from "open";
 import type { McpServerConfig } from "../harness/config.js";
 import { normalizeMcpConfig } from "./config-normalize.js";
+import { buildAuthProvider, type OhOAuthProvider } from "./oauth.js";
 import { buildClient, connectWithFallback } from "./transport.js";
 import type { McpToolDef } from "./types.js";
+
+function credentialsDir(): string {
+  return join(homedir(), ".oh", "credentials", "mcp");
+}
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
@@ -49,8 +57,16 @@ export class McpClient {
     if (normalized.kind === "error") {
       throw new Error(normalized.message);
     }
-    const sdk = await connectWithFallback(normalized.cfg, (c) => buildClient(c));
-    return new McpClient(cfg.name, cfg, sdk, timeoutMs);
+    const authProvider = buildAuthProvider(normalized.cfg, credentialsDir(), async (url) => {
+      await open(url);
+    });
+    if (authProvider) await authProvider.ready();
+    try {
+      const sdk = await connectWithFallback(normalized.cfg, (c) => buildClient(c, { authProvider }));
+      return new McpClient(cfg.name, cfg, sdk, timeoutMs);
+    } finally {
+      authProvider?.close();
+    }
   }
 
   /** Test-only constructor. Not exported from the package's public API. */
@@ -61,7 +77,15 @@ export class McpClient {
   private async defaultReconnect(): Promise<SdkClient> {
     const normalized = normalizeMcpConfig(this.cfg, process.env);
     if (normalized.kind === "error") throw new Error(normalized.message);
-    return connectWithFallback(normalized.cfg, (c) => buildClient(c));
+    const authProvider = buildAuthProvider(normalized.cfg, credentialsDir(), async (url) => {
+      await open(url);
+    });
+    if (authProvider) await authProvider.ready();
+    try {
+      return await connectWithFallback(normalized.cfg, (c) => buildClient(c, { authProvider }));
+    } finally {
+      authProvider?.close();
+    }
   }
 
   async listTools(): Promise<McpToolDef[]> {
