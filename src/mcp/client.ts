@@ -1,8 +1,17 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { McpServerConfig } from "../harness/config.js";
+import type { McpServerConfig, McpStdioConfig } from "../harness/config.js";
 import { safeEnv } from "../utils/safe-env.js";
 import type { JsonRpcRequest, JsonRpcResponse, McpToolDef } from "./types.js";
+
+function assertStdio(cfg: McpServerConfig): asserts cfg is McpStdioConfig {
+  if (cfg.type && cfg.type !== "stdio") {
+    throw new Error(`MCP server '${cfg.name}' has type '${cfg.type}'; remote transports are not yet implemented`);
+  }
+  if (!("command" in cfg) || !cfg.command) {
+    throw new Error(`MCP server '${cfg.name}' is missing 'command'`);
+  }
+}
 
 export class McpClient {
   readonly name: string;
@@ -48,6 +57,7 @@ export class McpClient {
   instructions: string | null = null;
 
   static async connect(cfg: McpServerConfig, timeoutMs = cfg.timeout ?? 5_000): Promise<McpClient> {
+    assertStdio(cfg);
     const proc = spawn(cfg.command, cfg.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
       env: safeEnv(cfg.env),

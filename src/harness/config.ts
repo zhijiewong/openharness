@@ -8,14 +8,32 @@ import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import type { PermissionMode } from "../types/permissions.js";
 
-export type McpServerConfig = {
+export type McpCommonConfig = {
   name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
   riskLevel?: "low" | "medium" | "high";
   timeout?: number; // ms, default 5000
 };
+
+export type McpStdioConfig = McpCommonConfig & {
+  type?: "stdio";
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+};
+
+export type McpHttpConfig = McpCommonConfig & {
+  type: "http";
+  url: string;
+  headers?: Record<string, string>;
+};
+
+export type McpSseConfig = McpCommonConfig & {
+  type: "sse";
+  url: string;
+  headers?: Record<string, string>;
+};
+
+export type McpServerConfig = McpStdioConfig | McpHttpConfig | McpSseConfig;
 
 export type HookDef = {
   command?: string; // shell command hook
