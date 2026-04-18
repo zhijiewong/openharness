@@ -11,6 +11,9 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
+    # Fail-fast if the review action hangs — default job timeout is 6 hours, which
+    # burns runner minutes and blocks PR merges when the LLM call doesn't return.
+    timeout-minutes: 15
     # Only run if ANTHROPIC_API_KEY is configured in repo secrets
     if: github.event.pull_request.draft == false
     steps:

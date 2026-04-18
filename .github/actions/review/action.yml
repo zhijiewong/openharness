@@ -78,11 +78,30 @@ runs:
         $(cat /tmp/pr-diff.txt)
         \`\`\`"
 
-        openharness run -m "${{ inputs.model }}" \
+        # Hard ceiling of 10 min on the openharness call itself (exit 124 on timeout).
+        # --max-turns 10 prevents a runaway agent loop; --permission-mode deny already
+        # blocks tools, but we've seen the model retry indefinitely in some configs.
+        set +e
+        timeout 600 openharness run -m "${{ inputs.model }}" \
           --permission-mode "${{ inputs.permission_mode }}" \
           --output-format text \
-          "$REVIEW_PROMPT" > /tmp/review-output.txt 2>/tmp/review-errors.txt || true
+          --max-turns 10 \
+          "$REVIEW_PROMPT" > /tmp/review-output.txt 2>/tmp/review-errors.txt
+        REVIEW_EXIT=$?
+        set -e
 
+        echo "=== openharness exit code: $REVIEW_EXIT ==="
+        if [ "$REVIEW_EXIT" = "124" ]; then
+          echo "⚠ openharness run timed out after 600s" | tee -a /tmp/review-output.txt
+        fi
+        if [ -s /tmp/review-errors.txt ]; then
+          echo "=== openharness stderr ==="
+          cat /tmp/review-errors.txt
+          echo "=== end stderr ==="
+        fi
+
+        # Emit the review text to step outputs regardless of exit code — comment step
+        # will post whatever we got (or skip if empty).
         echo "review<<EOF" >> $GITHUB_OUTPUT
         cat /tmp/review-output.txt >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
