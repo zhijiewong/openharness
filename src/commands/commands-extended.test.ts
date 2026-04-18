@@ -23,8 +23,8 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
 
 // ── /bug ──
 
-test("/bug shows issue reporting instructions", () => {
-  const result = processSlashCommand("/bug", makeCtx());
+test("/bug shows issue reporting instructions", async () => {
+  const result = await processSlashCommand("/bug", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("issues"));
@@ -33,8 +33,8 @@ test("/bug shows issue reporting instructions", () => {
 
 // ── /feedback ──
 
-test("/feedback shows feedback instructions", () => {
-  const result = processSlashCommand("/feedback", makeCtx());
+test("/feedback shows feedback instructions", async () => {
+  const result = await processSlashCommand("/feedback", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("feedback"));
@@ -43,8 +43,8 @@ test("/feedback shows feedback instructions", () => {
 
 // ── /upgrade ──
 
-test("/upgrade shows current version and upgrade instructions", () => {
-  const result = processSlashCommand("/upgrade", makeCtx());
+test("/upgrade shows current version and upgrade instructions", async () => {
+  const result = await processSlashCommand("/upgrade", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Current version"));
@@ -53,15 +53,15 @@ test("/upgrade shows current version and upgrade instructions", () => {
 
 // ── /token-count ──
 
-test("/token-count with no args shows conversation token estimate", () => {
-  const result = processSlashCommand("/token-count", makeCtx());
+test("/token-count with no args shows conversation token estimate", async () => {
+  const result = await processSlashCommand("/token-count", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("token"));
 });
 
-test("/token-count with text shows char/token estimate", () => {
-  const result = processSlashCommand("/token-count hello world test", makeCtx());
+test("/token-count with text shows char/token estimate", async () => {
+  const result = await processSlashCommand("/token-count hello world test", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("chars"));
@@ -70,16 +70,16 @@ test("/token-count with text shows char/token estimate", () => {
 
 // ── /benchmark ──
 
-test("/benchmark with no args shows usage", () => {
-  const result = processSlashCommand("/benchmark", makeCtx());
+test("/benchmark with no args shows usage", async () => {
+  const result = await processSlashCommand("/benchmark", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
   assert.ok(result.output.includes("BENCHMARKS"));
 });
 
-test("/benchmark with task-id returns prependToPrompt", () => {
-  const result = processSlashCommand("/benchmark django__django-1234", makeCtx());
+test("/benchmark with task-id returns prependToPrompt", async () => {
+  const result = await processSlashCommand("/benchmark django__django-1234", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("SWE-bench"));
@@ -88,8 +88,8 @@ test("/benchmark with task-id returns prependToPrompt", () => {
 
 // ── /vim ──
 
-test("/vim returns vim toggle signal", () => {
-  const result = processSlashCommand("/vim", makeCtx());
+test("/vim returns vim toggle signal", async () => {
+  const result = await processSlashCommand("/vim", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("VIM"));
@@ -97,15 +97,15 @@ test("/vim returns vim toggle signal", () => {
 
 // ── /login ──
 
-test("/login with no args shows usage with provider hint", () => {
-  const result = processSlashCommand("/login", makeCtx({ providerName: "anthropic" }));
+test("/login with no args shows usage with provider hint", async () => {
+  const result = await processSlashCommand("/login", makeCtx({ providerName: "anthropic" }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("ANTHROPIC_API_KEY"));
 });
 
-test("/login with key sets it", () => {
-  const result = processSlashCommand("/login sk-test-key-123", makeCtx());
+test("/login with key sets it", async () => {
+  const result = await processSlashCommand("/login sk-test-key-123", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("API key set"));
@@ -113,8 +113,8 @@ test("/login with key sets it", () => {
 
 // ── /logout ──
 
-test("/logout clears API key", () => {
-  const result = processSlashCommand("/logout", makeCtx());
+test("/logout clears API key", async () => {
+  const result = await processSlashCommand("/logout", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("cleared"));
@@ -122,15 +122,15 @@ test("/logout clears API key", () => {
 
 // ── /review-pr ──
 
-test("/review-pr with no args shows usage", () => {
-  const result = processSlashCommand("/review-pr", makeCtx());
+test("/review-pr with no args shows usage", async () => {
+  const result = await processSlashCommand("/review-pr", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/review-pr with number returns prependToPrompt for gh commands", () => {
-  const result = processSlashCommand("/review-pr 42", makeCtx());
+test("/review-pr with number returns prependToPrompt for gh commands", async () => {
+  const result = await processSlashCommand("/review-pr 42", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("gh pr"));
@@ -139,15 +139,15 @@ test("/review-pr with number returns prependToPrompt for gh commands", () => {
 
 // ── /pr-comments ──
 
-test("/pr-comments with no args shows usage", () => {
-  const result = processSlashCommand("/pr-comments", makeCtx());
+test("/pr-comments with no args shows usage", async () => {
+  const result = await processSlashCommand("/pr-comments", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/pr-comments with number returns prependToPrompt", () => {
-  const result = processSlashCommand("/pr-comments 99", makeCtx());
+test("/pr-comments with number returns prependToPrompt", async () => {
+  const result = await processSlashCommand("/pr-comments 99", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("99"));
@@ -156,22 +156,22 @@ test("/pr-comments with number returns prependToPrompt", () => {
 
 // ── /add-dir ──
 
-test("/add-dir with no args shows usage", () => {
-  const result = processSlashCommand("/add-dir", makeCtx());
+test("/add-dir with no args shows usage", async () => {
+  const result = await processSlashCommand("/add-dir", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/add-dir with existing dir succeeds", () => {
-  const result = processSlashCommand("/add-dir .", makeCtx());
+test("/add-dir with existing dir succeeds", async () => {
+  const result = await processSlashCommand("/add-dir .", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Added working directory"));
 });
 
-test("/add-dir with nonexistent dir fails", () => {
-  const result = processSlashCommand("/add-dir /nonexistent/path/xyz", makeCtx());
+test("/add-dir with nonexistent dir fails", async () => {
+  const result = await processSlashCommand("/add-dir /nonexistent/path/xyz", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("not found"));
@@ -179,15 +179,15 @@ test("/add-dir with nonexistent dir fails", () => {
 
 // ── /effort ──
 
-test("/effort without args shows usage", () => {
-  const result = processSlashCommand("/effort", makeCtx());
+test("/effort without args shows usage", async () => {
+  const result = await processSlashCommand("/effort", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/effort with valid level sets it", () => {
-  const result = processSlashCommand("/effort high", makeCtx());
+test("/effort with valid level sets it", async () => {
+  const result = await processSlashCommand("/effort high", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("high"));
@@ -195,15 +195,15 @@ test("/effort with valid level sets it", () => {
 
 // ── /theme ──
 
-test("/theme with valid value sets it", () => {
-  const result = processSlashCommand("/theme dark", makeCtx());
+test("/theme with valid value sets it", async () => {
+  const result = await processSlashCommand("/theme dark", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("dark"));
 });
 
-test("/theme with invalid value shows usage", () => {
-  const result = processSlashCommand("/theme blue", makeCtx());
+test("/theme with invalid value shows usage", async () => {
+  const result = await processSlashCommand("/theme blue", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
@@ -211,15 +211,15 @@ test("/theme with invalid value shows usage", () => {
 
 // ── /skill-create ──
 
-test("/skill-create with no args shows usage", () => {
-  const result = processSlashCommand("/skill-create", makeCtx());
+test("/skill-create with no args shows usage", async () => {
+  const result = await processSlashCommand("/skill-create", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/skill-create rejects path traversal", () => {
-  const result = processSlashCommand("/skill-create ../evil", makeCtx());
+test("/skill-create rejects path traversal", async () => {
+  const result = await processSlashCommand("/skill-create ../evil", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Invalid"));
@@ -227,8 +227,8 @@ test("/skill-create rejects path traversal", () => {
 
 // ── /version ──
 
-test("/version shows version number", () => {
-  const result = processSlashCommand("/version", makeCtx());
+test("/version shows version number", async () => {
+  const result = await processSlashCommand("/version", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("openHarness v"));
@@ -236,8 +236,8 @@ test("/version shows version number", () => {
 
 // ── /api-credits ──
 
-test("/api-credits shows provider info and env hint", () => {
-  const result = processSlashCommand("/api-credits", makeCtx({ providerName: "anthropic" }));
+test("/api-credits shows provider info and env hint", async () => {
+  const result = await processSlashCommand("/api-credits", makeCtx({ providerName: "anthropic" }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("ANTHROPIC_API_KEY"));
@@ -246,8 +246,8 @@ test("/api-credits shows provider info and env hint", () => {
 
 // ── /whoami ──
 
-test("/whoami shows current user and provider info", () => {
-  const result = processSlashCommand("/whoami", makeCtx());
+test("/whoami shows current user and provider info", async () => {
+  const result = await processSlashCommand("/whoami", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Provider"));
@@ -256,8 +256,8 @@ test("/whoami shows current user and provider info", () => {
 
 // ── /project ──
 
-test("/project shows detected project info", () => {
-  const result = processSlashCommand("/project", makeCtx());
+test("/project shows detected project info", async () => {
+  const result = await processSlashCommand("/project", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Project directory"));
@@ -265,8 +265,8 @@ test("/project shows detected project info", () => {
 
 // ── /stats ──
 
-test("/stats shows session statistics", () => {
-  const result = processSlashCommand("/stats", makeCtx({ totalInputTokens: 5000, totalOutputTokens: 3000 }));
+test("/stats shows session statistics", async () => {
+  const result = await processSlashCommand("/stats", makeCtx({ totalInputTokens: 5000, totalOutputTokens: 3000 }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Session Statistics"));
@@ -276,8 +276,8 @@ test("/stats shows session statistics", () => {
 
 // ── /tools ──
 
-test("/tools lists available tools", () => {
-  const result = processSlashCommand("/tools", makeCtx());
+test("/tools lists available tools", async () => {
+  const result = await processSlashCommand("/tools", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Available Tools"));
@@ -286,8 +286,8 @@ test("/tools lists available tools", () => {
 
 // ── /terminal-setup ──
 
-test("/terminal-setup shows terminal hints", () => {
-  const result = processSlashCommand("/terminal-setup", makeCtx());
+test("/terminal-setup shows terminal hints", async () => {
+  const result = await processSlashCommand("/terminal-setup", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Terminal Setup"));
@@ -296,8 +296,8 @@ test("/terminal-setup shows terminal hints", () => {
 
 // ── /verbose ──
 
-test("/verbose toggles verbose mode", () => {
-  const result = processSlashCommand("/verbose", makeCtx());
+test("/verbose toggles verbose mode", async () => {
+  const result = await processSlashCommand("/verbose", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Verbose"));
@@ -305,8 +305,8 @@ test("/verbose toggles verbose mode", () => {
 
 // ── /quiet ──
 
-test("/quiet toggles quiet mode", () => {
-  const result = processSlashCommand("/quiet", makeCtx());
+test("/quiet toggles quiet mode", async () => {
+  const result = await processSlashCommand("/quiet", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Quiet"));
@@ -314,16 +314,16 @@ test("/quiet toggles quiet mode", () => {
 
 // ── /provider ──
 
-test("/provider with no args shows current provider", () => {
-  const result = processSlashCommand("/provider", makeCtx());
+test("/provider with no args shows current provider", async () => {
+  const result = await processSlashCommand("/provider", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Current provider"));
   assert.ok(result.output.includes("openai"));
 });
 
-test("/provider with invalid name shows error", () => {
-  const result = processSlashCommand("/provider badprovider", makeCtx());
+test("/provider with invalid name shows error", async () => {
+  const result = await processSlashCommand("/provider badprovider", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Unknown provider"));
@@ -331,9 +331,9 @@ test("/provider with invalid name shows error", () => {
 
 // ── /release-notes ──
 
-test("/release-notes in non-git dir shows error", () => {
+test("/release-notes in non-git dir shows error", async () => {
   // Note: this test may pass or fail depending on CWD being a git repo
-  const result = processSlashCommand("/release-notes", makeCtx());
+  const result = await processSlashCommand("/release-notes", makeCtx());
   assert.ok(result);
   // It will either show release notes or "Not a git repository"
   assert.ok(result.output.length > 0);
@@ -341,8 +341,8 @@ test("/release-notes in non-git dir shows error", () => {
 
 // ── /stash ──
 
-test("/stash shows stash info", () => {
-  const result = processSlashCommand("/stash", makeCtx());
+test("/stash shows stash info", async () => {
+  const result = await processSlashCommand("/stash", makeCtx());
   assert.ok(result);
   // Either shows stashes or "No stashes found" or "Not a git repository"
   assert.ok(result.output.length > 0);
@@ -350,16 +350,16 @@ test("/stash shows stash info", () => {
 
 // ── /branch ──
 
-test("/branch with no args shows current branch", () => {
-  const result = processSlashCommand("/branch", makeCtx());
+test("/branch with no args shows current branch", async () => {
+  const result = await processSlashCommand("/branch", makeCtx());
   assert.ok(result);
   assert.ok(result.output.length > 0);
 });
 
 // ── /listen ──
 
-test("/listen shows listening mode message", () => {
-  const result = processSlashCommand("/listen", makeCtx());
+test("/listen shows listening mode message", async () => {
+  const result = await processSlashCommand("/listen", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Listening"));
@@ -367,20 +367,20 @@ test("/listen shows listening mode message", () => {
 
 // ── /truncate ──
 
-test("/truncate with no args shows usage", () => {
-  const result = processSlashCommand("/truncate", makeCtx());
+test("/truncate with no args shows usage", async () => {
+  const result = await processSlashCommand("/truncate", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/truncate with valid count removes messages", () => {
+test("/truncate with valid count removes messages", async () => {
   const msgs = [
     { role: "user" as const, content: "hello", timestamp: 1 },
     { role: "assistant" as const, content: "hi", timestamp: 2 },
     { role: "user" as const, content: "bye", timestamp: 3 },
   ];
-  const result = processSlashCommand("/truncate 1", makeCtx({ messages: msgs as any }));
+  const result = await processSlashCommand("/truncate 1", makeCtx({ messages: msgs as any }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Truncated 1"));
@@ -389,28 +389,28 @@ test("/truncate with valid count removes messages", () => {
 
 // ── /search ──
 
-test("/search with no args shows usage", () => {
-  const result = processSlashCommand("/search", makeCtx());
+test("/search with no args shows usage", async () => {
+  const result = await processSlashCommand("/search", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/search with term finds matching messages", () => {
+test("/search with term finds matching messages", async () => {
   const msgs = [
     { role: "user" as const, content: "Tell me about TypeScript", timestamp: 1 },
     { role: "assistant" as const, content: "TypeScript is great", timestamp: 2 },
     { role: "user" as const, content: "Thanks", timestamp: 3 },
   ];
-  const result = processSlashCommand("/search typescript", makeCtx({ messages: msgs as any }));
+  const result = await processSlashCommand("/search typescript", makeCtx({ messages: msgs as any }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("2 message(s)"));
 });
 
-test("/search with no matches reports none", () => {
+test("/search with no matches reports none", async () => {
   const msgs = [{ role: "user" as const, content: "hello", timestamp: 1 }];
-  const result = processSlashCommand("/search zzzznonexistent", makeCtx({ messages: msgs as any }));
+  const result = await processSlashCommand("/search zzzznonexistent", makeCtx({ messages: msgs as any }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("No messages matching"));
@@ -418,16 +418,16 @@ test("/search with no matches reports none", () => {
 
 // ── /summarize ──
 
-test("/summarize with empty conversation", () => {
-  const result = processSlashCommand("/summarize", makeCtx());
+test("/summarize with empty conversation", async () => {
+  const result = await processSlashCommand("/summarize", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("No messages"));
 });
 
-test("/summarize with messages returns prependToPrompt", () => {
+test("/summarize with messages returns prependToPrompt", async () => {
   const msgs = [{ role: "user" as const, content: "test", timestamp: 1 }];
-  const result = processSlashCommand("/summarize", makeCtx({ messages: msgs as any }));
+  const result = await processSlashCommand("/summarize", makeCtx({ messages: msgs as any }));
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("Summarize"));
@@ -435,15 +435,15 @@ test("/summarize with messages returns prependToPrompt", () => {
 
 // ── /explain ──
 
-test("/explain with no args shows usage", () => {
-  const result = processSlashCommand("/explain", makeCtx());
+test("/explain with no args shows usage", async () => {
+  const result = await processSlashCommand("/explain", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/explain with topic returns prependToPrompt", () => {
-  const result = processSlashCommand("/explain src/index.ts", makeCtx());
+test("/explain with topic returns prependToPrompt", async () => {
+  const result = await processSlashCommand("/explain src/index.ts", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("src/index.ts"));
@@ -451,15 +451,15 @@ test("/explain with topic returns prependToPrompt", () => {
 
 // ── /fix ──
 
-test("/fix with no args shows usage", () => {
-  const result = processSlashCommand("/fix", makeCtx());
+test("/fix with no args shows usage", async () => {
+  const result = await processSlashCommand("/fix", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/fix with issue returns prependToPrompt", () => {
-  const result = processSlashCommand("/fix broken import in utils.ts", makeCtx());
+test("/fix with issue returns prependToPrompt", async () => {
+  const result = await processSlashCommand("/fix broken import in utils.ts", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("broken import in utils.ts"));

@@ -92,7 +92,7 @@ export async function handleUserInput(input: string, ctx: SubmitContext): Promis
       totalOutputTokens: ctx.cost.totalOutputTokens,
       sessionId: ctx.sessionId,
     };
-    const result = processSlashCommand(trimmed, cmdCtx);
+    const result = await processSlashCommand(trimmed, cmdCtx);
     if (result) {
       if (result.clearMessages) messages = [];
       if (result.compactedMessages) messages = result.compactedMessages;

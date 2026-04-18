@@ -44,7 +44,7 @@ registerSkillCommands(register);
 /**
  * Check if input is a slash command. If so, execute it.
  */
-export function processSlashCommand(input: string, context: CommandContext): CommandResult | null {
+export async function processSlashCommand(input: string, context: CommandContext): Promise<CommandResult | null> {
   const trimmed = input.trim();
   if (!trimmed.startsWith("/")) return null;
 

@@ -10,6 +10,7 @@ import { readOhConfig } from "../harness/config.js";
 import { estimateMessageTokens } from "../harness/context-warning.js";
 import { getContextWindow } from "../harness/cost.js";
 import { connectedMcpServers } from "../mcp/loader.js";
+import { mcpLoginHandler, mcpLogoutHandler } from "./mcp-auth.js";
 import type { CommandHandler } from "./types.js";
 
 export function registerInfoCommands(
@@ -454,6 +455,14 @@ export function registerInfoCommands(
     }
 
     return { output: `Found ${results.length} servers:\n\n${formatRegistry(results)}`, handled: true };
+  });
+
+  register("mcp-login", "Authenticate to a remote MCP server via OAuth", async (args) => {
+    return mcpLoginHandler(args);
+  });
+
+  register("mcp-logout", "Wipe local OAuth tokens for an MCP server", async (args) => {
+    return mcpLogoutHandler(args);
   });
 
   register("init", "Initialize project with .oh/ config", () => {

@@ -472,8 +472,14 @@ export default function REPL({
           totalOutputTokens: costRef.current.totalOutputTokens,
           sessionId,
         };
-        const result = processSlashCommand(trimmed, ctx);
-        if (result) {
+        void processSlashCommand(trimmed, ctx).then((result) => {
+          if (!result) {
+            const userMsg = createUserMessage(input);
+            setMessages((prev) => [...prev, userMsg]);
+            pendingPromptRef.current = input;
+            setSubmitCount((c) => c + 1);
+            return;
+          }
           if (result.openCybergotchiSetup) {
             setShowCybergotchiSetup(true);
             return;
@@ -511,7 +517,8 @@ export default function REPL({
             setSubmitCount((c) => c + 1);
             return;
           }
-        }
+        });
+        return;
       }
 
       const userMsg = createUserMessage(input);

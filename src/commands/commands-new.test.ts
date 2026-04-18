@@ -23,8 +23,8 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
 
 // ── /doctor ──
 
-test("/doctor shows diagnostic info", () => {
-  const result = processSlashCommand("/doctor", makeCtx());
+test("/doctor shows diagnostic info", async () => {
+  const result = await processSlashCommand("/doctor", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Provider"));
@@ -36,9 +36,9 @@ test("/doctor shows diagnostic info", () => {
 
 // ── /context ──
 
-test("/context shows context window breakdown", () => {
+test("/context shows context window breakdown", async () => {
   const msgs = [createUserMessage("What is 2+2?"), createAssistantMessage("2+2 = 4"), createUserMessage("Thanks")];
-  const result = processSlashCommand("/context", makeCtx({ messages: msgs }));
+  const result = await processSlashCommand("/context", makeCtx({ messages: msgs }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Context Window"));
@@ -48,8 +48,8 @@ test("/context shows context window breakdown", () => {
   assert.ok(result.output.includes("Free"));
 });
 
-test("/context with empty messages", () => {
-  const result = processSlashCommand("/context", makeCtx());
+test("/context with empty messages", async () => {
+  const result = await processSlashCommand("/context", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Context Window"));
@@ -58,8 +58,8 @@ test("/context with empty messages", () => {
 
 // ── /mcp ──
 
-test("/mcp shows no servers message when none connected", () => {
-  const result = processSlashCommand("/mcp", makeCtx());
+test("/mcp shows no servers message when none connected", async () => {
+  const result = await processSlashCommand("/mcp", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("No MCP") || result.output.includes("MCP"));
@@ -67,8 +67,8 @@ test("/mcp shows no servers message when none connected", () => {
 
 // ── /keys ──
 
-test("/keys shows keyboard shortcuts", () => {
-  const result = processSlashCommand("/keys", makeCtx());
+test("/keys shows keyboard shortcuts", async () => {
+  const result = await processSlashCommand("/keys", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Keyboard Shortcuts"));
@@ -78,8 +78,8 @@ test("/keys shows keyboard shortcuts", () => {
   assert.ok(result.output.includes("Scroll wheel"));
 });
 
-test("/keys includes custom keybindings section", () => {
-  const result = processSlashCommand("/keys", makeCtx());
+test("/keys includes custom keybindings section", async () => {
+  const result = await processSlashCommand("/keys", makeCtx());
   assert.ok(result);
   assert.ok(result.output.includes("keybindings"));
   // Default bindings should appear
@@ -88,8 +88,8 @@ test("/keys includes custom keybindings section", () => {
 
 // ── /fast ──
 
-test("/fast returns toggleFastMode", () => {
-  const result = processSlashCommand("/fast", makeCtx());
+test("/fast returns toggleFastMode", async () => {
+  const result = await processSlashCommand("/fast", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.equal(result.toggleFastMode, true);
@@ -97,9 +97,9 @@ test("/fast returns toggleFastMode", () => {
 
 // ── /pin ──
 
-test("/pin with valid index returns compactedMessages with pinned flag", () => {
+test("/pin with valid index returns compactedMessages with pinned flag", async () => {
   const msgs = [createUserMessage("hello"), createAssistantMessage("world")];
-  const result = processSlashCommand("/pin 1", makeCtx({ messages: msgs }));
+  const result = await processSlashCommand("/pin 1", makeCtx({ messages: msgs }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("pinned"));
@@ -109,26 +109,26 @@ test("/pin with valid index returns compactedMessages with pinned flag", () => {
   assert.equal((result.compactedMessages![1] as any).meta?.pinned, undefined);
 });
 
-test("/pin with out-of-range index shows usage", () => {
-  const result = processSlashCommand("/pin 99", makeCtx({ messages: [createUserMessage("x")] }));
+test("/pin with out-of-range index shows usage", async () => {
+  const result = await processSlashCommand("/pin 99", makeCtx({ messages: [createUserMessage("x")] }));
   assert.ok(result);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/pin without args shows usage", () => {
-  const result = processSlashCommand("/pin", makeCtx());
+test("/pin without args shows usage", async () => {
+  const result = await processSlashCommand("/pin", makeCtx());
   assert.ok(result);
   assert.ok(result.output.includes("Usage"));
 });
 
 // ── /unpin ──
 
-test("/unpin removes pinned flag", () => {
+test("/unpin removes pinned flag", async () => {
   const msgs = [createUserMessage("hello"), createAssistantMessage("world")];
   // Pin first, then unpin
-  const pinResult = processSlashCommand("/pin 1", makeCtx({ messages: msgs }));
+  const pinResult = await processSlashCommand("/pin 1", makeCtx({ messages: msgs }));
   const pinnedMsgs = pinResult!.compactedMessages!;
-  const unpinResult = processSlashCommand("/unpin 1", makeCtx({ messages: pinnedMsgs }));
+  const unpinResult = await processSlashCommand("/unpin 1", makeCtx({ messages: pinnedMsgs }));
   assert.ok(unpinResult);
   assert.ok(unpinResult.output.includes("unpinned"));
   assert.equal((unpinResult.compactedMessages![0] as any).meta?.pinned, false);
@@ -136,14 +136,14 @@ test("/unpin removes pinned flag", () => {
 
 // ── aliases ──
 
-test("/s alias maps to /status", () => {
-  const result = processSlashCommand("/s", makeCtx());
+test("/s alias maps to /status", async () => {
+  const result = await processSlashCommand("/s", makeCtx());
   assert.ok(result);
   assert.ok(result.output.includes("Model"));
 });
 
-test("/h alias maps to /help", () => {
-  const result = processSlashCommand("/h", makeCtx());
+test("/h alias maps to /help", async () => {
+  const result = await processSlashCommand("/h", makeCtx());
   assert.ok(result);
   assert.ok(result.output.includes("Session"));
   assert.ok(result.output.includes("Git"));
@@ -151,15 +151,15 @@ test("/h alias maps to /help", () => {
 
 // ── /loop ──
 
-test("/loop with no args shows usage", () => {
-  const result = processSlashCommand("/loop", makeCtx());
+test("/loop with no args shows usage", async () => {
+  const result = await processSlashCommand("/loop", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Usage"));
 });
 
-test("/loop with dynamic prompt returns prependToPrompt", () => {
-  const result = processSlashCommand("/loop check if CI passed", makeCtx());
+test("/loop with dynamic prompt returns prependToPrompt", async () => {
+  const result = await processSlashCommand("/loop check if CI passed", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.output.includes("Dynamic"));
@@ -168,8 +168,8 @@ test("/loop with dynamic prompt returns prependToPrompt", () => {
   assert.ok(result.prependToPrompt?.includes("check if CI passed"));
 });
 
-test("/loop with fixed interval parses correctly", () => {
-  const result = processSlashCommand("/loop 5m /review", makeCtx());
+test("/loop with fixed interval parses correctly", async () => {
+  const result = await processSlashCommand("/loop 5m /review", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.output.includes("Fixed interval"));
@@ -179,8 +179,8 @@ test("/loop with fixed interval parses correctly", () => {
 
 // ── /plan ──
 
-test("/plan instructs to use EnterPlanMode tool", () => {
-  const result = processSlashCommand("/plan build auth system", makeCtx());
+test("/plan instructs to use EnterPlanMode tool", async () => {
+  const result = await processSlashCommand("/plan build auth system", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, false);
   assert.ok(result.prependToPrompt?.includes("EnterPlanMode"));
@@ -190,8 +190,8 @@ test("/plan instructs to use EnterPlanMode tool", () => {
 
 // ── /init ──
 
-test("/init returns handled result", () => {
-  const result = processSlashCommand("/init", makeCtx());
+test("/init returns handled result", async () => {
+  const result = await processSlashCommand("/init", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   // Either "already exists" (local dev) or "Initialized" (CI) — both valid
@@ -202,23 +202,23 @@ test("/init returns handled result", () => {
 
 // ── /permissions ──
 
-test("/permissions with no args shows current mode", () => {
-  const result = processSlashCommand("/permissions", makeCtx({ permissionMode: "trust" }));
+test("/permissions with no args shows current mode", async () => {
+  const result = await processSlashCommand("/permissions", makeCtx({ permissionMode: "trust" }));
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("trust"));
   assert.ok(result.output.includes("Available modes"));
 });
 
-test("/permissions with valid mode sets it", () => {
-  const result = processSlashCommand("/permissions deny", makeCtx());
+test("/permissions with valid mode sets it", async () => {
+  const result = await processSlashCommand("/permissions deny", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("deny"));
 });
 
-test("/permissions with invalid mode shows error", () => {
-  const result = processSlashCommand("/permissions yolo", makeCtx());
+test("/permissions with invalid mode shows error", async () => {
+  const result = await processSlashCommand("/permissions yolo", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("Unknown mode"));
@@ -226,8 +226,8 @@ test("/permissions with invalid mode shows error", () => {
 
 // ── /allowed-tools ──
 
-test("/allowed-tools shows no rules message when none configured", () => {
-  const result = processSlashCommand("/allowed-tools", makeCtx());
+test("/allowed-tools shows no rules message when none configured", async () => {
+  const result = await processSlashCommand("/allowed-tools", makeCtx());
   assert.ok(result);
   assert.equal(result.handled, true);
   assert.ok(result.output.includes("No custom tool permission rules") || result.output.includes("toolPermissions"));

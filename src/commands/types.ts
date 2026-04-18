@@ -25,7 +25,7 @@ export type CommandResult = {
   toggleFastMode?: boolean;
 };
 
-export type CommandHandler = (args: string, context: CommandContext) => CommandResult;
+export type CommandHandler = (args: string, context: CommandContext) => CommandResult | Promise<CommandResult>;
 
 export type CommandContext = {
   messages: Message[];
