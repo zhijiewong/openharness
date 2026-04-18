@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Remote MCP over HTTP and SSE transports. Configure with `type: http` or `type: sse` in `.oh/config.yaml`; supports header-based auth with `${ENV}` interpolation. See `docs/mcp-servers.md`. OAuth 2.1 deferred to a follow-up release.
+
+### Changed
+- Internal: `@modelcontextprotocol/sdk` now owns JSON-RPC framing and protocol lifecycle. `McpClient` public surface (`connect`, `listTools`, `callTool`, `listResources`, `readResource`, `disconnect`, `instructions`) unchanged.
+
 ## 2.10.0 (2026-04-18) — Hook JSON I/O + Real Prompt Hooks
 
 ### Added

@@ -366,6 +366,19 @@ mcpServers:
 
 MCP tools appear alongside built-in tools. `/status` shows connected servers.
 
+### Remote MCP servers (HTTP / SSE)
+
+```yaml
+mcpServers:
+  - name: linear
+    type: http
+    url: https://mcp.linear.app/mcp
+    headers:
+      Authorization: "Bearer ${LINEAR_API_KEY}"
+```
+
+See [docs/mcp-servers.md](docs/mcp-servers.md) for the full reference.
+
 **MCP Server Registry** — browse and install from a curated catalog:
 
 ```

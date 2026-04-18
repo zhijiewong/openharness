@@ -1,62 +1,59 @@
----
-layout: default
-title: MCP Servers
----
-
 # MCP Servers
 
-Connect any [Model Context Protocol](https://modelcontextprotocol.io) server to extend openHarness with new tools.
+OpenHarness connects to Model Context Protocol (MCP) servers via three transports:
 
-## Configuration
+| Transport | Use for |
+|---|---|
+| `stdio` (default) | Local subprocess servers (most open-source MCP servers) |
+| `http` | Remote Streamable HTTP servers (Linear, Sentry, GitHub managed, Anthropic-hosted) |
+| `sse` | Legacy HTTP+SSE servers |
 
-Add to `.oh/config.yaml`:
+Configure servers in `.oh/config.yaml` under the top-level `mcpServers:` key.
 
-```yaml
-mcpServers:
-  - name: github
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-github"]
-    env:
-      GITHUB_PERSONAL_ACCESS_TOKEN: ghp_...
-```
-
-MCP tools appear alongside built-in tools. `/status` shows connected servers.
-
-## Registry
-
-Browse the curated catalog of 15 MCP servers:
-
-```
-/mcp-registry              # browse all
-/mcp-registry github       # show install config
-/mcp-registry database     # search by category
-```
-
-### Categories
-
-| Category | Servers |
-|----------|---------|
-| Filesystem | filesystem |
-| Git | github, gitlab |
-| Database | sqlite, postgres |
-| Search | brave-search, fetch |
-| Productivity | slack, google-drive, linear |
-| Dev Tools | docker, puppeteer, context7 |
-| AI | memory, sequential-thinking |
-
-## Deferred Loading
-
-Servers with 10+ tools use **deferred loading** — tools show a minimal description until first invocation. Use ToolSearch to discover and activate them.
-
-## Custom MCP Server
-
-Any MCP-compatible server works. Specify the command to start it:
+## stdio (default)
 
 ```yaml
 mcpServers:
-  - name: my-custom-server
-    command: node
-    args: ["./my-server.js"]
-    riskLevel: medium   # low, medium, or high
-    timeout: 10000      # connection timeout (ms)
+  - name: filesystem
+    command: mcp-server-fs
+    args: [--root, /tmp]
+    env: { LOG_LEVEL: debug }
 ```
+
+`type` defaults to `stdio` when `command` is set.
+
+## Streamable HTTP
+
+```yaml
+mcpServers:
+  - name: linear
+    type: http
+    url: https://mcp.linear.app/mcp
+    headers:
+      Authorization: "Bearer ${LINEAR_API_KEY}"
+```
+
+Header values support `${VAR}` interpolation from `process.env`. If the referenced var is not set, OH skips the server with a warning and continues.
+
+## Legacy SSE
+
+```yaml
+mcpServers:
+  - name: self-hosted
+    type: sse
+    url: https://mcp.internal.example.com/sse
+    headers:
+      X-API-Key: "${INTERNAL_KEY}"
+```
+
+## Auto-fallback
+
+When you provide `url:` without `type:`, OH tries Streamable HTTP first and falls back to legacy SSE on HTTP 4xx. Set `type:` explicitly to disable fallback.
+
+## Authentication
+
+Only header-based auth is supported in this release. If a server responds with `401` + `WWW-Authenticate`, OH raises:
+
+> `MCP server '<name>' requires authentication. Add headers.Authorization to your config (OAuth flow is not yet supported).`
+
+OAuth 2.1 (device code, DCR, keychain token storage) is planned for a follow-up release.
