@@ -25,12 +25,14 @@ export type McpHttpConfig = McpCommonConfig & {
   type: "http";
   url: string;
   headers?: Record<string, string>;
+  auth?: "oauth" | "none";
 };
 
 export type McpSseConfig = McpCommonConfig & {
   type: "sse";
   url: string;
   headers?: Record<string, string>;
+  auth?: "oauth" | "none";
 };
 
 export type McpServerConfig = McpStdioConfig | McpHttpConfig | McpSseConfig;

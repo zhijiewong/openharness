@@ -83,4 +83,31 @@ describe("normalizeMcpConfig", () => {
     if (out.kind !== "ok" || out.cfg.type !== "stdio") return;
     assert.equal(out.cfg.env?.FOO, literalNotExpanded);
   });
+
+  it("preserves auth='oauth' on http configs", () => {
+    const out = normalizeMcpConfig(
+      { name: "linear", type: "http", url: "https://x/mcp", auth: "oauth" } as McpServerConfig,
+      {},
+    );
+    assert.equal(out.kind, "ok");
+    if (out.kind !== "ok" || out.cfg.type !== "http") return;
+    assert.equal(out.cfg.auth, "oauth");
+  });
+
+  it("preserves auth='none' on sse configs", () => {
+    const out = normalizeMcpConfig(
+      { name: "legacy", type: "sse", url: "https://x/sse", auth: "none" } as McpServerConfig,
+      {},
+    );
+    assert.equal(out.kind, "ok");
+    if (out.kind !== "ok" || out.cfg.type !== "sse") return;
+    assert.equal(out.cfg.auth, "none");
+  });
+
+  it("leaves auth undefined when not set (auto mode)", () => {
+    const out = normalizeMcpConfig({ name: "api", type: "http", url: "https://x/mcp" } as McpServerConfig, {});
+    assert.equal(out.kind, "ok");
+    if (out.kind !== "ok" || out.cfg.type !== "http") return;
+    assert.equal(out.cfg.auth, undefined);
+  });
 });
