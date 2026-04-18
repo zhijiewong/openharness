@@ -123,9 +123,16 @@ test("toolInput parameter passed correctly", () => {
 // ── auto mode ──
 
 test("auto mode approves safe bash commands", () => {
-  const r = checkPermission("auto", "high", false, "Bash", { command: "git status" });
-  assert.equal(r.allowed, true);
-  assert.equal(r.reason, "auto-mode");
+  // Read-only commands (`git status`) hit the read-only allowlist short-circuit
+  // before auto-mode is consulted. Non-read-only but otherwise safe commands
+  // still fall through to auto-mode approval.
+  const readOnly = checkPermission("auto", "high", false, "Bash", { command: "git status" });
+  assert.equal(readOnly.allowed, true);
+  assert.equal(readOnly.reason, "auto-approved");
+
+  const safeButWrite = checkPermission("auto", "high", false, "Bash", { command: "touch new-file.txt" });
+  assert.equal(safeButWrite.allowed, true);
+  assert.equal(safeButWrite.reason, "auto-mode");
 });
 
 test("auto mode blocks dangerous bash (rm -rf)", () => {
@@ -151,4 +158,83 @@ test("bypassPermissions approves everything", () => {
 test("bypassPermissions approves even in high-risk writes", () => {
   const r = checkPermission("bypassPermissions", "high", false);
   assert.equal(r.allowed, true);
+});
+
+// ── compound-command permission parsing (Tier A #7) ──
+
+test("deny rule on subcommand blocks the whole compound command", () => {
+  setToolPermissionRules([
+    { tool: "Bash", action: "allow", pattern: "^git log" },
+    { tool: "Bash", action: "deny", pattern: "^rm " },
+  ]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", { command: "git log && rm -rf /" });
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, "tool-rule-deny");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
+});
+
+test("ask rule on subcommand escalates allow-rule compound", () => {
+  setToolPermissionRules([
+    { tool: "Bash", action: "allow", pattern: "^git log" },
+    { tool: "Bash", action: "ask", pattern: "^git push" },
+  ]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", { command: "git log && git push" });
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, "needs-approval");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
+});
+
+test("all-allow compound is allowed", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "allow", pattern: "^(ls|cat|git log)" }]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", { command: "ls | cat && git log" });
+    assert.equal(r.allowed, true);
+    assert.equal(r.reason, "tool-rule-allow");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
+});
+
+test("process wrapper is stripped before matching (timeout prefix)", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "deny", pattern: "^rm " }]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", { command: "timeout 10 rm -rf /tmp/a" });
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, "tool-rule-deny");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
+});
+
+test("process wrapper stripping works inside compound command", () => {
+  setToolPermissionRules([
+    { tool: "Bash", action: "allow", pattern: "^git log" },
+    { tool: "Bash", action: "deny", pattern: "^rm " },
+  ]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", {
+      command: "git log && nice -n 10 rm file.txt",
+    });
+    assert.equal(r.allowed, false);
+    assert.equal(r.reason, "tool-rule-deny");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
+});
+
+test("non-compound bash command still uses single-rule matching", () => {
+  setToolPermissionRules([{ tool: "Bash", action: "allow", pattern: "^npm run " }]);
+  try {
+    const r = checkPermission("ask", "medium", false, "Bash", { command: "npm run build" });
+    assert.equal(r.allowed, true);
+    assert.equal(r.reason, "tool-rule-allow");
+  } finally {
+    setToolPermissionRules(undefined);
+  }
 });

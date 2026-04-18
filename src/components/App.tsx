@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { getCompanionSystemPrompt, loadCompanionRuntime } from "../cybergotchi/config.js";
 import { readOhConfig } from "../harness/config.js";
-import { loadMemories, memoriesToPrompt } from "../harness/memory.js";
+import { claudeMdToPrompt, loadClaudeMdHierarchy, loadMemories, memoriesToPrompt } from "../harness/memory.js";
 import { detectProject, projectContextToPrompt } from "../harness/onboarding.js";
 import { discoverSkills, skillsToPrompt } from "../harness/plugins.js";
 import { loadRulesAsPrompt } from "../harness/rules.js";
@@ -84,6 +84,12 @@ export default function App({
 
     const rulesPrompt = loadRulesAsPrompt();
     if (rulesPrompt) parts.push(rulesPrompt);
+
+    // CLAUDE.md: hierarchical project instructions (Anthropic convention).
+    // Additive with OH's own memory system — both layers inject into the prompt.
+    const claudeMd = loadClaudeMdHierarchy();
+    const claudeMdPrompt = claudeMdToPrompt(claudeMd);
+    if (claudeMdPrompt) parts.push(claudeMdPrompt);
 
     // Auto-memory: load saved learnings into context
     const memories = loadMemories();

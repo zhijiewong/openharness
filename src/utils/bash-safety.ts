@@ -51,6 +51,185 @@ const INSTALL_COMMANDS = new Set([
 const NETWORK_EXFIL = new Set(["curl", "wget", "nc", "ncat", "socat", "ssh", "scp", "rsync"]);
 
 /**
+ * Process-wrapper commands that don't change what runs, just how it runs.
+ * These are stripped off the front of a sub-command before permission matching
+ * so `timeout 10 rm file` matches the same rule as `rm file`. Mirrors Claude
+ * Code's wrapper-stripping for robust permission enforcement.
+ */
+const PROCESS_WRAPPERS = new Set(["timeout", "time", "nice", "nohup", "stdbuf", "ionice", "unbuffer", "env"]);
+
+/**
+ * Strip leading process-wrapper tokens from a command string. Returns the
+ * underlying command (tokens + original separator). When the command is
+ * `timeout 30 npm test`, returns `npm test`. When no wrapper is present,
+ * returns the input unchanged. Conservative: only strips wrappers with at
+ * least one remaining token after them.
+ */
+export function stripProcessWrappers(cmd: string): string {
+  const trimmed = cmd.trim();
+  let tokens = tokenize(trimmed);
+  while (tokens.length >= 2 && PROCESS_WRAPPERS.has(tokens[0]!)) {
+    const first = tokens[0]!;
+    let skip = 1;
+    // `timeout 30s`, `nice -n 10`, `stdbuf -oL` — skip option-like args
+    // belonging to the wrapper itself. Numeric or `-flag value` shapes are swallowed.
+    while (skip < tokens.length - 1) {
+      const t = tokens[skip]!;
+      if (t.startsWith("-") || /^[0-9.]+[a-zA-Z]?$/.test(t)) {
+        skip++;
+      } else {
+        break;
+      }
+    }
+    tokens = tokens.slice(skip);
+    // Safety: if stripping removes everything, fall back to original
+    if (tokens.length === 0) return trimmed;
+    // Detect and continue stripping nested wrappers (e.g., `timeout 5 nice rm`)
+    if (!PROCESS_WRAPPERS.has(tokens[0]!)) break;
+    // Avoid infinite loops on malformed input
+    if (tokens[0] === first) break;
+  }
+  return tokens.join(" ");
+}
+
+/**
+ * Pure read-only commands. A bash invocation consisting only of these
+ * commands (optionally piped/chained with each other) is safe to auto-approve
+ * without a permission prompt. Mirrors Claude Code's read-only allowlist so
+ * common inspection flows (`ls`, `cat file | head`, `git status`) don't pester
+ * the user.
+ *
+ * Strict criteria: no side effects, no network, no filesystem writes.
+ */
+const READ_ONLY_COMMANDS = new Set([
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "grep",
+  "egrep",
+  "fgrep",
+  "find",
+  "wc",
+  "diff",
+  "stat",
+  "du",
+  "df",
+  "pwd",
+  "echo",
+  "printf",
+  "whoami",
+  "which",
+  "type",
+  "file",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "date",
+  "true",
+  "false",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "sed", // sed without -i is read-only (checked below)
+  "awk",
+  "column",
+  "tee", // tee IS a write, handled below
+  "tree",
+  "jq",
+  "yq",
+  "xxd",
+  "od",
+  "md5sum",
+  "sha1sum",
+  "sha256sum",
+  "env", // reading env; `export` / `env X=Y cmd` is not here
+]);
+
+// Git subcommands that don't mutate the repo or working tree.
+const READ_ONLY_GIT_SUBCOMMANDS = new Set([
+  "status",
+  "log",
+  "show",
+  "diff",
+  "blame",
+  "branch",
+  "tag",
+  "describe",
+  "rev-parse",
+  "rev-list",
+  "ls-files",
+  "ls-tree",
+  "cat-file",
+  "config",
+  "remote",
+  "reflog",
+  "stash",
+  "for-each-ref",
+  "shortlog",
+  "grep",
+  "bisect",
+  "worktree",
+]);
+
+/**
+ * Return true iff every sub-command in the pipeline/chain is a read-only
+ * operation. Any side-effecting sub-command disqualifies the whole command.
+ * Respects quotes and command substitution via the existing splitCommands/tokenize.
+ */
+export function isReadOnlyBashCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+
+  // Refuse any redirection that creates/overwrites files ( > >> | tee -a ... ).
+  // Append is still a write. `2>&1` alone is fine, but `> file` is not.
+  if (/(?<![<&])>+\s*[^&]/.test(trimmed)) return false;
+
+  const subCommands = splitCommands(trimmed);
+  if (subCommands.length === 0) return false;
+
+  for (const sub of subCommands) {
+    const tokens = tokenize(sub);
+    if (tokens.length === 0) continue;
+    const cmd = tokens[0]!;
+    const args = tokens.slice(1);
+
+    // `git <subcmd>` with read-only subcommand
+    if (cmd === "git") {
+      const sub = args.find((a) => !a.startsWith("-"));
+      if (!sub || !READ_ONLY_GIT_SUBCOMMANDS.has(sub)) return false;
+      // `git stash push`, `git stash pop`, `git stash drop` are writes — refuse.
+      if (sub === "stash") {
+        const action = args[args.indexOf("stash") + 1];
+        if (action && ["push", "pop", "drop", "apply", "clear", "save"].includes(action)) return false;
+      }
+      // `git branch -d`, `git branch -D` delete branches — refuse.
+      if (sub === "branch" && args.some((a) => a === "-d" || a === "-D")) return false;
+      // `git config --global foo=bar` writes config — only read forms are safe.
+      if (
+        sub === "config" &&
+        args.some((a) => !a.startsWith("-") && args.indexOf(a) > args.indexOf("config") && a.includes("="))
+      ) {
+        return false;
+      }
+      continue;
+    }
+
+    // `sed -i` is in-place edit — writes.
+    if (cmd === "sed" && args.some((a) => a === "-i" || a.startsWith("-i"))) return false;
+
+    // `tee` without `-a` is a write; `tee -a` is also a write. Refuse always.
+    if (cmd === "tee") return false;
+
+    if (!READ_ONLY_COMMANDS.has(cmd)) return false;
+  }
+
+  return true;
+}
+
+/**
  * Analyze a bash command string for safety risks.
  * Does lightweight structural parsing — splits on pipes, semicolons,
  * and && / || operators to analyze each sub-command.
@@ -181,7 +360,7 @@ export function analyzeBashCommand(command: string): BashRisk {
  * Split a command string into sub-commands on |, ;, &&, ||
  * Respects quoted strings and command substitutions.
  */
-function splitCommands(cmd: string): string[] {
+export function splitCommands(cmd: string): string[] {
   const parts: string[] = [];
   let current = "";
   let inSingle = false;

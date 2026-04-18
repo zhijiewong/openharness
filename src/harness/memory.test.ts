@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { makeTmpDir } from "../test-helpers.js";
 import {
   boostRelevance,
+  claudeMdToPrompt,
+  loadClaudeMdHierarchy,
   loadMemories,
   loadUserProfile,
   memoriesToPrompt,
+  resolveClaudeMdImports,
   saveMemory,
   touchMemory,
   updateMemoryIndex,
@@ -217,4 +220,128 @@ test("userProfileToPrompt returns empty string when no profile", () => {
   withTmpCwd(() => {
     assert.equal(userProfileToPrompt(), "");
   });
+});
+
+// ── CLAUDE.md hierarchy ──
+
+test("loadClaudeMdHierarchy returns [] when no CLAUDE.md anywhere", () => {
+  withTmpCwd(() => {
+    const entries = loadClaudeMdHierarchy();
+    // Filter to project-scoped — user-global ~/.claude/CLAUDE.md may exist on the runner
+    const local = entries.filter((e) => e.source !== "user");
+    assert.deepEqual(local, []);
+  });
+});
+
+test("loadClaudeMdHierarchy reads project CLAUDE.md", () => {
+  withTmpCwd((dir) => {
+    writeFileSync(join(dir, "CLAUDE.md"), "# Project rules\nAlways use TypeScript strict mode.");
+    const entries = loadClaudeMdHierarchy();
+    const project = entries.find((e) => e.source === "project");
+    assert.ok(project);
+    assert.ok(project!.content.includes("Always use TypeScript"));
+  });
+});
+
+test("loadClaudeMdHierarchy reads .claude/CLAUDE.md when present", () => {
+  withTmpCwd((dir) => {
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "CLAUDE.md"), "# Claude-dir rules\nPrefer named exports.");
+    const entries = loadClaudeMdHierarchy();
+    const claudeDir = entries.find((e) => e.source === "claude-dir");
+    assert.ok(claudeDir);
+    assert.ok(claudeDir!.content.includes("Prefer named exports"));
+  });
+});
+
+test("loadClaudeMdHierarchy reads CLAUDE.local.md (gitignored)", () => {
+  withTmpCwd((dir) => {
+    writeFileSync(join(dir, "CLAUDE.local.md"), "My personal notes.");
+    const entries = loadClaudeMdHierarchy();
+    const local = entries.find((e) => e.source === "project-local");
+    assert.ok(local);
+    assert.ok(local!.content.includes("personal notes"));
+  });
+});
+
+test("loadClaudeMdHierarchy layers multiple sources", () => {
+  withTmpCwd((dir) => {
+    mkdirSync(join(dir, ".claude"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "CLAUDE.md"), "A");
+    writeFileSync(join(dir, "CLAUDE.md"), "B");
+    writeFileSync(join(dir, "CLAUDE.local.md"), "C");
+    const entries = loadClaudeMdHierarchy();
+    const sources = entries.map((e) => e.source).filter((s) => s !== "user");
+    // Order: claude-dir, project, project-local (user is last in scan order)
+    assert.deepEqual(sources, ["claude-dir", "project", "project-local"]);
+  });
+});
+
+test("resolveClaudeMdImports inlines @-imports", () => {
+  withTmpCwd((dir) => {
+    writeFileSync(join(dir, "style.md"), "Use tabs.");
+    const result = resolveClaudeMdImports("Read @style.md for style.", dir);
+    assert.ok(result.includes("Use tabs."));
+    assert.ok(result.includes("imported from @style.md"));
+  });
+});
+
+test("resolveClaudeMdImports handles nested imports", () => {
+  withTmpCwd((dir) => {
+    writeFileSync(join(dir, "inner.md"), "Inner content.");
+    writeFileSync(join(dir, "outer.md"), "Outer imports @inner.md here.");
+    const result = resolveClaudeMdImports("Top-level @outer.md", dir);
+    assert.ok(result.includes("Outer imports"));
+    assert.ok(result.includes("Inner content."));
+  });
+});
+
+test("resolveClaudeMdImports skips non-path tokens", () => {
+  withTmpCwd((dir) => {
+    // @username-style mentions should be left alone (no slash / no extension)
+    const result = resolveClaudeMdImports("Contact @alice for help.", dir);
+    assert.equal(result, "Contact @alice for help.");
+  });
+});
+
+test("resolveClaudeMdImports caps recursion at 5 hops", () => {
+  withTmpCwd((dir) => {
+    // Build a chain deeper than the 5-hop cap. Starting hopsLeft=5 expands
+    // chain0..chain4 (5 recursive calls); chain5 remains as a literal @ token.
+    for (let i = 0; i < 8; i++) {
+      const next = i < 7 ? `@chain${i + 1}.md` : "end.";
+      writeFileSync(join(dir, `chain${i}.md`), `level ${i} ${next}`);
+    }
+    const result = resolveClaudeMdImports("@chain0.md", dir);
+    assert.ok(result.includes("level 0"));
+    assert.ok(result.includes("level 4"));
+    // Depth exhausted at level 5 — chain5.md's content is NOT inlined
+    assert.ok(!result.includes("level 5"));
+    // The literal @chain5.md token survives (proof of stop, not truncation)
+    assert.ok(result.includes("@chain5.md"));
+  });
+});
+
+test("resolveClaudeMdImports silently drops missing imports", () => {
+  withTmpCwd((dir) => {
+    const result = resolveClaudeMdImports("Load @missing.md file.", dir);
+    // @missing.md stays literal in the output when the file doesn't exist
+    assert.ok(result.includes("@missing.md"));
+  });
+});
+
+test("claudeMdToPrompt returns empty string for empty input", () => {
+  assert.equal(claudeMdToPrompt([]), "");
+});
+
+test("claudeMdToPrompt formats entries with source headers", () => {
+  const prompt = claudeMdToPrompt([
+    { path: "./CLAUDE.md", source: "project", content: "Use TS." },
+    { path: "~/.claude/CLAUDE.md", source: "user", content: "Prefer minimal comments." },
+  ]);
+  assert.ok(prompt.includes("# Project instructions (CLAUDE.md)"));
+  assert.ok(prompt.includes("source: project"));
+  assert.ok(prompt.includes("source: user"));
+  assert.ok(prompt.includes("Use TS."));
+  assert.ok(prompt.includes("minimal comments"));
 });
