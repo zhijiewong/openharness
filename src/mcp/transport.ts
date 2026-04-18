@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -46,11 +47,15 @@ export class ProtocolError extends Error {
   }
 }
 
+export type BuildTransportOptions = {
+  authProvider?: OAuthClientProvider;
+};
+
 /**
  * Construct an SDK Transport for a normalized config.
  * Does NOT call .start() — caller (Client.connect) handles that.
  */
-export async function buildTransport(cfg: NormalizedConfig): Promise<Transport> {
+export async function buildTransport(cfg: NormalizedConfig, opts: BuildTransportOptions = {}): Promise<Transport> {
   if (cfg.type === "stdio") {
     return new StdioClientTransport({
       command: cfg.command,
@@ -61,11 +66,13 @@ export async function buildTransport(cfg: NormalizedConfig): Promise<Transport> 
   if (cfg.type === "http") {
     return new StreamableHTTPClientTransport(new URL(cfg.url), {
       requestInit: cfg.headers ? { headers: cfg.headers } : undefined,
+      authProvider: opts.authProvider,
     });
   }
   if (cfg.type === "sse") {
     return new SSEClientTransport(new URL(cfg.url), {
       requestInit: cfg.headers ? { headers: cfg.headers } : undefined,
+      authProvider: opts.authProvider,
     });
   }
   throw new Error(`unknown transport type: ${(cfg as any).type}`);
@@ -122,7 +129,6 @@ export async function connectWithFallback<T>(
     if (!isFallbackCandidate(err)) throw err;
 
     // Log + retry
-    // biome-ignore lint/suspicious/noConsole: user-facing diagnostic
     console.warn(`[mcp] ${cfg.name}: Streamable HTTP failed (${(err as Error).message}); trying legacy SSE`);
     const sseCfg: NormalizedConfig = { ...cfg, type: "sse" } as NormalizedConfig;
     return await doConnect(sseCfg);
@@ -132,12 +138,16 @@ export async function connectWithFallback<T>(
 const DEFAULT_TIMEOUT_MS = 5_000;
 const CLIENT_INFO = { name: "openharness", version: pkg.version } as const;
 
+export type BuildClientOptions = {
+  authProvider?: OAuthClientProvider;
+};
+
 /**
  * Build a connected SDK Client for a normalized config.
  * Maps connect-time errors into OH's typed error taxonomy.
  */
-export async function buildClient(cfg: NormalizedConfig): Promise<Client> {
-  const transport = await buildTransport(cfg);
+export async function buildClient(cfg: NormalizedConfig, opts: BuildClientOptions = {}): Promise<Client> {
+  const transport = await buildTransport(cfg, opts);
   const client = new Client(CLIENT_INFO, { capabilities: {} });
   const timeoutMs = cfg.timeout ?? DEFAULT_TIMEOUT_MS;
 

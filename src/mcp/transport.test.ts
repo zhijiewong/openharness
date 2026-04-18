@@ -198,3 +198,26 @@ describe("connectWithFallback", () => {
     assert.deepEqual(calls, ["http"]);
   });
 });
+
+import { buildAuthProvider } from "./oauth.js";
+
+describe("buildTransport with auth provider", () => {
+  function cfgHttp(overrides: Partial<NormalizedConfig> = {}): NormalizedConfig {
+    return { name: "srv", type: "http", url: "https://x/mcp", ...overrides } as NormalizedConfig;
+  }
+
+  it("passes authProvider through to StreamableHTTPClientTransport", async () => {
+    const cfg = cfgHttp();
+    const authProvider = buildAuthProvider(cfg, "/tmp/oh-test", async () => {});
+    assert.ok(authProvider);
+    const t = (await buildTransport(cfg, { authProvider })) as any;
+    assert.ok(t._authProvider === authProvider);
+    // Clean up callback listener that ready() would have bound (if accessed)
+    authProvider.close();
+  });
+
+  it("no authProvider option → transport has no _authProvider", async () => {
+    const t = (await buildTransport(cfgHttp())) as any;
+    assert.equal(t._authProvider, undefined);
+  });
+});
