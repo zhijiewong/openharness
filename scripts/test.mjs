@@ -1,3 +1,5 @@
+// Integration tests live under tests/integration/ and are opt-in; run them with:
+//   OH_INTEGRATION=1 npx tsx --test tests/integration/<name>.test.ts
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
