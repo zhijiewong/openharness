@@ -1,176 +1,125 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import type { McpServerConfig, McpStdioConfig } from "../harness/config.js";
-import { safeEnv } from "../utils/safe-env.js";
-import type { JsonRpcRequest, JsonRpcResponse, McpToolDef } from "./types.js";
+import type { Client as SdkClient } from "@modelcontextprotocol/sdk/client/index.js";
+import type { McpServerConfig } from "../harness/config.js";
+import { normalizeMcpConfig } from "./config-normalize.js";
+import { buildClient, connectWithFallback } from "./transport.js";
+import type { McpToolDef } from "./types.js";
 
-function assertStdio(cfg: McpServerConfig): asserts cfg is McpStdioConfig {
-  if (cfg.type && cfg.type !== "stdio") {
-    throw new Error(`MCP server '${cfg.name}' has type '${cfg.type}'; remote transports are not yet implemented`);
-  }
-  if (!("command" in cfg) || !cfg.command) {
-    throw new Error(`MCP server '${cfg.name}' is missing 'command'`);
-  }
-}
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+type ForTestingOptions = {
+  name: string;
+  cfg: McpServerConfig;
+  sdk: SdkClient;
+  timeoutMs: number;
+  reconnect?: () => Promise<SdkClient>;
+};
 
 export class McpClient {
   readonly name: string;
-  private proc: ChildProcess;
-  private nextId = 1;
-  private pending = new Map<number, { resolve: (r: JsonRpcResponse) => void; reject: (e: Error) => void }>();
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: set via Object.assign in static factory
-  private ready = false;
-  private dead = false;
-  private cfg: McpServerConfig;
-  private timeoutMs: number;
-
-  private constructor(name: string, proc: ChildProcess, cfg: McpServerConfig, timeoutMs: number) {
-    this.name = name;
-    this.proc = proc;
-    this.cfg = cfg;
-    this.timeoutMs = timeoutMs;
-
-    const rl = createInterface({ input: proc.stdout! });
-    rl.on("line", (line) => {
-      try {
-        const msg = JSON.parse(line) as JsonRpcResponse;
-        const p = this.pending.get(msg.id);
-        if (p) {
-          this.pending.delete(msg.id);
-          p.resolve(msg);
-        }
-      } catch {
-        // non-JSON line from server (e.g. startup noise) — ignore
-      }
-    });
-
-    proc.on("exit", () => {
-      this.dead = true;
-      for (const p of this.pending.values()) {
-        p.reject(new Error(`MCP server '${name}' exited`));
-      }
-      this.pending.clear();
-    });
-  }
-
-  /** Server-provided instructions (from capabilities during init) */
   instructions: string | null = null;
 
-  static async connect(cfg: McpServerConfig, timeoutMs = cfg.timeout ?? 5_000): Promise<McpClient> {
-    assertStdio(cfg);
-    const proc = spawn(cfg.command, cfg.args ?? [], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: safeEnv(cfg.env),
-    });
+  private sdk: SdkClient;
+  private cfg: McpServerConfig;
+  private timeoutMs: number;
+  private reconnectImpl: () => Promise<SdkClient>;
 
-    const client = new McpClient(cfg.name, proc, cfg, timeoutMs);
-
-    // Initialize handshake
-    const initResponse = await Promise.race([
-      client.call("initialize", {
-        protocolVersion: "2024-11-05",
-        clientInfo: { name: "openharness", version: "0.2.1" },
-        capabilities: {},
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`MCP '${cfg.name}' init timeout`)), timeoutMs),
-      ),
-    ]);
-
-    // Extract server instructions from init response
-    const serverInfo = (initResponse as any)?.result;
-    if (serverInfo?.instructions && typeof serverInfo.instructions === "string") {
-      client.instructions = serverInfo.instructions;
+  private constructor(
+    name: string,
+    cfg: McpServerConfig,
+    sdk: SdkClient,
+    timeoutMs: number,
+    reconnect?: () => Promise<SdkClient>,
+  ) {
+    this.name = name;
+    this.cfg = cfg;
+    this.sdk = sdk;
+    this.timeoutMs = timeoutMs;
+    this.reconnectImpl = reconnect ?? (() => this.defaultReconnect());
+    const version = (sdk as any).getServerVersion?.() as { instructions?: string } | undefined;
+    if (version?.instructions && typeof version.instructions === "string") {
+      this.instructions = version.instructions;
     }
+  }
 
-    await client.call("notifications/initialized", {});
-    client.ready = true;
-    return client;
+  static async connect(
+    cfg: McpServerConfig,
+    timeoutMs: number = cfg.timeout ?? DEFAULT_TIMEOUT_MS,
+  ): Promise<McpClient> {
+    const normalized = normalizeMcpConfig(cfg, process.env);
+    if (normalized.kind === "error") {
+      throw new Error(normalized.message);
+    }
+    const sdk = await connectWithFallback(normalized.cfg, (c) => buildClient(c));
+    return new McpClient(cfg.name, cfg, sdk, timeoutMs);
+  }
+
+  /** Test-only constructor. Not exported from the package's public API. */
+  static _forTesting(opts: ForTestingOptions): McpClient {
+    return new McpClient(opts.name, opts.cfg, opts.sdk, opts.timeoutMs, opts.reconnect);
+  }
+
+  private async defaultReconnect(): Promise<SdkClient> {
+    const normalized = normalizeMcpConfig(this.cfg, process.env);
+    if (normalized.kind === "error") throw new Error(normalized.message);
+    return connectWithFallback(normalized.cfg, (c) => buildClient(c));
   }
 
   async listTools(): Promise<McpToolDef[]> {
-    const res = await this.call("tools/list", {});
-    return ((res.result as any)?.tools ?? []) as McpToolDef[];
+    const res = await (this.sdk as any).listTools();
+    return (res?.tools ?? []) as McpToolDef[];
   }
 
   async listResources(): Promise<Array<{ uri: string; name: string; description?: string }>> {
     try {
-      const res = await this.callWithTimeout("resources/list", {});
-      return ((res.result as any)?.resources ?? []) as Array<{ uri: string; name: string; description?: string }>;
+      const res = await (this.sdk as any).listResources();
+      return (res?.resources ?? []) as Array<{ uri: string; name: string; description?: string }>;
     } catch {
       return []; // Server may not support resources
     }
   }
 
   async readResource(uri: string): Promise<string> {
-    const res = await this.callWithTimeout("resources/read", { uri });
-    if (res.error) throw new Error(res.error.message);
-    const contents = (res.result as any)?.contents ?? [];
+    const res = await (this.sdk as any).readResource({ uri });
+    const contents = res?.contents ?? [];
     return contents
-      .filter((c: any) => c.text)
+      .filter((c: any) => typeof c.text === "string")
       .map((c: any) => c.text as string)
       .join("\n");
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
-    if (this.dead) {
-      try {
-        const fresh = await McpClient.connect(this.cfg, this.timeoutMs);
-        Object.assign(this, { proc: fresh.proc, dead: false, ready: true, nextId: 1, pending: new Map() });
-      } catch {
-        throw new Error(`MCP server '${this.name}' died and restart failed`);
-      }
-    }
-
-    // Retry up to 2 times for transient failures
-    let lastError: Error | null = null;
+    // Retry up to 2 times on transport-closed / timeout errors
+    let lastErr: Error | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await this.callWithTimeout("tools/call", { name, arguments: args });
-        if (res.error) throw new Error(res.error.message);
-        const content = (res.result as any)?.content ?? [];
-        return content
-          .filter((c: any) => c.type === "text")
-          .map((c: any) => c.text as string)
+        const res = await (this.sdk as any).callTool({ name, arguments: args });
+        const content = (res?.content ?? []) as Array<{ type: string; text?: string }>;
+        const text = content
+          .filter((c) => c.type === "text" && typeof c.text === "string")
+          .map((c) => c.text as string)
           .join("\n");
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        // Only retry on timeout or server death — not on application errors
-        if (!lastError.message.includes("timeout") && !lastError.message.includes("exited")) {
-          throw lastError;
+        if (res?.isError) {
+          throw new Error(text || `MCP tool '${name}' returned an error`);
         }
-        if (this.dead && attempt < 2) {
-          try {
-            const fresh = await McpClient.connect(this.cfg, this.timeoutMs);
-            Object.assign(this, { proc: fresh.proc, dead: false, ready: true, nextId: 1, pending: new Map() });
-          } catch {
-            throw new Error(`MCP server '${this.name}' died and restart failed`);
-          }
+        return text;
+      } catch (err) {
+        lastErr = err instanceof Error ? err : new Error(String(err));
+        const msg = lastErr.message;
+        const retryable = /transport closed|timeout|ECONNRESET|stream closed|socket hang up/i.test(msg);
+        if (!retryable || attempt === 2) throw lastErr;
+        try {
+          this.sdk = await this.reconnectImpl();
+        } catch (reErr) {
+          throw new Error(
+            `MCP '${this.name}' died and reconnect failed: ${reErr instanceof Error ? reErr.message : String(reErr)}`,
+          );
         }
       }
     }
-    throw lastError ?? new Error(`MCP '${this.name}' call failed after retries`);
-  }
-
-  private callWithTimeout(method: string, params: unknown): Promise<JsonRpcResponse> {
-    return Promise.race([
-      this.call(method, params),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`MCP '${this.name}' call timeout (${this.timeoutMs}ms)`)), this.timeoutMs),
-      ),
-    ]);
-  }
-
-  private call(method: string, params: unknown): Promise<JsonRpcResponse> {
-    return new Promise((resolve, reject) => {
-      const id = this.nextId++;
-      const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
-      this.pending.set(id, { resolve, reject });
-      this.proc.stdin!.write(`${JSON.stringify(req)}\n`);
-    });
+    throw lastErr ?? new Error(`MCP '${this.name}' callTool failed after retries`);
   }
 
   disconnect(): void {
-    this.proc.kill();
+    void (this.sdk as any).close?.();
   }
 }
