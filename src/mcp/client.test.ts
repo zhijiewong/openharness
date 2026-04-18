@@ -15,7 +15,7 @@ function fakeSdkClient(
     }) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
     listResources: () => Promise<{ resources: unknown[] }>;
     readResource: (r: { uri: string }) => Promise<{ contents: Array<{ text?: string }> }>;
-    getServerVersion: () => { instructions?: string } | undefined;
+    getInstructions: () => string | undefined;
     close: () => Promise<void>;
   }> = {},
 ) {
@@ -24,7 +24,7 @@ function fakeSdkClient(
     callTool: overrides.callTool ?? (async () => ({ content: [{ type: "text", text: "ok" }] })),
     listResources: overrides.listResources ?? (async () => ({ resources: [] })),
     readResource: overrides.readResource ?? (async (_r) => ({ contents: [{ text: "res" }] })),
-    getServerVersion: overrides.getServerVersion ?? (() => undefined),
+    getInstructions: overrides.getInstructions ?? (() => undefined),
     close: overrides.close ?? (async () => {}),
   };
 }
@@ -124,9 +124,9 @@ describe("McpClient wrapper", () => {
     assert.equal(defs[0]!.name, "t1");
   });
 
-  it("instructions field is populated from SDK getServerVersion()", async () => {
+  it("instructions field is populated from SDK getInstructions()", async () => {
     const sdk = fakeSdkClient({
-      getServerVersion: () => ({ instructions: "follow these rules" }),
+      getInstructions: () => "follow these rules",
     });
     const client = McpClient._forTesting({
       name: "srv",

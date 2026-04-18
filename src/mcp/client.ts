@@ -35,9 +35,9 @@ export class McpClient {
     this.sdk = sdk;
     this.timeoutMs = timeoutMs;
     this.reconnectImpl = reconnect ?? (() => this.defaultReconnect());
-    const version = (sdk as any).getServerVersion?.() as { instructions?: string } | undefined;
-    if (version?.instructions && typeof version.instructions === "string") {
-      this.instructions = version.instructions;
+    const instr = (sdk as any).getInstructions?.() as string | undefined;
+    if (instr && typeof instr === "string") {
+      this.instructions = instr;
     }
   }
 

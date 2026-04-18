@@ -1,9 +1,12 @@
+import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { NormalizedConfig } from "./config-normalize.js";
+
+const pkg = createRequire(import.meta.url)("../../package.json") as { version: string };
 
 export class RemoteAuthRequiredError extends Error {
   readonly serverName: string;
@@ -127,7 +130,7 @@ export async function connectWithFallback<T>(
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
-const CLIENT_INFO = { name: "openharness", version: "0.2.1" } as const;
+const CLIENT_INFO = { name: "openharness", version: pkg.version } as const;
 
 /**
  * Build a connected SDK Client for a normalized config.
@@ -138,12 +141,13 @@ export async function buildClient(cfg: NormalizedConfig): Promise<Client> {
   const client = new Client(CLIENT_INFO, { capabilities: {} });
   const timeoutMs = cfg.timeout ?? DEFAULT_TIMEOUT_MS;
 
+  let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     await Promise.race([
       client.connect(transport),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs),
-      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs);
+      }),
     ]);
     return client;
   } catch (err) {
@@ -158,5 +162,7 @@ export async function buildClient(cfg: NormalizedConfig): Promise<Client> {
     }
     // Otherwise protocol-shaped
     throw new ProtocolError(cfg.name, err);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
   }
 }

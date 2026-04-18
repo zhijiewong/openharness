@@ -157,6 +157,28 @@ describe("connectWithFallback", () => {
     );
   });
 
+  it("bare 401 (no WWW-Authenticate) falls back to SSE when type was inferred", async () => {
+    // 401 without a WWW-Authenticate header is not an auth challenge per the MCP
+    // spec; treat it as a generic 4xx and try legacy SSE.
+    const calls: string[] = [];
+    const fakeConnect = async (cfg: NormalizedConfig) => {
+      calls.push(cfg.type);
+      if (cfg.type === "http") {
+        const e: any = new Error("401 Unauthorized");
+        e.code = 401;
+        // no e.headers
+        throw e;
+      }
+      return { name: cfg.name } as any;
+    };
+    const result = await connectWithFallback(
+      { name: "x", type: "http", url: "http://x", inferredFromUrl: true } as NormalizedConfig,
+      fakeConnect,
+    );
+    assert.deepEqual(calls, ["http", "sse"]);
+    assert.equal(result.name, "x");
+  });
+
   it("does NOT fall back on 5xx (server is reachable; fallback would mask bugs)", async () => {
     const calls: string[] = [];
     const fakeConnect = async (cfg: NormalizedConfig) => {
