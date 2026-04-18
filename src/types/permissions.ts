@@ -3,7 +3,12 @@
  */
 
 import type { ToolPermissionRule } from "../harness/config.js";
-import { analyzeBashCommand, isReadOnlyBashCommand } from "../utils/bash-safety.js";
+import {
+  analyzeBashCommand,
+  isReadOnlyBashCommand,
+  splitCommands,
+  stripProcessWrappers,
+} from "../utils/bash-safety.js";
 
 export type PermissionMode = "ask" | "trust" | "deny" | "acceptEdits" | "plan" | "auto" | "bypassPermissions";
 
@@ -63,50 +68,100 @@ function matchArgGlob(pattern: string, value: string): boolean {
 }
 
 /** Find the first matching tool permission rule */
+/**
+ * Priority of a rule action for "most restrictive wins" tie-breaking across
+ * subcommand matches: deny > ask > allow. Rules that don't apply return -1.
+ */
+function actionPriority(action: ToolPermissionRule["action"]): number {
+  return action === "deny" ? 2 : action === "ask" ? 1 : 0;
+}
+
+function matchesSingleRule(r: ToolPermissionRule, toolName: string, toolInput?: unknown): boolean {
+  const { toolName: specToolName, argPattern } = parseToolSpecifier(r.tool);
+  if (!matchToolPattern(specToolName, toolName)) return false;
+
+  if (argPattern && toolInput) {
+    const input = toolInput as Record<string, unknown>;
+    if (toolName === "Bash" && typeof input.command === "string") {
+      return matchArgGlob(argPattern, input.command);
+    }
+    if (["Edit", "Write", "Read"].includes(toolName) && typeof input.file_path === "string") {
+      return matchArgGlob(argPattern, input.file_path);
+    }
+    return false;
+  }
+
+  if (r.pattern && toolInput && toolName === "Bash") {
+    const command = (toolInput as Record<string, unknown>)?.command;
+    if (typeof command === "string") {
+      try {
+        return new RegExp(r.pattern).test(command);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Match permission rules against a Bash command.
+ *
+ * For compound commands (`cmd1 && cmd2`, `a | b`, `x; y`), evaluate rules
+ * against each sub-command independently with "most restrictive wins"
+ * semantics: any sub-command matching a `deny` rule returns deny; else any
+ * `ask` match returns ask; else any `allow` match returns allow; else no
+ * match. Process wrappers (`timeout 10 cmd`, `nice -n 5 cmd`) are stripped
+ * before matching so the real underlying command is what gets checked.
+ *
+ * Security note: this closes a common class of bypasses like
+ * `git log && rm -rf /` where a naive full-line match would hit the `git log`
+ * allow rule and skip the deny on `rm`.
+ */
+function findBashRule(rules: ToolPermissionRule[], command: string): ToolPermissionRule | undefined {
+  const subs = splitCommands(command).map(stripProcessWrappers).filter(Boolean);
+  if (subs.length === 0) return undefined;
+
+  let best: ToolPermissionRule | undefined;
+  let bestPriority = -1;
+  for (const sub of subs) {
+    const subInput = { command: sub };
+    for (const r of rules) {
+      if (!matchesSingleRule(r, "Bash", subInput)) continue;
+      const p = actionPriority(r.action);
+      if (p > bestPriority) {
+        best = r;
+        bestPriority = p;
+        if (p === 2) return best; // deny short-circuits
+      }
+    }
+  }
+  return best;
+}
+
 function findToolRule(
   rules: ToolPermissionRule[] | undefined,
   toolName: string,
   toolInput?: unknown,
 ): ToolPermissionRule | undefined {
   if (!rules || rules.length === 0) return undefined;
-  return rules.find((r) => {
-    const { toolName: specToolName, argPattern } = parseToolSpecifier(r.tool);
 
-    // Check tool name match (with prefix * support)
-    if (!matchToolPattern(specToolName, toolName)) return false;
-
-    // If rule has an inline argument pattern (e.g., "Bash(npm run *)")
-    if (argPattern && toolInput) {
-      const input = toolInput as Record<string, unknown>;
-
-      // For Bash: match against command string
-      if (toolName === "Bash" && typeof input.command === "string") {
-        return matchArgGlob(argPattern, input.command);
-      }
-
-      // For file tools: match against file_path
-      if (["Edit", "Write", "Read"].includes(toolName) && typeof input.file_path === "string") {
-        return matchArgGlob(argPattern, input.file_path);
-      }
-
-      return false; // Has pattern but no matching field
+  // Bash: always route through the compound-aware matcher. For single commands
+  // this just strips wrappers and does a normal rule search; for compound
+  // commands it evaluates each sub-command with most-restrictive-wins.
+  if (toolName === "Bash" && toolInput) {
+    const command = (toolInput as Record<string, unknown>)?.command;
+    if (typeof command === "string") {
+      const compoundMatch = findBashRule(rules, command);
+      if (compoundMatch) return compoundMatch;
+      // Compound matcher returned nothing (single command or no match).
+      // Fall through to the default single-rule find below.
     }
+  }
 
-    // Legacy: separate pattern field (regex) for Bash commands
-    if (r.pattern && toolInput && toolName === "Bash") {
-      const command = (toolInput as Record<string, unknown>)?.command;
-      if (typeof command === "string") {
-        try {
-          return new RegExp(r.pattern).test(command);
-        } catch {
-          return false;
-        }
-      }
-      return false;
-    }
-
-    return true;
-  });
+  return rules.find((r) => matchesSingleRule(r, toolName, toolInput));
 }
 
 /** Cached tool permission rules — set by the REPL at startup */

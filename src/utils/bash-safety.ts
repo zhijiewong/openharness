@@ -51,6 +51,48 @@ const INSTALL_COMMANDS = new Set([
 const NETWORK_EXFIL = new Set(["curl", "wget", "nc", "ncat", "socat", "ssh", "scp", "rsync"]);
 
 /**
+ * Process-wrapper commands that don't change what runs, just how it runs.
+ * These are stripped off the front of a sub-command before permission matching
+ * so `timeout 10 rm file` matches the same rule as `rm file`. Mirrors Claude
+ * Code's wrapper-stripping for robust permission enforcement.
+ */
+const PROCESS_WRAPPERS = new Set(["timeout", "time", "nice", "nohup", "stdbuf", "ionice", "unbuffer", "env"]);
+
+/**
+ * Strip leading process-wrapper tokens from a command string. Returns the
+ * underlying command (tokens + original separator). When the command is
+ * `timeout 30 npm test`, returns `npm test`. When no wrapper is present,
+ * returns the input unchanged. Conservative: only strips wrappers with at
+ * least one remaining token after them.
+ */
+export function stripProcessWrappers(cmd: string): string {
+  const trimmed = cmd.trim();
+  let tokens = tokenize(trimmed);
+  while (tokens.length >= 2 && PROCESS_WRAPPERS.has(tokens[0]!)) {
+    const first = tokens[0]!;
+    let skip = 1;
+    // `timeout 30s`, `nice -n 10`, `stdbuf -oL` — skip option-like args
+    // belonging to the wrapper itself. Numeric or `-flag value` shapes are swallowed.
+    while (skip < tokens.length - 1) {
+      const t = tokens[skip]!;
+      if (t.startsWith("-") || /^[0-9.]+[a-zA-Z]?$/.test(t)) {
+        skip++;
+      } else {
+        break;
+      }
+    }
+    tokens = tokens.slice(skip);
+    // Safety: if stripping removes everything, fall back to original
+    if (tokens.length === 0) return trimmed;
+    // Detect and continue stripping nested wrappers (e.g., `timeout 5 nice rm`)
+    if (!PROCESS_WRAPPERS.has(tokens[0]!)) break;
+    // Avoid infinite loops on malformed input
+    if (tokens[0] === first) break;
+  }
+  return tokens.join(" ");
+}
+
+/**
  * Pure read-only commands. A bash invocation consisting only of these
  * commands (optionally piped/chained with each other) is safe to auto-approve
  * without a permission prompt. Mirrors Claude Code's read-only allowlist so
@@ -318,7 +360,7 @@ export function analyzeBashCommand(command: string): BashRisk {
  * Split a command string into sub-commands on |, ;, &&, ||
  * Respects quoted strings and command substitutions.
  */
-function splitCommands(cmd: string): string[] {
+export function splitCommands(cmd: string): string[] {
   const parts: string[] = [];
   let current = "";
   let inSingle = false;
