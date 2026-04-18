@@ -66,3 +66,96 @@ describe("buildTransport dispatch", () => {
     );
   });
 });
+
+import { connectWithFallback } from "./transport.js";
+
+describe("connectWithFallback", () => {
+  it("returns the first successful connect result without fallback", async () => {
+    const calls: string[] = [];
+    const fakeConnect = async (cfg: NormalizedConfig) => {
+      calls.push(cfg.type);
+      return { name: cfg.name } as any;
+    };
+    const result = await connectWithFallback(
+      { name: "x", type: "http", url: "http://x", inferredFromUrl: true } as NormalizedConfig,
+      fakeConnect,
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0], "http");
+    assert.equal(result.name, "x");
+  });
+
+  it("falls back to sse when http 4xxes AND type was inferred", async () => {
+    const calls: string[] = [];
+    const fakeConnect = async (cfg: NormalizedConfig) => {
+      calls.push(cfg.type);
+      if (cfg.type === "http") {
+        const e: any = new Error("404 Not Found");
+        e.code = 404;
+        throw e;
+      }
+      return { name: cfg.name } as any;
+    };
+    const result = await connectWithFallback(
+      { name: "x", type: "http", url: "http://x", inferredFromUrl: true } as NormalizedConfig,
+      fakeConnect,
+    );
+    assert.deepEqual(calls, ["http", "sse"]);
+    assert.equal(result.name, "x");
+  });
+
+  it("does NOT fall back when type was explicit", async () => {
+    const calls: string[] = [];
+    const fakeConnect = async (cfg: NormalizedConfig) => {
+      calls.push(cfg.type);
+      const e: any = new Error("404 Not Found");
+      e.code = 404;
+      throw e;
+    };
+    await assert.rejects(
+      () =>
+        connectWithFallback(
+          { name: "x", type: "http", url: "http://x" } as NormalizedConfig, // no inferredFromUrl
+          fakeConnect,
+        ),
+      /404/,
+    );
+    assert.deepEqual(calls, ["http"]);
+  });
+
+  it("maps 401 + WWW-Authenticate to RemoteAuthRequiredError", async () => {
+    const fakeConnect = async (_cfg: NormalizedConfig) => {
+      const e: any = new Error("401 Unauthorized");
+      e.code = 401;
+      e.headers = { "www-authenticate": 'Bearer realm="linear"' };
+      throw e;
+    };
+    await assert.rejects(
+      () =>
+        connectWithFallback(
+          { name: "linear", type: "http", url: "http://x", inferredFromUrl: true } as NormalizedConfig,
+          fakeConnect,
+        ),
+      (err: Error) => err instanceof RemoteAuthRequiredError && err.serverName === "linear",
+    );
+  });
+
+  it("does NOT fall back on 5xx (server is reachable; fallback would mask bugs)", async () => {
+    const calls: string[] = [];
+    const fakeConnect = async (cfg: NormalizedConfig) => {
+      calls.push(cfg.type);
+      const e: any = new Error("500 Internal Server Error");
+      e.code = 500;
+      throw e;
+    };
+    await assert.rejects(
+      () =>
+        connectWithFallback(
+          { name: "x", type: "http", url: "http://x", inferredFromUrl: true } as NormalizedConfig,
+          fakeConnect,
+        ),
+      /500/,
+    );
+    assert.deepEqual(calls, ["http"]);
+  });
+});
