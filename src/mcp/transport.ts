@@ -1,3 +1,4 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -122,5 +123,40 @@ export async function connectWithFallback<T>(
     console.warn(`[mcp] ${cfg.name}: Streamable HTTP failed (${(err as Error).message}); trying legacy SSE`);
     const sseCfg: NormalizedConfig = { ...cfg, type: "sse" } as NormalizedConfig;
     return await doConnect(sseCfg);
+  }
+}
+
+const DEFAULT_TIMEOUT_MS = 5_000;
+const CLIENT_INFO = { name: "openharness", version: "0.2.1" } as const;
+
+/**
+ * Build a connected SDK Client for a normalized config.
+ * Maps connect-time errors into OH's typed error taxonomy.
+ */
+export async function buildClient(cfg: NormalizedConfig): Promise<Client> {
+  const transport = await buildTransport(cfg);
+  const client = new Client(CLIENT_INFO, { capabilities: {} });
+  const timeoutMs = cfg.timeout ?? DEFAULT_TIMEOUT_MS;
+
+  try {
+    await Promise.race([
+      client.connect(transport),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+    return client;
+  } catch (err) {
+    // Leave RemoteAuthRequiredError / UnreachableError / ProtocolError as-is
+    if (err instanceof RemoteAuthRequiredError || err instanceof UnreachableError || err instanceof ProtocolError) {
+      throw err;
+    }
+    // Network-shaped errors (DNS, TCP, TLS, timeout) → Unreachable
+    const msg = (err as Error)?.message ?? String(err);
+    if (/timeout|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|fetch failed/i.test(msg)) {
+      throw new UnreachableError(cfg.name, err);
+    }
+    // Otherwise protocol-shaped
+    throw new ProtocolError(cfg.name, err);
   }
 }

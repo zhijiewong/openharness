@@ -67,7 +67,24 @@ describe("buildTransport dispatch", () => {
   });
 });
 
-import { connectWithFallback } from "./transport.js";
+import { buildClient, connectWithFallback } from "./transport.js";
+
+describe("buildClient", () => {
+  it("returns an SDK Client bound to the transport; throws wrapped error on init timeout", async () => {
+    // stdio with a node process that never emits an init response → init timeout
+    await assert.rejects(
+      () =>
+        buildClient({
+          name: "bogus",
+          type: "stdio",
+          command: "node",
+          args: ["-e", "setInterval(()=>{},1e6);"],
+          timeout: 300,
+        } as any),
+      (err: Error) => err instanceof UnreachableError || err instanceof ProtocolError,
+    );
+  });
+});
 
 describe("connectWithFallback", () => {
   it("returns the first successful connect result without fallback", async () => {
