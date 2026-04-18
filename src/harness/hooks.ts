@@ -85,11 +85,54 @@ function buildEnv(event: HookEvent, ctx: HookContext): Record<string, string> {
   return env;
 }
 
-function matchesHook(def: HookDef, ctx: HookContext): boolean {
-  if (def.match && ctx.toolName && !ctx.toolName.includes(def.match)) {
-    return false;
+/**
+ * Evaluate a hook matcher against the current tool name.
+ *
+ * Supported forms (Claude Code compatible):
+ *  - No matcher → always matches.
+ *  - `/pattern/flags` → treated as a regex. Flags optional.
+ *  - `mcp__server__tool` → literal match is a substring check (works for the
+ *    standard `mcp__<server>__<tool>` naming convention).
+ *  - `prefix*` or glob-ish → simple wildcard translated to regex.
+ *  - Anything else → case-sensitive substring (legacy behavior — back-compat).
+ */
+/** @internal Exposed for testing. */
+export function matchesHook(def: HookDef, ctx: HookContext): boolean {
+  if (!def.match) return true;
+  if (!ctx.toolName) return true;
+
+  const match = def.match;
+
+  // /regex/flags form
+  if (match.length > 2 && match.startsWith("/")) {
+    const lastSlash = match.lastIndexOf("/");
+    if (lastSlash > 0) {
+      try {
+        const pattern = match.slice(1, lastSlash);
+        const flags = match.slice(lastSlash + 1);
+        return new RegExp(pattern, flags).test(ctx.toolName);
+      } catch {
+        return false;
+      }
+    }
   }
-  return true;
+
+  // Simple glob: asterisks translated to `.*`, anchored. Only activates if the
+  // match contains an asterisk — otherwise treat as substring for back-compat.
+  if (match.includes("*")) {
+    const escaped = match
+      .split("*")
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*");
+    try {
+      return new RegExp(`^${escaped}$`).test(ctx.toolName);
+    } catch {
+      return false;
+    }
+  }
+
+  // Legacy substring match
+  return ctx.toolName.includes(match);
 }
 
 // ── Hook Executors ──

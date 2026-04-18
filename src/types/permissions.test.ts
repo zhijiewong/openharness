@@ -123,9 +123,16 @@ test("toolInput parameter passed correctly", () => {
 // ── auto mode ──
 
 test("auto mode approves safe bash commands", () => {
-  const r = checkPermission("auto", "high", false, "Bash", { command: "git status" });
-  assert.equal(r.allowed, true);
-  assert.equal(r.reason, "auto-mode");
+  // Read-only commands (`git status`) hit the read-only allowlist short-circuit
+  // before auto-mode is consulted. Non-read-only but otherwise safe commands
+  // still fall through to auto-mode approval.
+  const readOnly = checkPermission("auto", "high", false, "Bash", { command: "git status" });
+  assert.equal(readOnly.allowed, true);
+  assert.equal(readOnly.reason, "auto-approved");
+
+  const safeButWrite = checkPermission("auto", "high", false, "Bash", { command: "touch new-file.txt" });
+  assert.equal(safeButWrite.allowed, true);
+  assert.equal(safeButWrite.reason, "auto-mode");
 });
 
 test("auto mode blocks dangerous bash (rm -rf)", () => {

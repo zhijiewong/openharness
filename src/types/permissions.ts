@@ -3,7 +3,7 @@
  */
 
 import type { ToolPermissionRule } from "../harness/config.js";
-import { analyzeBashCommand } from "../utils/bash-safety.js";
+import { analyzeBashCommand, isReadOnlyBashCommand } from "../utils/bash-safety.js";
 
 export type PermissionMode = "ask" | "trust" | "deny" | "acceptEdits" | "plan" | "auto" | "bypassPermissions";
 
@@ -135,22 +135,31 @@ export function checkPermission(
 
   // Bash command safety analysis — detect destructive patterns
   let effectiveRisk = riskLevel;
+  let bashReadOnly = false;
   if (toolName === "Bash" && toolInput) {
     const command = (toolInput as Record<string, unknown>)?.command;
     if (typeof command === "string") {
-      const analysis = analyzeBashCommand(command);
-      if (analysis.level === "dangerous") {
-        effectiveRisk = "high";
-      } else if (analysis.level === "moderate" && effectiveRisk !== "high") {
-        effectiveRisk = "medium";
-      } else if (analysis.level === "safe") {
-        effectiveRisk = "medium"; // bash is never fully "low" risk
+      // Read-only allowlist short-circuit (Claude Code parity). A pure
+      // inspection pipeline like `ls | head` or `git status` should not
+      // prompt the user in any permission mode that gates read-only work.
+      if (isReadOnlyBashCommand(command)) {
+        bashReadOnly = true;
+        effectiveRisk = "low";
+      } else {
+        const analysis = analyzeBashCommand(command);
+        if (analysis.level === "dangerous") {
+          effectiveRisk = "high";
+        } else if (analysis.level === "moderate" && effectiveRisk !== "high") {
+          effectiveRisk = "medium";
+        } else if (analysis.level === "safe") {
+          effectiveRisk = "medium"; // bash is never fully "low" risk
+        }
       }
     }
   }
 
-  // Always allow low-risk read-only
-  if (effectiveRisk === "low" && isReadOnly) {
+  // Always allow low-risk read-only (now includes Bash commands matching the allowlist)
+  if (effectiveRisk === "low" && (isReadOnly || bashReadOnly)) {
     return { allowed: true, reason: "auto-approved", riskLevel: effectiveRisk };
   }
 

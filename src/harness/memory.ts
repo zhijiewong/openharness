@@ -18,6 +18,11 @@ import { createUserMessage } from "../types/message.js";
 const PROJECT_MEMORY_DIR = join(".oh", "memory");
 const GLOBAL_MEMORY_DIR = join(homedir(), ".oh", "memory");
 
+// Maximum number of @-import hops before giving up (prevents cycles).
+const CLAUDE_MD_MAX_HOPS = 5;
+// Cap per loaded CLAUDE.md source to keep the system prompt bounded.
+const CLAUDE_MD_PER_FILE_CAP = 20_000;
+
 // Version counter — incremented on every save, used by query loop for live injection
 let _memoryVersion = 0;
 export function memoryVersion(): number {
@@ -111,6 +116,108 @@ export function memoriesToPrompt(memories: MemoryEntry[]): string {
     result += line;
   }
   return result.trimEnd();
+}
+
+// ── CLAUDE.md support (Anthropic convention) ──
+
+/** A single CLAUDE.md source with its resolved content (imports inlined). */
+export type ClaudeMdEntry = {
+  path: string;
+  source: "project" | "project-local" | "user" | "claude-dir";
+  content: string;
+};
+
+/**
+ * Resolve `@path/to/file` imports inline. Relative paths resolve against
+ * `baseDir`. Absolute paths are read as-is. Each imported file can itself
+ * contain imports — recursion capped at `CLAUDE_MD_MAX_HOPS` to prevent
+ * cycles. Missing or unreadable imports are silently dropped.
+ *
+ * @internal exposed for testing
+ */
+export function resolveClaudeMdImports(content: string, baseDir: string, hopsLeft = CLAUDE_MD_MAX_HOPS): string {
+  if (hopsLeft <= 0) return content;
+
+  // Match `@path` on its own line or in a line-leading position. We avoid
+  // email addresses (`foo@bar.com`) by requiring whitespace/start-of-line
+  // before the `@` and a path-like token after.
+  const importRe = /(^|\s)@([^\s@]+)/g;
+
+  return content.replace(importRe, (match, leading: string, path: string) => {
+    // Skip obvious non-path tokens (e.g. `@user` mentions without slashes or extensions)
+    if (!path.includes("/") && !path.includes(".")) return match;
+
+    const resolved = path.startsWith("/") || path.startsWith("~") ? path.replace(/^~/, homedir()) : join(baseDir, path);
+
+    if (!existsSync(resolved)) return match;
+
+    try {
+      const raw = readFileSync(resolved, "utf-8");
+      const subDir = resolved.split(/[/\\]/).slice(0, -1).join("/");
+      const expanded = resolveClaudeMdImports(raw, subDir || baseDir, hopsLeft - 1);
+      return `${leading}<!-- imported from @${path} -->\n${expanded}\n<!-- end @${path} -->`;
+    } catch {
+      return match;
+    }
+  });
+}
+
+/** Read a single CLAUDE.md candidate path if it exists. Returns null otherwise. */
+function readClaudeMdIfExists(path: string, source: ClaudeMdEntry["source"]): ClaudeMdEntry | null {
+  if (!existsSync(path)) return null;
+  try {
+    const raw = readFileSync(path, "utf-8").slice(0, CLAUDE_MD_PER_FILE_CAP);
+    const baseDir = path.split(/[/\\]/).slice(0, -1).join("/") || ".";
+    return { path, source, content: resolveClaudeMdImports(raw, baseDir) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the hierarchical CLAUDE.md set in the order Anthropic documents:
+ *   1. `./.claude/CLAUDE.md` (project, checked in)
+ *   2. `./CLAUDE.md` (project, checked in)
+ *   3. `./CLAUDE.local.md` (project, gitignored)
+ *   4. `~/.claude/CLAUDE.md` (user-global)
+ *
+ * Each file is read, `@imports` are resolved, and the results are returned in
+ * load order. Missing files are skipped. The caller can format these into the
+ * system prompt alongside `memoriesToPrompt()` — the two systems are additive.
+ *
+ * @param root optional project root (defaults to cwd)
+ */
+export function loadClaudeMdHierarchy(root = "."): ClaudeMdEntry[] {
+  const candidates: Array<[string, ClaudeMdEntry["source"]]> = [
+    [join(root, ".claude", "CLAUDE.md"), "claude-dir"],
+    [join(root, "CLAUDE.md"), "project"],
+    [join(root, "CLAUDE.local.md"), "project-local"],
+    [join(homedir(), ".claude", "CLAUDE.md"), "user"],
+  ];
+
+  const entries: ClaudeMdEntry[] = [];
+  const seen = new Set<string>();
+  for (const [path, source] of candidates) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const entry = readClaudeMdIfExists(path, source);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * Render loaded CLAUDE.md entries as a system-prompt block. Empty when no
+ * CLAUDE.md files exist — caller should concatenate alongside `memoriesToPrompt`.
+ */
+export function claudeMdToPrompt(entries: ClaudeMdEntry[]): string {
+  if (entries.length === 0) return "";
+  const parts: string[] = ["# Project instructions (CLAUDE.md)"];
+  for (const e of entries) {
+    parts.push(`<!-- source: ${e.source} (${e.path}) -->`);
+    parts.push(e.content.trim());
+  }
+  return parts.join("\n\n").trimEnd();
 }
 
 /** Save a memory entry to the project memory directory */

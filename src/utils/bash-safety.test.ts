@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { analyzeBashCommand } from "./bash-safety.js";
+import { analyzeBashCommand, isReadOnlyBashCommand } from "./bash-safety.js";
 
 describe("analyzeBashCommand", () => {
   describe("safe commands", () => {
@@ -127,5 +127,74 @@ describe("analyzeBashCommand", () => {
       const result = analyzeBashCommand('echo "hello | world && foo"');
       assert.strictEqual(result.level, "safe");
     });
+  });
+});
+
+describe("isReadOnlyBashCommand", () => {
+  it("accepts simple read-only commands", () => {
+    assert.ok(isReadOnlyBashCommand("ls -la"));
+    assert.ok(isReadOnlyBashCommand("cat file.txt"));
+    assert.ok(isReadOnlyBashCommand("pwd"));
+    assert.ok(isReadOnlyBashCommand("echo hello"));
+    assert.ok(isReadOnlyBashCommand("grep -r foo ."));
+    assert.ok(isReadOnlyBashCommand("find . -name '*.ts'"));
+    assert.ok(isReadOnlyBashCommand("wc -l file.txt"));
+    assert.ok(isReadOnlyBashCommand("head -n 20 log"));
+  });
+
+  it("accepts piped read-only pipelines", () => {
+    assert.ok(isReadOnlyBashCommand("ls | head"));
+    assert.ok(isReadOnlyBashCommand("cat file | grep foo | wc -l"));
+    assert.ok(isReadOnlyBashCommand("git log --oneline | head -20"));
+  });
+
+  it("accepts read-only git subcommands", () => {
+    assert.ok(isReadOnlyBashCommand("git status"));
+    assert.ok(isReadOnlyBashCommand("git log --oneline -10"));
+    assert.ok(isReadOnlyBashCommand("git diff HEAD~1"));
+    assert.ok(isReadOnlyBashCommand("git show HEAD"));
+    assert.ok(isReadOnlyBashCommand("git branch"));
+    assert.ok(isReadOnlyBashCommand("git config --get user.name"));
+  });
+
+  it("rejects git write operations", () => {
+    assert.strictEqual(isReadOnlyBashCommand("git commit -m x"), false);
+    assert.strictEqual(isReadOnlyBashCommand("git push"), false);
+    assert.strictEqual(isReadOnlyBashCommand("git branch -d feat"), false);
+    assert.strictEqual(isReadOnlyBashCommand("git stash push"), false);
+    assert.strictEqual(isReadOnlyBashCommand("git config user.name=foo"), false);
+  });
+
+  it("rejects destructive commands", () => {
+    assert.strictEqual(isReadOnlyBashCommand("rm file.txt"), false);
+    assert.strictEqual(isReadOnlyBashCommand("rm -rf /tmp/foo"), false);
+    assert.strictEqual(isReadOnlyBashCommand("mv a b"), false);
+    assert.strictEqual(isReadOnlyBashCommand("cp a b"), false);
+  });
+
+  it("rejects pipelines containing any write command", () => {
+    assert.strictEqual(isReadOnlyBashCommand("ls | tee out.txt"), false);
+    assert.strictEqual(isReadOnlyBashCommand("cat a && git commit -am x"), false);
+    assert.strictEqual(isReadOnlyBashCommand("echo hi > /tmp/file"), false);
+  });
+
+  it("rejects sed -i (in-place edit)", () => {
+    assert.strictEqual(isReadOnlyBashCommand("sed -i 's/a/b/' file"), false);
+    assert.ok(isReadOnlyBashCommand("sed 's/a/b/' file")); // without -i is read-only
+  });
+
+  it("rejects redirection to files", () => {
+    assert.strictEqual(isReadOnlyBashCommand("echo hi > /tmp/f"), false);
+    assert.strictEqual(isReadOnlyBashCommand("ls >> log"), false);
+  });
+
+  it("rejects unknown commands by default", () => {
+    assert.strictEqual(isReadOnlyBashCommand("custom-tool --flag"), false);
+    assert.strictEqual(isReadOnlyBashCommand("npm install"), false);
+  });
+
+  it("rejects empty input", () => {
+    assert.strictEqual(isReadOnlyBashCommand(""), false);
+    assert.strictEqual(isReadOnlyBashCommand("   "), false);
   });
 });

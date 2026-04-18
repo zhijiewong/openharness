@@ -104,6 +104,17 @@ export type OhConfig = {
     rateLimit?: number; // max requests/minute per IP (default 60)
     allowedTools?: string[]; // tool whitelist for remote callers
   };
+  /**
+   * Environment variables injected into child processes spawned by the harness —
+   * Bash/Monitor/PowerShell tool executions and MCP server subprocesses. Useful
+   * for passing API keys to MCP servers without embedding them in the server's
+   * `env` field (which is per-server) or requiring the user to export them in
+   * their shell. Claude Code convention: same shape as `settings.json.env`.
+   *
+   * Implementation: read by `safeEnv()` in `src/utils/safe-env.ts` — every
+   * call-site that already uses `safeEnv()` picks this up automatically.
+   */
+  env?: Record<string, string>;
 };
 
 function yamlScalar(value: string): string {
