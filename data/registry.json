@@ -6,7 +6,10 @@
       "author": "zhijiewong",
       "version": "1.0.0",
       "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/code-review.md",
-      "tags": ["review", "quality", "security"]
+      "tags": ["review", "quality", "security"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
     },
     {
       "name": "debug",
@@ -14,7 +17,10 @@
       "author": "zhijiewong",
       "version": "1.0.0",
       "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/debug.md",
-      "tags": ["debug", "fix", "troubleshoot"]
+      "tags": ["debug", "fix", "troubleshoot"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
     },
     {
       "name": "tdd",
@@ -22,7 +28,10 @@
       "author": "zhijiewong",
       "version": "1.0.0",
       "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/tdd.md",
-      "tags": ["test", "tdd", "testing"]
+      "tags": ["test", "tdd", "testing"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
     },
     {
       "name": "commit",
@@ -30,7 +39,224 @@
       "author": "zhijiewong",
       "version": "1.0.0",
       "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/commit.md",
-      "tags": ["git", "commit", "version-control"]
+      "tags": ["git", "commit", "version-control"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
+    },
+    {
+      "name": "diagnose",
+      "description": "Diagnose why an agent run failed, regressed, or produced unexpected output",
+      "author": "zhijiewong",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/diagnose.md",
+      "tags": ["agent", "debug", "diagnose", "ops"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
+    },
+    {
+      "name": "plan",
+      "description": "Design an implementation plan before coding",
+      "author": "zhijiewong",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/plan.md",
+      "tags": ["plan", "design", "architecture"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
+    },
+    {
+      "name": "simplify",
+      "description": "Refactor code to be simpler and more maintainable without changing behavior",
+      "author": "zhijiewong",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/zhijiewong/openharness/main/data/skills/simplify.md",
+      "tags": ["refactor", "simplify", "quality"],
+      "license": "MIT",
+      "attribution": "© 2025 OpenHarness contributors",
+      "upstream": "https://github.com/zhijiewong/openharness"
+    },
+
+    {
+      "name": "superpowers-brainstorming",
+      "description": "Explores user intent, requirements and design before implementation. Use before any creative work.",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/brainstorming/SKILL.md",
+      "tags": ["plan", "brainstorm", "design", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-systematic-debugging",
+      "description": "Structured debugging approach before proposing fixes",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/systematic-debugging/SKILL.md",
+      "tags": ["debug", "fix", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-test-driven-development",
+      "description": "Strict TDD workflow — test first, minimal implementation, refactor",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/test-driven-development/SKILL.md",
+      "tags": ["test", "tdd", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-writing-plans",
+      "description": "Author detailed implementation plans for multi-step tasks before touching code",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/writing-plans/SKILL.md",
+      "tags": ["plan", "write", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-executing-plans",
+      "description": "Execute a written implementation plan with review checkpoints",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/executing-plans/SKILL.md",
+      "tags": ["execute", "plan", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-using-git-worktrees",
+      "description": "Create isolated git worktrees for feature development with safety verification",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/using-git-worktrees/SKILL.md",
+      "tags": ["git", "worktree", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-verification-before-completion",
+      "description": "Run verification commands and confirm output before claiming work is complete",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/verification-before-completion/SKILL.md",
+      "tags": ["verify", "complete", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+    {
+      "name": "superpowers-dispatching-parallel-agents",
+      "description": "Dispatch multiple independent tasks to parallel sub-agents",
+      "author": "Jesse Vincent",
+      "version": "5.0.7",
+      "source": "https://raw.githubusercontent.com/obra/superpowers/main/skills/dispatching-parallel-agents/SKILL.md",
+      "tags": ["parallel", "agent", "superpowers"],
+      "license": "MIT",
+      "attribution": "© 2025 Jesse Vincent — superpowers plugin",
+      "upstream": "https://github.com/obra/superpowers"
+    },
+
+    {
+      "name": "cli-anything-shotcut",
+      "description": "CLI for Shotcut — stateful video editing via MLT XML, designed for agents",
+      "author": "HKUDS",
+      "version": "0.1.0",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/shotcut/agent-harness/cli_anything/shotcut/skills/SKILL.md",
+      "tags": ["video", "editing", "shotcut", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+    {
+      "name": "cli-anything-obsidian",
+      "description": "CLI for Obsidian via the Local REST API — knowledge management harness",
+      "author": "HKUDS",
+      "version": "0.1.0",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/obsidian/agent-harness/cli_anything/obsidian/skills/SKILL.md",
+      "tags": ["obsidian", "notes", "kb", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+    {
+      "name": "cli-anything-zotero",
+      "description": "CLI for Zotero — reference management automation",
+      "author": "HKUDS",
+      "version": "0.4.1",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/zotero/agent-harness/cli_anything/zotero/skills/SKILL.md",
+      "tags": ["zotero", "research", "references", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+    {
+      "name": "cli-anything-blender",
+      "description": "CLI for Blender — 3D modeling automation",
+      "author": "HKUDS",
+      "version": "0.1.0",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/blender/agent-harness/cli_anything/blender/skills/SKILL.md",
+      "tags": ["blender", "3d", "modeling", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+    {
+      "name": "cli-anything-inkscape",
+      "description": "CLI for Inkscape — vector graphics automation",
+      "author": "HKUDS",
+      "version": "0.1.0",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/inkscape/agent-harness/cli_anything/inkscape/skills/SKILL.md",
+      "tags": ["inkscape", "svg", "vector", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+    {
+      "name": "cli-anything-godot",
+      "description": "CLI for Godot — game engine automation with E2E demo pipeline",
+      "author": "HKUDS",
+      "version": "0.1.0",
+      "source": "https://raw.githubusercontent.com/HKUDS/CLI-Anything/main/godot/agent-harness/cli_anything/godot/skills/SKILL.md",
+      "tags": ["godot", "game", "engine", "cli-anything"],
+      "license": "Apache-2.0",
+      "attribution": "© HKUDS CLI-Anything contributors",
+      "upstream": "https://github.com/HKUDS/CLI-Anything"
+    },
+
+    {
+      "name": "tob-smart-contract-audit",
+      "description": "Trail of Bits — smart contract security audit workflow (link-only, CC-BY-SA)",
+      "author": "Trail of Bits",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/trailofbits/skills/main/skills/smart-contract-audit/SKILL.md",
+      "tags": ["security", "audit", "smart-contract", "tob"],
+      "license": "CC-BY-SA-4.0",
+      "attribution": "© Trail of Bits — CC-BY-SA-4.0 (ShareAlike)",
+      "upstream": "https://github.com/trailofbits/skills",
+      "installable": false
+    },
+    {
+      "name": "tob-malware-detection",
+      "description": "Trail of Bits — malware detection workflow (link-only, CC-BY-SA)",
+      "author": "Trail of Bits",
+      "version": "1.0.0",
+      "source": "https://raw.githubusercontent.com/trailofbits/skills/main/skills/malware-detection/SKILL.md",
+      "tags": ["security", "malware", "detection", "tob"],
+      "license": "CC-BY-SA-4.0",
+      "attribution": "© Trail of Bits — CC-BY-SA-4.0 (ShareAlike)",
+      "upstream": "https://github.com/trailofbits/skills",
+      "installable": false
     }
   ]
 }

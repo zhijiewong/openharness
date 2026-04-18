@@ -1,5 +1,5 @@
 name: 'OpenHarness Code Review'
-description: 'AI-powered code review using OpenHarness CLI'
+description: 'AI-powered code review using OpenHarness CLI. Advisory — posts a PR comment.'
 branding:
   icon: 'code'
   color: 'purple'
@@ -20,19 +20,26 @@ inputs:
     required: false
     default: 'deny'
   max_diff_size:
-    description: 'Max diff size in characters to include in review prompt'
+    description: 'Max diff size in characters to include in the review prompt'
     required: false
     default: '50000'
   custom_prompt:
     description: 'Additional instructions to append to the review prompt'
     required: false
     default: ''
+  pr_number:
+    description: 'PR number (when triggered from issue_comment — GITHUB_REF is not the PR)'
+    required: false
+  base_sha:
+    description: 'Base SHA to diff against'
+    required: false
+  head_sha:
+    description: 'Head SHA to review'
+    required: false
 
 outputs:
   review:
     description: 'The review output text'
-  exit_code:
-    description: 'Exit code (0 = pass, 1 = issues found)'
 
 runs:
   using: 'composite'
@@ -46,19 +53,51 @@ runs:
       shell: bash
       run: npm install -g @zhijiewang/openharness
 
-    - name: Get PR diff
-      id: diff
+    - name: Build prompt (safe — no shell interpolation of PR content)
+      id: build-prompt
       shell: bash
+      env:
+        # Route PR metadata through env vars so GitHub Actions never injects user-controlled
+        # content into a shell-quoted string. $(...), backticks, and $VAR in the body are
+        # treated as literal text.
+        PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+        PR_BODY: ${{ github.event.pull_request.body || github.event.issue.body }}
+        BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ inputs.head_sha || github.event.pull_request.head.sha }}
+        CUSTOM_PROMPT: ${{ inputs.custom_prompt }}
+        MAX_DIFF_SIZE: ${{ inputs.max_diff_size }}
       run: |
-        # Get the diff between base and head
-        git diff ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > /tmp/pr-diff.txt
+        set -euo pipefail
+
+        # 1) Capture diff safely to a file.
+        git diff "$BASE_SHA".."$HEAD_SHA" > /tmp/pr-diff.txt
         DIFF_SIZE=$(wc -c < /tmp/pr-diff.txt)
-        MAX_SIZE=${{ inputs.max_diff_size }}
-        if [ "$DIFF_SIZE" -gt "$MAX_SIZE" ]; then
-          head -c $MAX_SIZE /tmp/pr-diff.txt > /tmp/pr-diff-trimmed.txt
-          echo "... [diff truncated at ${MAX_SIZE} chars]" >> /tmp/pr-diff-trimmed.txt
+        if [ "$DIFF_SIZE" -gt "$MAX_DIFF_SIZE" ]; then
+          head -c "$MAX_DIFF_SIZE" /tmp/pr-diff.txt > /tmp/pr-diff-trimmed.txt
+          printf '\n... [diff truncated at %s chars]\n' "$MAX_DIFF_SIZE" >> /tmp/pr-diff-trimmed.txt
           mv /tmp/pr-diff-trimmed.txt /tmp/pr-diff.txt
         fi
+
+        # 2) Build prompt by writing literal text + env-var values via printf.
+        # printf %s prints the arg VERBATIM — no expansion of $(...), backticks, or $VAR
+        # inside the value. This is what protects against shell injection via PR content.
+        {
+          printf '%s\n' "Review this pull request diff for bugs, security issues, code quality, and correctness. Be specific about line numbers and file paths. If everything looks good, say so briefly."
+          printf '\n'
+          printf 'PR #%s: %s\n' "$PR_NUMBER" "$PR_TITLE"
+          printf '\nPR Body:\n'
+          printf '%s\n' "$PR_BODY"
+          printf '\n'
+          if [ -n "$CUSTOM_PROMPT" ]; then
+            printf '%s\n\n' "$CUSTOM_PROMPT"
+          fi
+          printf '```diff\n'
+          cat /tmp/pr-diff.txt
+          printf '\n```\n'
+        } > /tmp/review-prompt.txt
+
+        printf 'Prompt size: %s bytes\n' "$(wc -c < /tmp/review-prompt.txt)"
 
     - name: Run review
       id: review
@@ -67,37 +106,49 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         OPENAI_API_KEY: ${{ inputs.openai_api_key }}
       run: |
-        REVIEW_PROMPT="Review this pull request diff for bugs, security issues, code quality, and correctness. Be specific about line numbers and file paths. If everything looks good, say so briefly.
-
-        PR Title: ${{ github.event.pull_request.title }}
-        PR Body: ${{ github.event.pull_request.body }}
-
-        ${{ inputs.custom_prompt }}
-
-        \`\`\`diff
-        $(cat /tmp/pr-diff.txt)
-        \`\`\`"
-
-        openharness run -m "${{ inputs.model }}" \
+        # Pipe prompt via stdin (openharness run supports `-` to read from stdin). Using
+        # stdin sidesteps every shell-quoting pitfall that plagued the prior version.
+        # `timeout 600` bounds the model call; `--max-turns 10` bounds the agent loop.
+        set +e
+        timeout 600 openharness run \
+          -m "${{ inputs.model }}" \
           --permission-mode "${{ inputs.permission_mode }}" \
           --output-format text \
-          "$REVIEW_PROMPT" > /tmp/review-output.txt 2>/tmp/review-errors.txt || true
+          --max-turns 10 \
+          - < /tmp/review-prompt.txt > /tmp/review-output.txt 2>/tmp/review-errors.txt
+        REVIEW_EXIT=$?
+        set -e
 
-        echo "review<<EOF" >> $GITHUB_OUTPUT
-        cat /tmp/review-output.txt >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        echo "=== openharness exit code: $REVIEW_EXIT ==="
+        if [ "$REVIEW_EXIT" = "124" ]; then
+          echo "⚠ openharness run timed out after 600s" | tee -a /tmp/review-output.txt
+        fi
+        if [ -s /tmp/review-errors.txt ]; then
+          echo "=== openharness stderr ==="
+          cat /tmp/review-errors.txt
+          echo "=== end stderr ==="
+        fi
+
+        {
+          echo "review<<REVIEW_EOF"
+          cat /tmp/review-output.txt
+          echo "REVIEW_EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Post review comment
-      if: github.event_name == 'pull_request'
+      if: steps.review.outputs.review != ''
       uses: actions/github-script@v7
+      env:
+        REVIEW_BODY: ${{ steps.review.outputs.review }}
+        MODEL: ${{ inputs.model }}
+        PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
       with:
         script: |
-          const review = `${{ steps.review.outputs.review }}`;
-          if (review.trim()) {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `## 🤖 OpenHarness Code Review\n\n${review}\n\n---\n*Reviewed by [OpenHarness](https://github.com/zhijiewang/openCLI) with model \`${{ inputs.model }}\`*`
-            });
-          }
+          const { REVIEW_BODY, MODEL, PR_NUMBER } = process.env;
+          if (!REVIEW_BODY || !REVIEW_BODY.trim()) return;
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: Number(PR_NUMBER),
+            body: `## 🤖 OpenHarness Code Review\n\n${REVIEW_BODY}\n\n---\n*Advisory review by [OpenHarness](https://github.com/zhijiewong/openharness) using model \`${MODEL}\`. Findings are informational; the author decides what to do.*`,
+          });

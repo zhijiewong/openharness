@@ -13,7 +13,8 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type SkillMetadata = {
   name: string;
@@ -21,9 +22,19 @@ export type SkillMetadata = {
   trigger: string | undefined;
   tools: string[] | undefined;
   args: string[] | undefined;
+  /** Optional natural-language hint for when this skill applies; concatenated to description for trigger matching */
+  whenToUse: string | undefined;
+  /** SPDX license identifier (e.g. "MIT", "Apache-2.0", "CC-BY-SA-4.0"). Used by install gate. */
+  license: string | undefined;
+  /** Glob patterns scoping skill auto-surfacing to specific file paths */
+  paths: string[] | undefined;
+  /** Execution context: "default" runs in the current agent, "fork" spawns a sub-agent (Anthropic extension) */
+  context: "default" | "fork" | undefined;
+  /** When `context: fork`, the sub-agent type to spawn (must match an AgentRole id) */
+  agent: string | undefined;
   content: string;
   filePath: string;
-  source: "project" | "global" | "plugin";
+  source: "bundled" | "project" | "global" | "plugin";
   /** When false, skill is hidden from system prompt until explicitly invoked */
   invokeModel: boolean;
 };
@@ -50,8 +61,29 @@ export type AgentTeamConfig = {
 
 const PROJECT_SKILLS_DIR = join(".oh", "skills");
 const GLOBAL_SKILLS_DIR = join(homedir(), ".oh", "skills");
+// Claude Code ecosystem mirror paths (Anthropic convention)
+const CC_PROJECT_SKILLS_DIR = join(".claude", "skills");
+const CC_GLOBAL_SKILLS_DIR = join(homedir(), ".claude", "skills");
+// Bundled skills shipped with the openharness package itself.
+// At runtime this resolves to <package-root>/data/skills/ both in dev (src/) and prod (dist/).
+const BUNDLED_SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data", "skills");
 
-/** Parse YAML frontmatter from a skill markdown file */
+/** Parse a frontmatter list value. Accepts `[a, b]` (YAML inline) or `a b c` (space-separated, Anthropic spec). */
+function parseListValue(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed
+      .slice(1, -1)
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+  // Strip surrounding quotes if present
+  const unquoted = trimmed.replace(/^["']|["']$/g, "");
+  return unquoted.split(/\s+/).filter(Boolean);
+}
+
+/** Parse YAML frontmatter from a skill markdown file. Accepts both OH camelCase and Anthropic kebab-case. */
 function parseSkillFrontmatter(content: string): Partial<SkillMetadata> {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
@@ -65,35 +97,73 @@ function parseSkillFrontmatter(content: string): Partial<SkillMetadata> {
   const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
   if (descMatch) result.description = descMatch[1]!.trim();
 
+  // trigger: OH-native field; when-to-use / whenToUse: Anthropic-style hint (also used as trigger fallback)
   const triggerMatch = frontmatter.match(/^trigger:\s*(.+)$/m);
   if (triggerMatch) result.trigger = triggerMatch[1]!.trim();
+  const whenToUseMatch = frontmatter.match(/^(?:when-to-use|whenToUse):\s*(.+)$/m);
+  if (whenToUseMatch) result.whenToUse = whenToUseMatch[1]!.trim();
 
-  const toolsMatch = frontmatter.match(/^tools:\s*\[(.+)\]$/m);
-  if (toolsMatch) result.tools = toolsMatch[1]!.split(",").map((t) => t.trim());
-
-  // Also parse allowedTools (used by built-in skills) and merge with tools
-  const allowedToolsMatch = frontmatter.match(/^allowedTools:\s*\[(.+)\]$/m);
-  if (allowedToolsMatch) {
-    const allowed = allowedToolsMatch[1]!.split(",").map((t) => t.trim());
-    result.tools = result.tools ? [...new Set([...result.tools, ...allowed])] : allowed;
+  // tools / allowedTools / allowed-tools — array OR space-separated. Merge all forms found.
+  const toolsCollected = new Set<string>();
+  for (const re of [/^tools:\s*(.+)$/m, /^allowedTools:\s*(.+)$/m, /^allowed-tools:\s*(.+)$/m]) {
+    const m = frontmatter.match(re);
+    if (m) for (const t of parseListValue(m[1]!)) toolsCollected.add(t);
   }
+  if (toolsCollected.size > 0) result.tools = [...toolsCollected];
 
-  const argsMatch = frontmatter.match(/^args:\s*\[(.+)\]$/m);
-  if (argsMatch) result.args = argsMatch[1]!.split(",").map((a) => a.trim());
+  // args / argument-hint
+  const argsMatch = frontmatter.match(/^(?:args|argument-hint):\s*(.+)$/m);
+  if (argsMatch) result.args = parseListValue(argsMatch[1]!);
 
   // invokeModel: false OR disable-model-invocation: true → hidden from system prompt
   if (frontmatter.match(/^invokeModel:\s*false$/m) || frontmatter.match(/^disable-model-invocation:\s*true$/m)) {
     result.invokeModel = false;
   }
 
+  // license: SPDX identifier (e.g. MIT, Apache-2.0)
+  const licenseMatch = frontmatter.match(/^license:\s*(.+)$/m);
+  if (licenseMatch) result.license = licenseMatch[1]!.trim().replace(/^["']|["']$/g, "");
+
+  // paths: glob list — scopes auto-surfacing to matching files
+  const pathsMatch = frontmatter.match(/^paths:\s*(.+)$/m);
+  if (pathsMatch) result.paths = parseListValue(pathsMatch[1]!);
+
+  // context: "default" | "fork" — when "fork", skill runs in a new sub-agent context
+  const contextMatch = frontmatter.match(/^context:\s*(.+)$/m);
+  if (contextMatch) {
+    const v = contextMatch[1]!.trim().replace(/^["']|["']$/g, "");
+    if (v === "fork" || v === "default") result.context = v;
+  }
+
+  // agent: sub-agent type name (only meaningful when context: fork)
+  const agentMatch = frontmatter.match(/^agent:\s*(.+)$/m);
+  if (agentMatch) result.agent = agentMatch[1]!.trim().replace(/^["']|["']$/g, "");
+
   return result;
 }
 
-/** Recursively collect all .md files from a directory tree */
+/** Recursively collect skill .md files from a directory tree.
+ * Anthropic / Claude Code convention: a directory containing `SKILL.md` is a single
+ * directory-packaged skill — only the SKILL.md surfaces; sibling .md files are
+ * companion documentation (referenced via Read at runtime). Directories without
+ * SKILL.md fall through to the legacy flat-file behavior (every .md is a skill).
+ */
 function walkMdFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+
+  // Directory-packaged skill: only SKILL.md counts; siblings are companions.
+  if (entries.includes("SKILL.md")) {
+    return [join(dir, "SKILL.md")];
+  }
+
   const results: string[] = [];
-  for (const entry of readdirSync(dir)) {
+  for (const entry of entries) {
     const full = join(dir, entry);
     try {
       if (statSync(full).isDirectory()) {
@@ -124,6 +194,11 @@ function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillM
           trigger: meta.trigger,
           tools: meta.tools,
           args: meta.args,
+          whenToUse: meta.whenToUse,
+          license: meta.license,
+          paths: meta.paths,
+          context: meta.context,
+          agent: meta.agent,
           content,
           filePath,
           source,
@@ -136,11 +211,17 @@ function loadSkillsFromDir(dir: string, source: SkillMetadata["source"]): SkillM
     .filter((s): s is SkillMetadata => s !== null);
 }
 
-/** Discover all available skills from project + global dirs + installed plugins */
+/** Discover all available skills from bundled + project + global dirs + installed plugins */
 export function discoverSkills(): SkillMetadata[] {
   const skills: SkillMetadata[] = [];
+  // Bundled (shipped with the openharness package)
+  skills.push(...loadSkillsFromDir(BUNDLED_SKILLS_DIR, "bundled"));
+  // OH-native paths
   skills.push(...loadSkillsFromDir(PROJECT_SKILLS_DIR, "project"));
   skills.push(...loadSkillsFromDir(GLOBAL_SKILLS_DIR, "global"));
+  // Claude Code ecosystem mirror paths — same source labels (project/global)
+  skills.push(...loadSkillsFromDir(CC_PROJECT_SKILLS_DIR, "project"));
+  skills.push(...loadSkillsFromDir(CC_GLOBAL_SKILLS_DIR, "global"));
 
   // Load skills from installed marketplace plugins (namespaced as plugin-name:skill-name)
   try {
@@ -158,7 +239,14 @@ export function discoverSkills(): SkillMetadata[] {
     /* marketplace module may not be loaded yet */
   }
 
-  return skills;
+  // De-duplicate by name+filePath: if same skill appears in multiple paths (e.g. CC mirror), keep first.
+  const seen = new Set<string>();
+  return skills.filter((s) => {
+    const key = `${s.name}::${s.filePath}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Find a skill by name (case-insensitive) */
@@ -167,7 +255,7 @@ export function findSkill(name: string): SkillMetadata | null {
   return skills.find((s) => s.name.toLowerCase() === name.toLowerCase()) ?? null;
 }
 
-/** Find skills that match a trigger condition */
+/** Find skills that match a trigger condition (substring match against `trigger` field). */
 export function findTriggeredSkills(userMessage: string): SkillMetadata[] {
   const skills = discoverSkills();
   return skills.filter((s) => {

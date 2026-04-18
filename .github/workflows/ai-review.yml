@@ -1,8 +1,11 @@
 name: AI Code Review
 
+# Manually triggered only — comment `@openharness` or `/oh-review` on a PR to run.
+# This mirrors anthropics/claude-code (@claude) and sst/opencode (/review): opt-in,
+# advisory, so a broken OH version cannot block its own PRs.
 on:
-  pull_request:
-    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -10,16 +13,41 @@ permissions:
 
 jobs:
   review:
+    # Only run on PR comments (not issue comments) that mention the magic word
+    # from a user with push access (author_association filters drive-by invocations).
+    if: |
+      github.event.issue.pull_request != null &&
+      (contains(github.event.comment.body, '@openharness') || contains(github.event.comment.body, '/oh-review')) &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
-    # Only run if ANTHROPIC_API_KEY is configured in repo secrets
-    if: github.event.pull_request.draft == false
+    # Hard ceiling — the runner kills everything after 15 min regardless of what the
+    # action does.
+    timeout-minutes: 15
     steps:
+      - name: Resolve PR head ref
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.head.sha')
+          BASE_SHA=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.base.sha')
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for diff
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
 
       - uses: ./.github/actions/review
         with:
           model: 'claude-sonnet-4-6'
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          permission_mode: 'deny'  # Read-only review, no file modifications
+          permission_mode: 'deny'
+          pr_number: ${{ steps.pr.outputs.number }}
+          base_sha: ${{ steps.pr.outputs.base_sha }}
+          head_sha: ${{ steps.pr.outputs.head_sha }}

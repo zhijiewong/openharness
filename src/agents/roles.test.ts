@@ -1,6 +1,18 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { getRole, getRoleIds, listRoles } from "./roles.js";
+import { makeTmpDir, writeFile } from "../test-helpers.js";
+import { discoverMarkdownAgents, getRole, getRoleIds, listRoles } from "./roles.js";
+
+function withTmpCwd(fn: (dir: string) => void) {
+  const dir = makeTmpDir();
+  const original = process.cwd();
+  process.chdir(dir);
+  try {
+    fn(dir);
+  } finally {
+    process.chdir(original);
+  }
+}
 
 describe("agent roles", () => {
   it("lists all roles", () => {
@@ -69,5 +81,99 @@ describe("agent roles", () => {
         );
       }
     }
+  });
+
+  // ── Claude Code interop ──
+
+  it("parses tools as space-separated string (Claude Code style)", () => {
+    withTmpCwd((dir) => {
+      writeFile(
+        dir,
+        ".oh/agents/cc-style.md",
+        `---\nname: CC Style\ndescription: x\ntools: Read Glob Grep\n---\nbody\n`,
+      );
+      const agents = discoverMarkdownAgents();
+      const a = agents.find((r) => r.id === "cc-style");
+      assert.ok(a);
+      assert.deepEqual(a!.suggestedTools, ["Read", "Glob", "Grep"]);
+    });
+  });
+
+  it("parses tools as comma-separated string", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/comma.md", `---\nname: Comma\ndescription: x\ntools: Read, Edit, Bash\n---\nbody\n`);
+      const a = discoverMarkdownAgents().find((r) => r.id === "comma");
+      assert.ok(a);
+      assert.deepEqual(a!.suggestedTools, ["Read", "Edit", "Bash"]);
+    });
+  });
+
+  it("parses model + isolation + disallowedTools fields", () => {
+    withTmpCwd((dir) => {
+      writeFile(
+        dir,
+        ".oh/agents/full.md",
+        `---\nname: Full\ndescription: x\ntools: Read Edit Bash\ndisallowedTools: Write\nmodel: sonnet\nisolation: worktree\n---\nbody\n`,
+      );
+      const a = discoverMarkdownAgents().find((r) => r.id === "full");
+      assert.ok(a);
+      assert.equal(a!.model, "sonnet");
+      assert.equal(a!.isolation, "worktree");
+      assert.deepEqual(a!.disallowedTools, ["Write"]);
+    });
+  });
+
+  it("rejects invalid isolation value (silently ignored)", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/badiso.md", `---\nname: Bad\ndescription: x\nisolation: bogus\n---\n`);
+      const a = discoverMarkdownAgents().find((r) => r.id === "badiso");
+      assert.ok(a);
+      assert.equal(a!.isolation, undefined);
+    });
+  });
+
+  it("discovers agents from .claude/agents/ in addition to .oh/agents/", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/oh-one.md", `---\nname: OH One\ndescription: x\n---\n`);
+      writeFile(dir, ".claude/agents/cc-one.md", `---\nname: CC One\ndescription: y\n---\n`);
+      const agents = discoverMarkdownAgents();
+      assert.ok(agents.find((r) => r.id === "oh-one"));
+      assert.ok(agents.find((r) => r.id === "cc-one"));
+    });
+  });
+
+  it("OH paths take precedence over .claude paths on id collision", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/dup.md", `---\nname: From OH\ndescription: oh\n---\n`);
+      writeFile(dir, ".claude/agents/dup.md", `---\nname: From CC\ndescription: cc\n---\n`);
+      const agents = discoverMarkdownAgents().filter((r) => r.id === "dup");
+      assert.equal(agents.length, 1);
+      assert.equal(agents[0]!.name, "From OH");
+    });
+  });
+
+  it("parses inline-JSON mcpServers + hooks fields", () => {
+    withTmpCwd((dir) => {
+      writeFile(
+        dir,
+        ".oh/agents/with-mcp.md",
+        `---\nname: WithMcp\ndescription: x\nmcpServers: {"excel":{"command":"npx"}}\nhooks: {"PreToolUse":[{"command":"echo pre"}]}\n---\nbody\n`,
+      );
+      const a = discoverMarkdownAgents().find((r) => r.id === "with-mcp");
+      assert.ok(a);
+      assert.ok(a!.mcpServers);
+      assert.ok("excel" in (a!.mcpServers as object));
+      assert.ok(a!.hooks);
+      assert.ok("PreToolUse" in (a!.hooks as object));
+    });
+  });
+
+  it("silently ignores malformed JSON in mcpServers/hooks", () => {
+    withTmpCwd((dir) => {
+      writeFile(dir, ".oh/agents/bad-json.md", `---\nname: BadJson\ndescription: x\nmcpServers: {not json}\n---\n`);
+      const a = discoverMarkdownAgents().find((r) => r.id === "bad-json");
+      assert.ok(a);
+      assert.equal(a!.mcpServers, undefined);
+    });
   });
 });

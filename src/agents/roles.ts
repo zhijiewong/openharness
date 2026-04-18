@@ -14,8 +14,18 @@ export type AgentRole = {
   name: string;
   description: string;
   systemPromptSupplement: string;
-  /** Suggested tools to include (empty = all tools) */
+  /** Suggested tools to include (empty = all tools) — Anthropic alias: `tools` */
   suggestedTools?: string[];
+  /** Tool denylist applied after suggestedTools — Anthropic standard: `disallowedTools` */
+  disallowedTools?: string[];
+  /** Per-agent model override (e.g. "sonnet", "opus", "haiku", or a full model ID) */
+  model?: string;
+  /** Isolation mode for sub-agent execution. Default: inherits parent. */
+  isolation?: "none" | "worktree";
+  /** Per-agent MCP servers injected only when this agent runs (parsed via raw passthrough; dispatcher wiring is a future task). */
+  mcpServers?: Record<string, unknown>;
+  /** Per-agent hooks (parsed via raw passthrough; dispatcher wiring is a future task). */
+  hooks?: Record<string, unknown>;
 };
 
 const roles: AgentRole[] = [
@@ -176,15 +186,39 @@ import { basename, join } from "node:path";
 
 const PROJECT_AGENTS_DIR = join(".oh", "agents");
 const GLOBAL_AGENTS_DIR = join(homedir(), ".oh", "agents");
+// Claude Code ecosystem mirror paths
+const CC_PROJECT_AGENTS_DIR = join(".claude", "agents");
+const CC_GLOBAL_AGENTS_DIR = join(homedir(), ".claude", "agents");
+
+/** Parse a frontmatter list value. Accepts `[a, b]` (YAML inline) OR `a b c` (Claude Code style). */
+function parseAgentList(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed
+      .slice(1, -1)
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+  // Claude Code spec: comma-separated OR space-separated bare tokens. Handle both.
+  return trimmed
+    .replace(/^["']|["']$/g, "")
+    .split(/[,\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
 
 /**
  * Parse a markdown agent file into an AgentRole.
  *
- * Format:
+ * Format (OH-native + Claude Code interoperable):
  * ---
  * name: My Agent
  * description: What it does
- * tools: [Read, Grep, Bash]
+ * tools: Read, Grep, Bash         # space- or comma-separated, OR YAML array
+ * disallowedTools: Write, Edit    # tool denylist
+ * model: sonnet                   # model override
+ * isolation: worktree             # explicit isolation mode
  * ---
  *
  * System prompt content...
@@ -196,7 +230,10 @@ function parseAgentMarkdown(raw: string, filePath: string): AgentRole | null {
   const fm = fmMatch[1]!;
   const nameMatch = fm.match(/^name:\s*(.+)$/m);
   const descMatch = fm.match(/^description:\s*(.+)$/m);
-  const toolsMatch = fm.match(/^tools:\s*\[(.+)\]$/m);
+  const toolsMatch = fm.match(/^tools:\s*(.+)$/m);
+  const disallowedMatch = fm.match(/^disallowedTools:\s*(.+)$/m) ?? fm.match(/^disallowed-tools:\s*(.+)$/m);
+  const modelMatch = fm.match(/^model:\s*(.+)$/m);
+  const isolationMatch = fm.match(/^isolation:\s*(.+)$/m);
 
   const fmEnd = raw.indexOf("---", raw.indexOf("---") + 3);
   const content = fmEnd > 0 ? raw.slice(fmEnd + 3).trim() : "";
@@ -205,13 +242,35 @@ function parseAgentMarkdown(raw: string, filePath: string): AgentRole | null {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-");
 
+  const isolation = isolationMatch?.[1]?.trim().replace(/^["']|["']$/g, "");
+  const validIsolation = isolation === "worktree" || isolation === "none" ? isolation : undefined;
+
+  // Parse optional inline-JSON fields (mcpServers, hooks). These are block fields in
+  // Anthropic's YAML but we support single-line JSON for lightweight frontmatter use.
+  const mcpServersMatch = fm.match(/^mcpServers:\s*(\{[\s\S]*?\})\s*$/m);
+  const hooksMatch = fm.match(/^hooks:\s*(\{[\s\S]*?\})\s*$/m);
+
   return {
     id,
     name: nameMatch?.[1]?.trim() ?? id,
     description: descMatch?.[1]?.trim() ?? "",
     systemPromptSupplement: content,
-    suggestedTools: toolsMatch ? toolsMatch[1]!.split(",").map((t) => t.trim()) : undefined,
+    suggestedTools: toolsMatch ? parseAgentList(toolsMatch[1]!) : undefined,
+    disallowedTools: disallowedMatch ? parseAgentList(disallowedMatch[1]!) : undefined,
+    model: modelMatch?.[1]?.trim().replace(/^["']|["']$/g, ""),
+    isolation: validIsolation,
+    mcpServers: mcpServersMatch ? tryParseJson(mcpServersMatch[1]!) : undefined,
+    hooks: hooksMatch ? tryParseJson(hooksMatch[1]!) : undefined,
   };
+}
+
+function tryParseJson(raw: string): Record<string, unknown> | undefined {
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Load agent roles from a directory of .md files */
@@ -230,9 +289,21 @@ function loadAgentsFromDir(dir: string): AgentRole[] {
     .filter((r): r is AgentRole => r !== null);
 }
 
-/** Discover markdown agent roles from .oh/agents/ and ~/.oh/agents/ */
+/** Discover markdown agent roles from .oh/agents/ + ~/.oh/agents/ + .claude/agents/ + ~/.claude/agents/ */
 export function discoverMarkdownAgents(): AgentRole[] {
-  return [...loadAgentsFromDir(PROJECT_AGENTS_DIR), ...loadAgentsFromDir(GLOBAL_AGENTS_DIR)];
+  const all = [
+    ...loadAgentsFromDir(PROJECT_AGENTS_DIR),
+    ...loadAgentsFromDir(GLOBAL_AGENTS_DIR),
+    ...loadAgentsFromDir(CC_PROJECT_AGENTS_DIR),
+    ...loadAgentsFromDir(CC_GLOBAL_AGENTS_DIR),
+  ];
+  // De-duplicate by id (first wins — OH paths take precedence over .claude paths)
+  const seen = new Set<string>();
+  return all.filter((r) => {
+    if (seen.has(r.id)) return false;
+    seen.add(r.id);
+    return true;
+  });
 }
 
 /** Get a role by ID (checks built-in first, then markdown agents) */

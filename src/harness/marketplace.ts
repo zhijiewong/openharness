@@ -8,13 +8,16 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 const MARKETPLACE_DIR = join(homedir(), ".oh", "marketplaces");
 const PLUGIN_CACHE_DIR = join(homedir(), ".oh", "plugins", "cache");
 const INSTALLED_PLUGINS_FILE = join(homedir(), ".oh", "plugins", "installed.json");
+
+// Claude Code plugin manifest path relative to plugin root
+const CC_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
 
 // ── Types ──
 
@@ -45,53 +48,222 @@ export type InstalledPlugin = {
   marketplace: string;
   installedAt: number;
   cachePath: string;
+  /** Optional fields populated from `.claude-plugin/plugin.json` if present */
+  description?: string;
+  author?: string;
+  license?: string;
+  homepage?: string;
+  keywords?: string[];
 };
 
-// ── Marketplace Management ──
+/** Claude Code plugin manifest (`.claude-plugin/plugin.json`).
+ * Required: name, description. All other fields optional.
+ */
+export type CcPluginManifest = {
+  name: string;
+  description: string;
+  version?: string;
+  author?: { name?: string; email?: string } | string;
+  homepage?: string;
+  repository?: string;
+  license?: string;
+  keywords?: string[];
+};
 
-/** Add a marketplace from a URL, GitHub repo, or local path */
-export function addMarketplace(nameOrUrl: string): Marketplace | null {
-  mkdirSync(MARKETPLACE_DIR, { recursive: true });
-
-  // Fetch marketplace.json
-  let data: string;
-  let marketplaceName: string;
-
-  if (nameOrUrl.startsWith("http")) {
-    // URL
-    try {
-      data = execSync(`curl -sL "${nameOrUrl}/marketplace.json"`, { encoding: "utf-8", timeout: 10_000 });
-      marketplaceName = new URL(nameOrUrl).hostname;
-    } catch {
-      return null;
-    }
-  } else if (nameOrUrl.includes("/") && !nameOrUrl.startsWith(".")) {
-    // GitHub repo (owner/repo format)
-    try {
-      const url = `https://raw.githubusercontent.com/${nameOrUrl}/main/marketplace.json`;
-      data = execSync(`curl -sL "${url}"`, { encoding: "utf-8", timeout: 10_000 });
-      marketplaceName = nameOrUrl.replace("/", "-");
-    } catch {
-      return null;
-    }
-  } else if (existsSync(join(nameOrUrl, "marketplace.json"))) {
-    // Local path
-    data = readFileSync(join(nameOrUrl, "marketplace.json"), "utf-8");
-    marketplaceName = basename(nameOrUrl);
-  } else {
-    return null;
-  }
-
+/** Parse a `.claude-plugin/plugin.json` file at the given plugin root, or null if missing/invalid. */
+export function parseCcPluginManifest(pluginRoot: string): CcPluginManifest | null {
+  const path = join(pluginRoot, CC_MANIFEST_PATH);
+  if (!existsSync(path)) return null;
   try {
-    const marketplace = JSON.parse(data) as Marketplace;
-    if (!marketplace.plugins || !Array.isArray(marketplace.plugins)) return null;
-
-    marketplace.name = marketplace.name ?? marketplaceName;
-    writeFileSync(join(MARKETPLACE_DIR, `${marketplace.name}.json`), JSON.stringify(marketplace, null, 2));
-    return marketplace;
+    const m = JSON.parse(readFileSync(path, "utf-8"));
+    if (typeof m?.name !== "string" || typeof m?.description !== "string") return null;
+    return m as CcPluginManifest;
   } catch {
     return null;
   }
+}
+
+/** Claude Code marketplace.json format — superset of OH's marketplace.json with source-typed entries. */
+export type CcMarketplacePluginSource =
+  | string // relative path "./plugins/foo"
+  | { source: "github"; repo: string; ref?: string }
+  | { source: "url"; url: string }
+  | { source: "npm"; package: string; version?: string };
+
+export type CcMarketplaceEntry = {
+  name: string;
+  description?: string;
+  version?: string;
+  author?: { name?: string; email?: string } | string;
+  source: CcMarketplacePluginSource;
+};
+
+export type CcMarketplace = {
+  name: string;
+  description?: string;
+  owner?: { name?: string; email?: string };
+  plugins: CcMarketplaceEntry[];
+};
+
+/** Convert a CcMarketplace to OH's internal Marketplace type (lossy: dropped fields like `owner` are not stored). */
+export function ccMarketplaceToOh(cc: CcMarketplace): Marketplace {
+  const plugins: MarketplaceEntry[] = [];
+  for (const p of cc.plugins) {
+    const ohSource = ccSourceToOh(p.source);
+    if (!ohSource) continue; // Skip relative-path sources — only resolvable inside the marketplace repo
+    plugins.push({
+      name: p.name,
+      description: p.description ?? "",
+      version: p.version ?? "0.0.0",
+      author: typeof p.author === "string" ? p.author : p.author?.name,
+      source: ohSource,
+    });
+  }
+  return { name: cc.name, version: 1, description: cc.description, plugins };
+}
+
+function ccSourceToOh(src: CcMarketplacePluginSource): MarketplaceSource | null {
+  if (typeof src === "string") return null; // relative paths require marketplace-repo context
+  if (src.source === "github") return { type: "github", repo: src.repo };
+  if (src.source === "url") return { type: "url", url: src.url };
+  if (src.source === "npm") return { type: "npm", package: src.package };
+  return null;
+}
+
+/** Parse marketplace JSON text. Tries CC format (.claude-plugin/marketplace.json shape) first, falls back to OH-native. */
+export function parseMarketplaceJson(text: string): Marketplace | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (!Array.isArray(obj.plugins)) return null;
+
+  // Detect CC format: any plugin entry has either a string `source` or `source.source` (kind tag)
+  const looksCc = obj.plugins.some((p: unknown) => {
+    if (!p || typeof p !== "object") return false;
+    const s = (p as Record<string, unknown>).source;
+    return typeof s === "string" || (s !== null && typeof s === "object" && "source" in (s as Record<string, unknown>));
+  });
+
+  if (looksCc) {
+    return ccMarketplaceToOh(obj as unknown as CcMarketplace);
+  }
+  // OH-native format
+  return obj as unknown as Marketplace;
+}
+
+/** Discover plugin-shipped MCP servers from `cachePath/.mcp.json`. Returns raw object for the runtime to merge. */
+export function getPluginMcpServers(cachePath: string): Record<string, unknown> | null {
+  const path = join(cachePath, ".mcp.json");
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    // Claude Code shape: { "mcpServers": { name: { command, args, env, ... } } }
+    // Some plugins store the inner map directly. Accept both.
+    if (data && typeof data === "object") {
+      if ("mcpServers" in data && typeof data.mcpServers === "object")
+        return data.mcpServers as Record<string, unknown>;
+      return data as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Discover plugin-shipped hooks from `cachePath/hooks/hooks.json`. Returns raw config for the runtime to register. */
+export function getPluginHooks(cachePath: string): Record<string, unknown> | null {
+  const path = join(cachePath, "hooks", "hooks.json");
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    if (data && typeof data === "object") return data as Record<string, unknown>;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Discover plugin-shipped LSP servers from `cachePath/.lsp.json`. Returns raw config for the runtime to register. */
+export function getPluginLspServers(cachePath: string): Record<string, unknown> | null {
+  const path = join(cachePath, ".lsp.json");
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    if (data && typeof data === "object") {
+      if ("lspServers" in data && typeof data.lspServers === "object")
+        return data.lspServers as Record<string, unknown>;
+      return data as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Marketplace Management ──
+
+/** Add a marketplace from a URL, GitHub repo, or local path.
+ * Probes for both OH-native `marketplace.json` and Claude Code `.claude-plugin/marketplace.json`.
+ */
+export function addMarketplace(nameOrUrl: string): Marketplace | null {
+  mkdirSync(MARKETPLACE_DIR, { recursive: true });
+
+  // Candidate filenames to try, in priority order
+  const candidatePaths = ["marketplace.json", ".claude-plugin/marketplace.json"];
+
+  let data: string | null = null;
+  let marketplaceName: string;
+
+  if (nameOrUrl.startsWith("http")) {
+    marketplaceName = new URL(nameOrUrl).hostname;
+    for (const fname of candidatePaths) {
+      try {
+        const text = execSync(`curl -sfL "${nameOrUrl}/${fname}"`, { encoding: "utf-8", timeout: 10_000 });
+        if (text.trim()) {
+          data = text;
+          break;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  } else if (nameOrUrl.includes("/") && !nameOrUrl.startsWith(".")) {
+    marketplaceName = nameOrUrl.replace("/", "-");
+    for (const fname of candidatePaths) {
+      try {
+        const url = `https://raw.githubusercontent.com/${nameOrUrl}/main/${fname}`;
+        const text = execSync(`curl -sfL "${url}"`, { encoding: "utf-8", timeout: 10_000 });
+        if (text.trim()) {
+          data = text;
+          break;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  } else {
+    marketplaceName = basename(nameOrUrl);
+    for (const fname of candidatePaths) {
+      const path = join(nameOrUrl, fname);
+      if (existsSync(path)) {
+        data = readFileSync(path, "utf-8");
+        break;
+      }
+    }
+  }
+
+  if (!data) return null;
+
+  const marketplace = parseMarketplaceJson(data);
+  if (!marketplace) return null;
+  marketplace.name = marketplace.name ?? marketplaceName;
+  writeFileSync(join(MARKETPLACE_DIR, `${marketplace.name}.json`), JSON.stringify(marketplace, null, 2));
+  return marketplace;
 }
 
 /** Remove a marketplace */
@@ -240,14 +412,101 @@ export function uninstallPlugin(name: string): boolean {
   return true;
 }
 
-/** Get all installed plugins */
+/** Get all installed plugins.
+ * Sources merged in priority order:
+ * 1. installed.json (plugins installed via /plugin install or addMarketplace flow)
+ * 2. CC-style plugins discovered in PLUGIN_CACHE_DIR via .claude-plugin/plugin.json
+ *    (covers plugins manually dropped in the cache, or installed by parallel tooling)
+ * Plugins from #1 are enriched with manifest data if their cachePath has one.
+ * De-duplication is by cachePath.
+ */
 export function getInstalledPlugins(): InstalledPlugin[] {
-  if (!existsSync(INSTALLED_PLUGINS_FILE)) return [];
+  const recorded: InstalledPlugin[] = (() => {
+    if (!existsSync(INSTALLED_PLUGINS_FILE)) return [];
+    try {
+      return JSON.parse(readFileSync(INSTALLED_PLUGINS_FILE, "utf-8")) as InstalledPlugin[];
+    } catch {
+      return [];
+    }
+  })();
+
+  // Enrich recorded plugins from their CC manifest if present
+  const enriched = recorded.map((p) => mergeManifest(p, parseCcPluginManifest(p.cachePath)));
+  const seenPaths = new Set(enriched.map((p) => p.cachePath));
+
+  // Discover CC-style plugins in PLUGIN_CACHE_DIR not already recorded
+  const discovered: InstalledPlugin[] = [];
+  if (existsSync(PLUGIN_CACHE_DIR)) {
+    try {
+      for (const nameEntry of readdirSync(PLUGIN_CACHE_DIR)) {
+        const nameDir = join(PLUGIN_CACHE_DIR, nameEntry);
+        if (!safeIsDirectory(nameDir)) continue;
+        // Plugin can sit either at <name>/ or <name>/<version>/
+        const candidates = [nameDir, ...listSubdirs(nameDir)];
+        for (const root of candidates) {
+          if (seenPaths.has(root)) continue;
+          const manifest = parseCcPluginManifest(root);
+          if (!manifest) continue;
+          discovered.push({
+            name: manifest.name,
+            version: manifest.version ?? "0.0.0",
+            marketplace: "discovered",
+            installedAt: tryStatTime(root),
+            cachePath: root,
+            ...projectManifestFields(manifest),
+          });
+          seenPaths.add(root);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return [...enriched, ...discovered];
+}
+
+function safeIsDirectory(path: string): boolean {
   try {
-    return JSON.parse(readFileSync(INSTALLED_PLUGINS_FILE, "utf-8"));
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function listSubdirs(dir: string): string[] {
+  try {
+    return readdirSync(dir)
+      .map((entry) => join(dir, entry))
+      .filter((p) => safeIsDirectory(p));
   } catch {
     return [];
   }
+}
+
+function tryStatTime(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return Date.now();
+  }
+}
+
+function projectManifestFields(
+  m: CcPluginManifest,
+): Pick<InstalledPlugin, "description" | "author" | "license" | "homepage" | "keywords"> {
+  return {
+    description: m.description,
+    author: typeof m.author === "string" ? m.author : m.author?.name,
+    license: m.license,
+    homepage: m.homepage,
+    keywords: m.keywords,
+  };
+}
+
+function mergeManifest(plugin: InstalledPlugin, manifest: CcPluginManifest | null): InstalledPlugin {
+  if (!manifest) return plugin;
+  return { ...plugin, ...projectManifestFields(manifest) };
 }
 
 function saveInstalledPlugin(plugin: InstalledPlugin): void {
