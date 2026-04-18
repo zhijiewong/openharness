@@ -16,7 +16,7 @@ export class RemoteAuthRequiredError extends Error {
   constructor(serverName: string, wwwAuthenticate: string | undefined) {
     super(
       `MCP server '${serverName}' requires authentication. ` +
-        `Add headers.Authorization to your config (OAuth flow is not yet supported).`,
+        `Add 'auth: oauth' to enable the OAuth 2.1 flow, or set headers.Authorization for a static bearer token.`,
     );
     this.name = "RemoteAuthRequiredError";
     this.serverName = serverName;
@@ -189,6 +189,14 @@ export async function buildClient(cfg: NormalizedConfig, opts: BuildClientOption
       try {
         const { code } = await opts.authProvider.awaitCallback();
         await (transport as StreamableHTTPClientTransport).finishAuth(code);
+        // Close the old transport before constructing a fresh one — the SDK's
+        // Transport is one-shot after an UnauthorizedError; leaving it open leaks
+        // the underlying TCP socket / event stream.
+        try {
+          await transport.close?.();
+        } catch {
+          // best-effort
+        }
         // Build a fresh transport + client for the authenticated retry
         const freshTransport = await buildTransport(cfg, opts);
         const freshClient = new Client(CLIENT_INFO, { capabilities: {} });

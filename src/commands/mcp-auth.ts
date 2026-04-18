@@ -50,7 +50,7 @@ export async function mcpLoginHandler(name: string, opts: { storageDir?: string 
   }
   await clearTokens(storageDir, trimmed);
   try {
-    const client = await McpClient.connect(entry);
+    const client = await McpClient.connect(entry, { storageDir });
     client.disconnect();
     return { output: `\u2713 Authenticated to '${trimmed}'.`, handled: true };
   } catch (err) {

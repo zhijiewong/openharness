@@ -11,7 +11,7 @@ describe("transport error types", () => {
     assert.equal(err.serverName, "linear");
     assert.equal(err.wwwAuthenticate, 'Bearer realm="linear-mcp"');
     assert.match(err.message, /linear/);
-    assert.match(err.message, /OAuth flow is not yet supported/);
+    assert.match(err.message, /auth: oauth/);
   });
 
   it("UnreachableError wraps cause", () => {

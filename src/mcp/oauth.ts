@@ -9,6 +9,16 @@ import type {
 import type { NormalizedConfig } from "./config-normalize.js";
 import { deleteCredentials, loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
 
+/** Thrown when the OAuth callback flow fails — user cancelled, timeout, state mismatch, etc. */
+export class OAuthFlowError extends Error {
+  readonly serverName: string;
+  constructor(serverName: string, reason: string) {
+    super(`OAuth flow for '${serverName}' failed: ${reason}`);
+    this.name = "OAuthFlowError";
+    this.serverName = serverName;
+  }
+}
+
 export type OAuthCallbackResult = { code: string; state: string };
 
 export type PendingCallback = {
@@ -74,9 +84,10 @@ export async function awaitOAuthCallback(opts: { timeoutMs: number }): Promise<P
     const state = url.searchParams.get("state") ?? "";
     res.statusCode = 200;
     res.setHeader("content-type", "text/html; charset=utf-8");
-    res.end(SUCCESS_HTML);
-    cleanup();
-    resolveResult({ code, state });
+    res.end(SUCCESS_HTML, () => {
+      cleanup();
+      resolveResult({ code, state });
+    });
   });
 
   timer = setTimeout(() => {
@@ -205,7 +216,16 @@ export class OhOAuthProvider implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(url: URL): Promise<void> {
-    await this.openFn(url.toString());
+    const urlStr = url.toString();
+    try {
+      await this.openFn(urlStr);
+      console.warn(`[mcp] ${this.name}: opened browser for OAuth authorization. Waiting for callback...`);
+    } catch (_err) {
+      console.warn(
+        `[mcp] ${this.name}: could not open browser automatically. Please open this URL manually:\n  ${urlStr}`,
+      );
+      // Don't re-throw — the listener may still receive the callback if the user opens the URL by hand.
+    }
   }
 
   async saveCodeVerifier(verifier: string): Promise<void> {
@@ -228,7 +248,12 @@ export class OhOAuthProvider implements OAuthClientProvider {
   /** Await a resolved callback from the listener bound in ready(). */
   async awaitCallback(): Promise<OAuthCallbackResult> {
     if (!this.pending) throw new Error("awaitCallback called before ready()");
-    return this.pending.done;
+    try {
+      return await this.pending.done;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new OAuthFlowError(this.name, msg);
+    }
   }
 
   private emptyCreds(): OhCredentials {

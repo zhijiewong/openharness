@@ -48,6 +48,8 @@ export function registerInfoCommands(
         "doctor",
         "context",
         "mcp",
+        "mcp-login",
+        "mcp-logout",
         "mcp-registry",
         "init",
         "bug",
