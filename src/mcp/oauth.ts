@@ -6,7 +6,8 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
+import type { NormalizedConfig } from "./config-normalize.js";
+import { deleteCredentials, loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
 
 export type OAuthCallbackResult = { code: string; state: string };
 
@@ -238,4 +239,41 @@ export class OhOAuthProvider implements OAuthClientProvider {
       updatedAt: new Date().toISOString(),
     };
   }
+}
+
+export type AuthStatus = "n/a" | "none" | "authenticated" | "expired";
+
+/**
+ * Construct an OAuth provider for a normalized config, iff:
+ * - type is http or sse
+ * - no static headers.Authorization
+ * - auth !== "none"
+ * Otherwise return undefined — the transport proceeds without OAuth.
+ */
+export function buildAuthProvider(
+  cfg: NormalizedConfig,
+  storageDir: string,
+  openFn: (url: string) => Promise<void>,
+): OhOAuthProvider | undefined {
+  if (cfg.type === "stdio") return undefined;
+  const headers = (cfg as any).headers as Record<string, string> | undefined;
+  if (headers?.Authorization) return undefined;
+  if ((cfg as any).auth === "none") return undefined;
+  return new OhOAuthProvider({ name: cfg.name, storageDir, openFn });
+}
+
+/** Delete stored credentials for a server. Safe to call when none exist. */
+export async function clearTokens(storageDir: string, name: string): Promise<void> {
+  await deleteCredentials(storageDir, name);
+}
+
+/** Compute auth state for a server for /mcp display. */
+export async function getAuthStatus(cfg: NormalizedConfig, storageDir: string): Promise<AuthStatus> {
+  if (cfg.type === "stdio") return "n/a";
+  const headers = (cfg as any).headers as Record<string, string> | undefined;
+  if (headers?.Authorization) return "n/a";
+  const creds = await loadCredentials(storageDir, cfg.name);
+  if (!creds?.tokens?.access_token) return "none";
+  if (creds.tokens.expires_at && creds.tokens.expires_at <= Date.now()) return "expired";
+  return "authenticated";
 }

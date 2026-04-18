@@ -3,7 +3,16 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { awaitOAuthCallback, OhOAuthProvider, redactToken } from "./oauth.js";
+import type { NormalizedConfig } from "./config-normalize.js";
+import {
+  awaitOAuthCallback,
+  buildAuthProvider,
+  clearTokens,
+  getAuthStatus,
+  OhOAuthProvider,
+  redactToken,
+} from "./oauth.js";
+import { loadCredentials, saveCredentials } from "./oauth-storage.js";
 
 describe("awaitOAuthCallback", () => {
   it("resolves with {code, state} on a valid GET /oauth/callback", async () => {
@@ -161,6 +170,134 @@ describe("OhOAuthProvider", () => {
       assert.equal(seen.length, 1);
       assert.equal(seen[0], "https://auth.example.com/authorize?foo=bar");
       p.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildAuthProvider", () => {
+  function cfgHttp(overrides: Partial<NormalizedConfig> = {}): NormalizedConfig {
+    return { name: "srv", type: "http", url: "https://x/mcp", ...overrides } as NormalizedConfig;
+  }
+
+  it("returns a provider for http configs without headers.Authorization and without auth='none'", () => {
+    const p = buildAuthProvider(cfgHttp(), "/tmp/oh-test", async () => {});
+    assert.ok(p !== undefined);
+  });
+
+  it("returns undefined when headers.Authorization is set", () => {
+    const p = buildAuthProvider(
+      cfgHttp({ headers: { Authorization: "Bearer x" } } as any),
+      "/tmp/oh-test",
+      async () => {},
+    );
+    assert.equal(p, undefined);
+  });
+
+  it("returns undefined when auth='none'", () => {
+    const p = buildAuthProvider(cfgHttp({ auth: "none" } as any), "/tmp/oh-test", async () => {});
+    assert.equal(p, undefined);
+  });
+
+  it("returns undefined for stdio configs", () => {
+    const p = buildAuthProvider(
+      { name: "fs", type: "stdio", command: "x" } as NormalizedConfig,
+      "/tmp/oh-test",
+      async () => {},
+    );
+    assert.equal(p, undefined);
+  });
+
+  it("returns a provider for sse configs when eligible", () => {
+    const p = buildAuthProvider(
+      { name: "legacy", type: "sse", url: "https://x/sse" } as NormalizedConfig,
+      "/tmp/oh-test",
+      async () => {},
+    );
+    assert.ok(p !== undefined);
+  });
+});
+
+describe("getAuthStatus", () => {
+  function freshDir(): string {
+    return mkdtempSync(join(tmpdir(), "oh-oauth-status-"));
+  }
+
+  it("returns 'n/a' for stdio configs", async () => {
+    const status = await getAuthStatus({ name: "fs", type: "stdio", command: "x" } as NormalizedConfig, "/tmp/nope");
+    assert.equal(status, "n/a");
+  });
+
+  it("returns 'n/a' when headers.Authorization is set", async () => {
+    const status = await getAuthStatus(
+      {
+        name: "s",
+        type: "http",
+        url: "http://x",
+        headers: { Authorization: "Bearer x" },
+      } as NormalizedConfig,
+      "/tmp/nope",
+    );
+    assert.equal(status, "n/a");
+  });
+
+  it("returns 'none' when no credentials file exists", async () => {
+    const dir = freshDir();
+    try {
+      const status = await getAuthStatus({ name: "s", type: "http", url: "http://x" } as NormalizedConfig, dir);
+      assert.equal(status, "none");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 'authenticated' when expires_at is in the future", async () => {
+    const dir = freshDir();
+    try {
+      await saveCredentials(dir, "s", {
+        issuerUrl: "x",
+        clientInformation: { client_id: "c" },
+        tokens: { access_token: "at", expires_at: Date.now() + 60_000 },
+        updatedAt: new Date().toISOString(),
+      });
+      const status = await getAuthStatus({ name: "s", type: "http", url: "http://x" } as NormalizedConfig, dir);
+      assert.equal(status, "authenticated");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns 'expired' when expires_at is in the past", async () => {
+    const dir = freshDir();
+    try {
+      await saveCredentials(dir, "s", {
+        issuerUrl: "x",
+        clientInformation: { client_id: "c" },
+        tokens: { access_token: "at", expires_at: Date.now() - 60_000 },
+        updatedAt: new Date().toISOString(),
+      });
+      const status = await getAuthStatus({ name: "s", type: "http", url: "http://x" } as NormalizedConfig, dir);
+      assert.equal(status, "expired");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("clearTokens", () => {
+  it("deletes the credentials file idempotently", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "oh-oauth-clear-"));
+    try {
+      await saveCredentials(dir, "bye", {
+        issuerUrl: "x",
+        clientInformation: { client_id: "c" },
+        tokens: { access_token: "at" },
+        updatedAt: new Date().toISOString(),
+      });
+      await clearTokens(dir, "bye");
+      assert.equal(await loadCredentials(dir, "bye"), undefined);
+      await clearTokens(dir, "bye"); // idempotent
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
