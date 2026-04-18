@@ -6,11 +6,35 @@ import { McpTool } from "./McpTool.js";
 
 const connectedClients: McpClient[] = [];
 
+let exitHandlerInstalled = false;
+
+function installExitHandler(): void {
+  if (exitHandlerInstalled) return;
+  exitHandlerInstalled = true;
+  const handler = () => {
+    try {
+      disconnectMcpClients();
+    } catch {
+      /* shutdown best-effort */
+    }
+  };
+  process.once("exit", handler);
+  process.once("SIGINT", () => {
+    handler();
+    process.exit(130);
+  });
+  process.once("SIGTERM", () => {
+    handler();
+    process.exit(143);
+  });
+}
+
 /** Threshold: servers with more tools than this use deferred loading */
 const DEFERRED_THRESHOLD = 10;
 
 /** Load MCP tools from .oh/config.yaml mcpServers list. Returns empty array if none configured. */
 export async function loadMcpTools(): Promise<Tool[]> {
+  installExitHandler();
   const cfg = readOhConfig();
   const servers = cfg?.mcpServers ?? [];
   if (servers.length === 0) return [];
