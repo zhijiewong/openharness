@@ -378,6 +378,7 @@ mcpServers:
 ```
 
 See [docs/mcp-servers.md](docs/mcp-servers.md) for the full reference.
+See [docs/mcp-servers.md](docs/mcp-servers.md#authentication) for OAuth 2.1 setup (auto-triggered on 401; `/mcp-login` and `/mcp-logout` commands available).
 
 **MCP Server Registry** — browse and install from a curated catalog:
 

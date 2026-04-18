@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- OAuth 2.1 for remote MCP servers: Authorization Code + PKCE with Dynamic Client Registration, auto-triggered on `401 + WWW-Authenticate`. Filesystem-backed token storage at `~/.oh/credentials/mcp/` with `0600` permissions. New slash commands: `/mcp-login <name>`, `/mcp-logout <name>`; `/mcp` extended with per-server auth-state column.
+- Config: new optional `auth: "oauth" | "none"` field on `type: http` and `type: sse` server entries. Default is auto — OAuth when needed, static-bearer when `headers.Authorization` is set.
+
+### Changed
+- `McpClient.connect` now wires an `OAuthClientProvider` into the SDK transport when a server is OAuth-eligible. Existing static-bearer and stdio configs unchanged.
+- `CommandHandler` type now accepts async handlers (`CommandResult | Promise<CommandResult>`). Backward-compatible for all existing sync handlers.
+
 ## 2.11.0 (2026-04-18) — Remote MCP over HTTP/SSE
 
 ### Added
