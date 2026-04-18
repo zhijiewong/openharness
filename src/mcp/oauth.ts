@@ -86,3 +86,10 @@ export async function awaitOAuthCallback(opts: { timeoutMs: number }): Promise<P
     },
   };
 }
+
+/** Strip access_token=, refresh_token=, and "Bearer <x>" from a log message. */
+export function redactToken(msg: string): string {
+  return msg
+    .replace(/(access_token|refresh_token|code)=[^&\s"']+/gi, "$1=<redacted>")
+    .replace(/Bearer\s+[^\s"']+/gi, "Bearer <redacted>");
+}
