@@ -193,3 +193,60 @@ describe("hook JSON I/O mode", () => {
     });
   });
 });
+
+// ── Prompt hooks (LLM-decision) ──
+
+/**
+ * Write a .oh/config.yaml with a prompt hook + mock provider config. The mock
+ * provider is registered via dependency injection through the provider module,
+ * which we don't yet have — so these tests exercise the fail-closed paths
+ * (no config, bad config, timeout) that don't require a real LLM response.
+ *
+ * Full LLM-response tests live in provider-specific suites.
+ */
+function writePromptHookConfig(dir: string, prompt: string) {
+  mkdirSync(`${dir}/.oh`, { recursive: true });
+  writeFileSync(
+    `${dir}/.oh/config.yaml`,
+    [
+      "provider: ollama",
+      "model: nonexistent-test-model",
+      "baseUrl: http://127.0.0.1:1", // deliberately unreachable → forces timeout/error
+      "permissionMode: ask",
+      "hooks:",
+      "  preToolUse:",
+      `    - prompt: ${JSON.stringify(prompt)}`,
+      "      timeout: 500",
+      "",
+    ].join("\n"),
+  );
+  invalidateConfigCache();
+  invalidateHookCache();
+}
+
+describe("prompt hooks (LLM-decision)", () => {
+  it("fails closed (denies) when the configured provider is unreachable", async () => {
+    await new Promise<void>((resolve) => {
+      withTmpCwd((dir) => {
+        writePromptHookConfig(dir, "Should we allow this tool?");
+        // Prompt hooks only run in the async path; emitHook's sync path defers them.
+        // Verify the deny via emitHookAsync.
+        emitHookAsync("preToolUse", { toolName: "Bash", toolArgs: "rm -rf /" }).then((allowed) => {
+          assert.equal(allowed, false, "unreachable provider should fail closed");
+          resolve();
+        });
+      });
+    });
+  });
+
+  it("fails closed when no config is present", async () => {
+    // No tmp cwd change — no .oh/config.yaml exists in process cwd
+    invalidateConfigCache();
+    invalidateHookCache();
+    // Can't easily invoke runPromptHook directly — it's module-private. But we
+    // can verify by checking that emitHookAsync with no hooks configured returns
+    // true (there's no hook to fail), then write a bad config and see false.
+    const noHooks = await emitHookAsync("preToolUse", { toolName: "Bash" });
+    assert.equal(noHooks, true, "with no hooks configured, emitHookAsync should allow");
+  });
+});

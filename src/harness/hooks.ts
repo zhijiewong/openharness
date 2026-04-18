@@ -284,15 +284,63 @@ async function runHttpHook(url: string, event: HookEvent, ctx: HookContext, time
 }
 
 /**
- * Run a prompt hook. Uses LLM to make a yes/no decision.
+ * Run a prompt hook. Uses an LLM to make a yes/no allow/deny decision.
  *
- * Currently a stub — prompt hooks always allow because the hook system
- * runs outside the query loop and has no access to a Provider instance.
- * Full implementation requires passing a Provider via HookContext so the
- * hook can call provider.complete() with the prompt text.
+ * The hook's `prompt:` field is the question posed to the model along with
+ * the event context. The response is parsed case-insensitively: responses
+ * starting with YES / ALLOW / TRUE / PASS / APPROVE allow; anything else
+ * (including explicit NO, DENY, errors, timeouts, empty) blocks.
+ *
+ * Fail-closed semantics: if the provider isn't reachable or the response
+ * can't be parsed, the hook denies. This matches command hooks (non-zero
+ * exit = deny) and HTTP hooks (network error = deny).
+ *
+ * Provider selection: reads `.oh/config.yaml` to get the configured provider
+ * and model. A separate provider instance is created per call — no caching,
+ * since hooks are rare and cold-start cost is negligible compared to the
+ * LLM call itself.
  */
-async function runPromptHook(_promptText: string, _ctx: HookContext): Promise<boolean> {
-  return true;
+async function runPromptHook(promptText: string, ctx: HookContext, timeoutMs = 10_000): Promise<boolean> {
+  try {
+    const cfg = readOhConfig();
+    if (!cfg) return false; // no config → no provider → fail closed
+
+    const { createProvider } = (await import("../providers/index.js")) as typeof import("../providers/index.js");
+    const modelArg = cfg.model ? `${cfg.provider}/${cfg.model}` : cfg.provider;
+    const overrides: Partial<import("../providers/base.js").ProviderConfig> = {};
+    if (cfg.apiKey) overrides.apiKey = cfg.apiKey;
+    if (cfg.baseUrl) overrides.baseUrl = cfg.baseUrl;
+    const { provider, model } = await createProvider(modelArg, overrides);
+
+    const systemPrompt =
+      "You are a policy gate. Read the question and the event context. Answer with a single word: YES to allow, NO to deny. Do not explain unless asked.";
+    const userContent = [
+      `Question: ${promptText}`,
+      "",
+      "Event context:",
+      JSON.stringify({ event: ctx }, null, 2),
+      "",
+      "Answer (YES or NO):",
+    ].join("\n");
+
+    const { createUserMessage } = (await import("../types/message.js")) as typeof import("../types/message.js");
+    const messages = [createUserMessage(userContent)];
+
+    // Race the completion against a hard timeout so a hung provider doesn't
+    // block the agent loop indefinitely.
+    const completion = await Promise.race([
+      provider.complete(messages, systemPrompt, undefined, model),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+
+    if (!completion) return false; // timeout → deny
+    const text = (completion.content ?? "").trim().toUpperCase();
+    if (!text) return false;
+    // Accept multiple allow synonyms; default to deny on anything else.
+    return /^(YES|ALLOW|TRUE|PASS|APPROVE)\b/.test(text);
+  } catch {
+    return false; // any error path → deny
+  }
 }
 
 // ── Hook Execution ──
