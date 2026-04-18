@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.9.0 (2026-04-18) — Claude Code Ecosystem Parity
+
+### Added
+- **Ecosystem format interop** (#24): Claude Code plugins drop into `~/.oh/plugins/cache/` and auto-discover via `.claude-plugin/plugin.json`. Directory-packaged skills (`skill-name/SKILL.md` with companion docs). `.claude/skills/` and `.claude/agents/` discovered alongside `.oh/` equivalents. `.claude-plugin/marketplace.json` parser with source-typed entries (github/npm/url). Plugin-shipped `.mcp.json`, `hooks/hooks.json`, `.lsp.json` — discovered via helpers for runtime merge.
+- **CLAUDE.md + @-imports** (#25): Hierarchical loader walks `./.claude/CLAUDE.md`, `./CLAUDE.md`, `./CLAUDE.local.md`, `~/.claude/CLAUDE.md`. `@path` imports resolved inline with 5-hop cycle cap. Injected alongside `.oh/memory/` (additive).
+- **Read-only Bash auto-approve** (#25): Allowlist of pure inspection commands (ls, cat, grep, find, git status/log/diff, …) short-circuits the permission prompt. Rejects `sed -i`, `tee`, `git commit/push`, redirects.
+- **Settings `env:` injection** (#25): New `env: { KEY: VALUE }` field in `.oh/config.yaml` (mirrors CC's `settings.json.env`). Merged into child process environment via `safeEnv()` — every spawn site picks it up automatically.
+- **Skill frontmatter aliases** (#24): Anthropic kebab-case forms — `allowed-tools`, `disable-model-invocation`, `argument-hint`, `when-to-use` — accepted alongside the existing camelCase. New fields: `license` (SPDX), `paths` (glob scoping), `context: fork` + `agent: <type>`.
+- **Agent frontmatter additions** (#24): `model`, `disallowedTools`, `isolation`, `mcpServers`, `hooks`. Tools field accepts YAML array OR space/comma-separated string.
+- **`/plugin` command** (#24): Alias of `/plugins` with new `info <name>` subcommand showing the full manifest.
+- **License gate on `/skill-install`** (#24): Refuses non-permissive SPDX licenses unless `--accept-license=<id>` passed. `installable: false` registry entries are link-only (for viral licenses like CC-BY-SA).
+- **Registry expanded** (#24): 4 → 23 entries with `license` + `attribution` + `upstream` metadata. 7 OH-native MIT, 8 superpowers MIT, 6 CLI-Anything Apache-2.0, 2 Trail-of-Bits CC-BY-SA (link-only).
+- **7 bundled skills** (#24): code-review, commit, debug, tdd, diagnose, plan, simplify. Shipped in npm package, loaded with `[bundled]` source tag.
+- **`/skills` listing command** (#24): Lists all discoverable skills with source tags.
+
+### Changed
+- **Hook matcher** (#25): Accepts `/regex/flags` and `glob*` patterns alongside legacy substring match. Invalid regex fails closed.
+- **Compound-command permission parsing** (#25): Evaluates `cmd1 && cmd2`, `a | b`, `x; y` per-sub-command with most-restrictive-wins (deny > ask > allow). Process wrappers (`timeout`, `nice`, `nohup`, `stdbuf`) stripped before matching. Closes the `git log && rm -rf /` bypass class.
+- **AI review workflow** (#24): Converted from `pull_request` auto-trigger to `issue_comment`-mention trigger (`@openharness` or `/oh-review`). Shell-injection fix — PR content routed through env vars and delivered via stdin, never interpolated into a shell-quoted string. 15-min job ceiling + 10-min inner timeout.
+- **MonitorTool** (#24): Use `proc.on("close")` instead of `"exit"` to avoid draining race on fast-exiting commands — fixes the previously-flaky "filters output by pattern" test.
+
+### Fixed
+- **`SessionSearchTool` test isolation** (#26): Singleton DB now honors `OH_SESSION_DB_PATH` env var for test isolation. The "empty DB returns no results" test no longer fails on machines with real session history.
+
+### Summary
+976 tests (up from 890 — **+86 tests**; 40 in this release alone across skills, plugins, agents, marketplace, memory, hooks, permissions, safe-env, session-db). 42 tools, 79 commands. Full typecheck + lint clean. Two PRs merged (#24, #25) closing the "this feels like Claude Code" ecosystem surface gap. Remaining Tier A item (hook JSON I/O mode) deferred to next sprint.
+
 ## 2.8.0 (2026-04-16) — Full Test Coverage
 
 ### Added

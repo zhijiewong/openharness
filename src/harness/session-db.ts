@@ -205,12 +205,32 @@ export function rebuildIndex(db: Database.Database, sessionsDir?: string): numbe
 // ── Singleton Connection ──
 
 let _singletonDb: Database.Database | null = null;
+let _singletonDbPath: string | null = null;
 
-/** Get a shared DB connection (opens once, reuses thereafter) */
+/**
+ * Get a shared DB connection (opens once, reuses thereafter).
+ *
+ * Honors the `OH_SESSION_DB_PATH` environment variable for test isolation.
+ * When the env var changes between calls, the old singleton is closed and a
+ * new one is opened at the new path — this lets tests point at a tmp dir
+ * without leaking into the user's real `~/.oh/sessions.db`.
+ */
 export function getSessionDb(): Database.Database {
-  if (!_singletonDb) {
-    _singletonDb = openSessionDb();
+  const envPath = process.env.OH_SESSION_DB_PATH;
+  const targetPath = envPath || DEFAULT_DB_PATH;
+  if (_singletonDb && _singletonDbPath === targetPath) {
+    return _singletonDb;
   }
+  if (_singletonDb) {
+    try {
+      _singletonDb.close();
+    } catch {
+      /* ignore */
+    }
+    _singletonDb = null;
+  }
+  _singletonDb = openSessionDb(targetPath);
+  _singletonDbPath = targetPath;
   return _singletonDb;
 }
 

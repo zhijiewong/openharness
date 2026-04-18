@@ -617,10 +617,23 @@ describe("tools-basic", () => {
 
   it("SessionSearchTool — returns no results for empty DB", async () => {
     const { SessionSearchTool } = await import("./SessionSearchTool/index.js");
+    const { closeGlobalSessionDb } = await import("../harness/session-db.js");
+    // Point the singleton at a tmp DB so we don't pollute (or get polluted by)
+    // the user's real ~/.oh/sessions.db. Without this the test is non-deterministic
+    // based on what's in the developer / CI user's session history.
     const tmp = makeTmpDir();
-    const result = await SessionSearchTool.call({ query: "authentication" }, ctx(tmp));
-    assert.equal(result.isError, false);
-    assert.ok(result.output.includes("No matching sessions"));
+    const prevEnv = process.env.OH_SESSION_DB_PATH;
+    process.env.OH_SESSION_DB_PATH = join(tmp, "sessions.db");
+    closeGlobalSessionDb();
+    try {
+      const result = await SessionSearchTool.call({ query: "authentication" }, ctx(tmp));
+      assert.equal(result.isError, false);
+      assert.ok(result.output.includes("No matching sessions"));
+    } finally {
+      if (prevEnv !== undefined) process.env.OH_SESSION_DB_PATH = prevEnv;
+      else delete process.env.OH_SESSION_DB_PATH;
+      closeGlobalSessionDb();
+    }
   });
 
   it("SkillTool — path traversal blocked via ..", async () => {
