@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.12.0 (2026-04-18) — OAuth 2.1 for Remote MCP
 
 ### Added
 - OAuth 2.1 for remote MCP servers: Authorization Code + PKCE with Dynamic Client Registration, auto-triggered on `401 + WWW-Authenticate`. Filesystem-backed token storage at `~/.oh/credentials/mcp/` with `0600` permissions. New slash commands: `/mcp-login <name>`, `/mcp-logout <name>`; `/mcp` extended with per-server auth-state column.
