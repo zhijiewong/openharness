@@ -4,7 +4,7 @@ import type { Client as SdkClient } from "@modelcontextprotocol/sdk/client/index
 import open from "open";
 import type { McpServerConfig } from "../harness/config.js";
 import { normalizeMcpConfig } from "./config-normalize.js";
-import { buildAuthProvider, type OhOAuthProvider } from "./oauth.js";
+import { buildAuthProvider } from "./oauth.js";
 import { buildClient, connectWithFallback } from "./transport.js";
 import type { McpToolDef } from "./types.js";
 
