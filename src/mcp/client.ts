@@ -51,15 +51,25 @@ export class McpClient {
 
   static async connect(
     cfg: McpServerConfig,
-    timeoutMs: number = cfg.timeout ?? DEFAULT_TIMEOUT_MS,
+    timeoutMsOrOpts:
+      | number
+      | { timeoutMs?: number; openFn?: (url: string) => Promise<void>; storageDir?: string }
+      | undefined = undefined,
   ): Promise<McpClient> {
+    // Backward-compatible: accept number for timeout OR options object
+    const opts = typeof timeoutMsOrOpts === "number" ? { timeoutMs: timeoutMsOrOpts } : (timeoutMsOrOpts ?? {});
+    const timeoutMs = opts.timeoutMs ?? cfg.timeout ?? DEFAULT_TIMEOUT_MS;
+    const openFn =
+      opts.openFn ??
+      (async (url: string) => {
+        await open(url);
+      });
+    const storageDirResolved = opts.storageDir ?? credentialsDir();
     const normalized = normalizeMcpConfig(cfg, process.env);
     if (normalized.kind === "error") {
       throw new Error(normalized.message);
     }
-    const authProvider = buildAuthProvider(normalized.cfg, credentialsDir(), async (url) => {
-      await open(url);
-    });
+    const authProvider = buildAuthProvider(normalized.cfg, storageDirResolved, openFn);
     if (authProvider) await authProvider.ready();
     try {
       const sdk = await connectWithFallback(normalized.cfg, (c) => buildClient(c, { authProvider }));

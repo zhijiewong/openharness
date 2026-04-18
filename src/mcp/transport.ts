@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -142,25 +143,80 @@ export type BuildClientOptions = {
   authProvider?: OAuthClientProvider;
 };
 
+/** Duck-type check: does this provider expose awaitCallback (our OhOAuthProvider)? */
+function hasAwaitCallback(
+  p: OAuthClientProvider,
+): p is OAuthClientProvider & { awaitCallback(): Promise<{ code: string; state: string }> } {
+  return typeof (p as any).awaitCallback === "function";
+}
+
 /**
  * Build a connected SDK Client for a normalized config.
  * Maps connect-time errors into OH's typed error taxonomy.
+ *
+ * When the auth provider exposes `awaitCallback()` (i.e. OhOAuthProvider), this
+ * function handles the full OAuth callback → finishAuth → reconnect loop so callers
+ * don't need to orchestrate it manually.
  */
 export async function buildClient(cfg: NormalizedConfig, opts: BuildClientOptions = {}): Promise<Client> {
   const transport = await buildTransport(cfg, opts);
   const client = new Client(CLIENT_INFO, { capabilities: {} });
   const timeoutMs = cfg.timeout ?? DEFAULT_TIMEOUT_MS;
 
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  async function tryConnect(): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        client.connect(transport),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
+  }
+
   try {
-    await Promise.race([
-      client.connect(transport),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs);
-      }),
-    ]);
+    await tryConnect();
     return client;
   } catch (err) {
+    // If the SDK requires a browser-based OAuth flow (UnauthorizedError after REDIRECT),
+    // and our provider knows how to await the callback, complete the loop here.
+    // Per the SDK design, after finishAuth we must create a fresh transport + client
+    // because the original transport is already in a "started" state.
+    if (err instanceof UnauthorizedError && opts.authProvider && hasAwaitCallback(opts.authProvider)) {
+      try {
+        const { code } = await opts.authProvider.awaitCallback();
+        await (transport as StreamableHTTPClientTransport).finishAuth(code);
+        // Build a fresh transport + client for the authenticated retry
+        const freshTransport = await buildTransport(cfg, opts);
+        const freshClient = new Client(CLIENT_INFO, { capabilities: {} });
+        let freshTimer: ReturnType<typeof setTimeout> | null = null;
+        try {
+          await Promise.race([
+            freshClient.connect(freshTransport),
+            new Promise<never>((_, reject) => {
+              freshTimer = setTimeout(() => reject(new Error(`init timeout after ${timeoutMs}ms`)), timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (freshTimer !== null) clearTimeout(freshTimer);
+        }
+        return freshClient;
+      } catch (oauthErr) {
+        // Classify the retry error the same way as the primary path
+        if (
+          oauthErr instanceof RemoteAuthRequiredError ||
+          oauthErr instanceof UnreachableError ||
+          oauthErr instanceof ProtocolError
+        ) {
+          throw oauthErr;
+        }
+        throw new ProtocolError(cfg.name, oauthErr);
+      }
+    }
+
     // Leave RemoteAuthRequiredError / UnreachableError / ProtocolError as-is
     if (err instanceof RemoteAuthRequiredError || err instanceof UnreachableError || err instanceof ProtocolError) {
       throw err;
@@ -172,7 +228,5 @@ export async function buildClient(cfg: NormalizedConfig, opts: BuildClientOption
     }
     // Otherwise protocol-shaped
     throw new ProtocolError(cfg.name, err);
-  } finally {
-    if (timer !== null) clearTimeout(timer);
   }
 }
