@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.10.0 (2026-04-18) — Hook JSON I/O + Real Prompt Hooks
+
+### Added
+- **Hook JSON I/O mode** (#27): Hooks with `jsonIO: true` receive `{event, ...context}` on stdin and respond with `{decision, reason, hookSpecificOutput}` on stdout (Claude Code convention). `decision: "deny"` blocks; non-zero exit always blocks; malformed JSON + zero exit fails closed. Env-var mode remains the default for backward compatibility.
+- **Prompt hooks now work** (#28): `src/harness/hooks.ts` `runPromptHook` was a documented stub that always allowed. Now it calls the configured LLM with the hook's prompt + JSON event context, parses yes/no (`YES`/`ALLOW`/`TRUE`/`PASS`/`APPROVE` → allow), and gates with 10s hard timeout. Fail-closed on every error path.
+
+### Summary
+985 tests (+9 across the two PRs: 7 hook JSON I/O, 2 prompt-hook fail-closed paths). Tier A of the Claude Code parity roadmap is now fully complete. Tier B items (Remote MCP HTTP/SSE, session fork/export, model router, fallback providers, first-run wizard, additional hook events) remain in the backlog.
+
 ## 2.9.0 (2026-04-18) — Claude Code Ecosystem Parity
 
 ### Added
