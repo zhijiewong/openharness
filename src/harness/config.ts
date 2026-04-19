@@ -63,6 +63,9 @@ export type HooksConfig = {
   sessionEnd?: HookDef[];
   preToolUse?: HookDef[];
   postToolUse?: HookDef[];
+  postToolUseFailure?: HookDef[];
+  userPromptSubmit?: HookDef[];
+  permissionRequest?: HookDef[];
   fileChanged?: HookDef[];
   cwdChanged?: HookDef[];
   subagentStart?: HookDef[];

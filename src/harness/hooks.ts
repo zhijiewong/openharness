@@ -19,6 +19,9 @@ export type HookEvent =
   | "sessionEnd"
   | "preToolUse"
   | "postToolUse"
+  | "postToolUseFailure"
+  | "userPromptSubmit"
+  | "permissionRequest"
   | "fileChanged"
   | "cwdChanged"
   | "subagentStart"
@@ -47,6 +50,14 @@ export type HookContext = {
   agentId?: string;
   /** For notification: the message */
   message?: string;
+  /** For userPromptSubmit: the raw prompt text the user is about to submit */
+  prompt?: string;
+  /** For postToolUseFailure: short error label ("TimeoutError", "ExecutionError", "ReportedError") */
+  toolError?: string;
+  /** For postToolUseFailure: full error message */
+  errorMessage?: string;
+  /** For permissionRequest: the decision OH would take absent the hook ("ask", "allow", "deny") — informational */
+  permissionAction?: "ask" | "allow" | "deny";
 };
 
 let cachedHooks: HooksConfig | null | undefined;

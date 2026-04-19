@@ -250,3 +250,21 @@ describe("prompt hooks (LLM-decision)", () => {
     assert.equal(noHooks, true, "with no hooks configured, emitHookAsync should allow");
   });
 });
+
+describe("new hook event types (Task 1)", () => {
+  it("HookEvent accepts postToolUseFailure / userPromptSubmit / permissionRequest at type level", () => {
+    // Compile-time check only — if this file type-checks, the union accepts the new variants.
+    const events: Array<"postToolUseFailure" | "userPromptSubmit" | "permissionRequest"> = [
+      "postToolUseFailure",
+      "userPromptSubmit",
+      "permissionRequest",
+    ];
+    assert.equal(events.length, 3);
+  });
+
+  it("emitHook accepts the three new events without throwing (no hooks configured)", () => {
+    assert.equal(emitHook("postToolUseFailure", { toolName: "t", errorMessage: "x" }), true);
+    assert.equal(emitHook("userPromptSubmit", { prompt: "hi" }), true);
+    assert.equal(emitHook("permissionRequest", { toolName: "Bash", permissionAction: "ask" }), true);
+  });
+});
