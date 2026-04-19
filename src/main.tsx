@@ -301,35 +301,58 @@ program
             ? (opts.permissionMode as PermissionMode)
             : (savedConfig?.permissionMode ?? "ask");
 
-    // Auto-detect provider or prompt for setup
+    // Auto-detect provider or launch the setup wizard
     let provider: Provider;
     let resolvedModel: string;
-    try {
+    const tryCreateProvider = async (): Promise<{ provider: Provider; model: string }> => {
       const { createProvider } = await import("./providers/index.js");
       const overrides: Partial<ProviderConfig> = {};
-      if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
-      if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
-      const result = await createProvider(effectiveModel, Object.keys(overrides).length ? overrides : undefined);
+      const fresh = readOhConfig();
+      if (fresh?.apiKey) overrides.apiKey = fresh.apiKey;
+      if (fresh?.baseUrl) overrides.baseUrl = fresh.baseUrl;
+      const targetModel = fresh?.model ?? effectiveModel;
+      return createProvider(targetModel, Object.keys(overrides).length ? overrides : undefined);
+    };
+
+    try {
+      const result = await tryCreateProvider();
       provider = result.provider;
       resolvedModel = result.model;
     } catch (_err) {
-      // First-run experience: guide the user
-      console.log();
-      console.log("  Welcome to OpenHarness!");
-      console.log();
-      console.log("  To get started, choose a provider:");
-      console.log();
-      console.log("  Local (free, no API key):");
-      console.log("    npx openharness --model ollama/llama3");
-      console.log("    npx openharness --model ollama/qwen2.5:7b-instruct");
-      console.log();
-      console.log("  Cloud (needs API key in env var):");
-      console.log("    OPENAI_API_KEY=sk-... npx openharness --model gpt-4o");
-      console.log("    ANTHROPIC_API_KEY=sk-ant-... npx openharness --model claude-sonnet-4-6");
-      console.log();
-      console.log("  Make sure Ollama is running: ollama serve");
-      console.log();
-      process.exit(0);
+      // First-run: launch the interactive wizard in TTY mode; fall back to
+      // static help text for non-TTY (CI, piped stdin, etc.).
+      if (process.stdout.isTTY && process.stdin.isTTY) {
+        const { default: InitWizard } = await import("./components/InitWizard.js");
+        const { waitUntilExit } = render(<InitWizard onDone={() => {}} />);
+        await waitUntilExit();
+        try {
+          const result = await tryCreateProvider();
+          provider = result.provider;
+          resolvedModel = result.model;
+        } catch {
+          console.log();
+          console.log("  Setup incomplete. Run 'oh init' to try again, or set a provider via --model.");
+          console.log();
+          process.exit(0);
+        }
+      } else {
+        console.log();
+        console.log("  Welcome to OpenHarness!");
+        console.log();
+        console.log("  To get started, choose a provider:");
+        console.log();
+        console.log("  Local (free, no API key):");
+        console.log("    npx openharness --model ollama/llama3");
+        console.log("    npx openharness --model ollama/qwen2.5:7b-instruct");
+        console.log();
+        console.log("  Cloud (needs API key in env var):");
+        console.log("    OPENAI_API_KEY=sk-... npx openharness --model gpt-4o");
+        console.log("    ANTHROPIC_API_KEY=sk-ant-... npx openharness --model claude-sonnet-4-6");
+        console.log();
+        console.log("  Make sure Ollama is running: ollama serve");
+        console.log();
+        process.exit(0);
+      }
     }
 
     const mcpTools = await loadMcpTools();
