@@ -380,9 +380,15 @@ describe("tools.ts — postToolUse / postToolUseFailure mutual exclusion", () =>
       await executeSingleTool(makeToolCall("SuccessA"), [successTool], makeContext(), "trust");
       await executeSingleTool(makeToolCall("ErrorB"), [errorTool], makeContext(), "trust");
 
-      await new Promise<void>((r) => setTimeout(r, 200));
-
-      const fired = existsSync(capturePath) ? readFileSync(capturePath, "utf8").split("\n").filter(Boolean) : [];
+      // Poll for both fire-and-forget hook processes to flush their stdout to
+      // the capture file. On slow CI runners, a fixed 200ms wait is too short.
+      const deadline = Date.now() + 5_000;
+      let fired: string[] = [];
+      while (Date.now() < deadline) {
+        fired = existsSync(capturePath) ? readFileSync(capturePath, "utf8").split("\n").filter(Boolean) : [];
+        if (fired.length >= 2) break;
+        await new Promise<void>((r) => setTimeout(r, 50));
+      }
 
       // SuccessA → postToolUse, ErrorB → postToolUseFailure
       assert.equal(fired.length, 2, "exactly two hook events should have fired");
