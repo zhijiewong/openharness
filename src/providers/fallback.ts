@@ -48,18 +48,18 @@ export function createFallbackProvider(
 
       for (let i = 0; i < providers.length; i++) {
         const p = providers[i]!;
+        let hasYielded = false;
         try {
-          let _hasYielded = false;
           for await (const event of p.provider.stream(messages, systemPrompt, tools, p.model)) {
-            _hasYielded = true;
+            hasYielded = true;
             yield event;
           }
           _activeFallback = i === 0 ? null : p.provider.name;
           return;
         } catch (err) {
-          // Mid-stream failure: can't un-send events, propagate error
-          if (i > 0 || !isRetriableError(err)) throw err;
-          // Pre-stream failure on primary: try next provider
+          // Mid-stream failure OR non-retriable OR fallback error: propagate.
+          if (i > 0 || !isRetriableError(err) || hasYielded) throw err;
+          // Pre-stream retriable failure on primary only: try next provider.
           _activeFallback = null;
         }
       }

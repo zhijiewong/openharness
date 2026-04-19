@@ -99,14 +99,15 @@ describe("createFallbackProvider — stream()", () => {
     await assert.rejects(() => drain(wrapped.stream([], "sys", [], "m")), /401 Unauthorized/);
   });
 
-  it("primary fails mid-stream with non-retriable error → error propagates (no fallback)", async () => {
-    // Non-retriable error mid-stream: always propagates regardless of hasYielded.
+  it("primary fails mid-stream with retriable error → error propagates (no fallback)", async () => {
+    // Retriable error mid-stream: hasYielded=true forces rethrow even though it's retriable.
+    // This validates Fix 1: the catch block now checks hasYielded before deciding to fall back.
     // The fallback provider would yield different content — receiving only the partial
     // primary event confirms the fallback was NOT invoked.
     const primary = fakeProvider({
       name: "primary",
       streamEvents: [{ type: "text_delta", content: "partial" } as StreamEvent],
-      streamError: new Error("403 Forbidden"),
+      streamError: new Error("429 mid-stream rate limit"),
       streamErrorAfterEvents: 1,
     });
     const fallback = fakeProvider({
@@ -126,7 +127,7 @@ describe("createFallbackProvider — stream()", () => {
       thrown = err as Error;
     }
     assert.ok(thrown, "expected an error to be thrown");
-    assert.match(thrown.message, /403 Forbidden/);
+    assert.match(thrown.message, /mid-stream/i);
     // Exactly 1 event was yielded before the error (the "partial" event from primary)
     assert.equal(events.length, 1);
     assert.equal((events[0] as { type: string; content: string }).content, "partial");
