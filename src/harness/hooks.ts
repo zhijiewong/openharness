@@ -93,6 +93,14 @@ function buildEnv(event: HookEvent, ctx: HookContext): Record<string, string> {
   if (ctx.newCwd) env.OH_NEW_CWD = ctx.newCwd;
   if (ctx.agentId) env.OH_AGENT_ID = ctx.agentId;
   if (ctx.message) env.OH_MESSAGE = ctx.message;
+  if (ctx.prompt !== undefined) {
+    // Cap at 8KB to avoid Windows env-var length limits.
+    const PROMPT_MAX = 8 * 1024;
+    env.OH_PROMPT = ctx.prompt.length > PROMPT_MAX ? ctx.prompt.slice(0, PROMPT_MAX) : ctx.prompt;
+  }
+  if (ctx.toolError !== undefined) env.OH_TOOL_ERROR = ctx.toolError;
+  if (ctx.errorMessage !== undefined) env.OH_ERROR_MESSAGE = ctx.errorMessage;
+  if (ctx.permissionAction !== undefined) env.OH_PERMISSION_ACTION = ctx.permissionAction;
   return env;
 }
 
