@@ -180,3 +180,46 @@ describe("createFallbackProvider — complete()", () => {
     assert.equal(wrapped.activeFallback, "fb1");
   });
 });
+
+describe("createFallbackProvider — observability", () => {
+  it("emits console.warn when a fallback activates on stream()", async () => {
+    const original = console.warn;
+    const warns: string[] = [];
+    console.warn = (msg: string) => {
+      warns.push(String(msg));
+    };
+    try {
+      const primary = fakeProvider({ name: "primary", streamError: new Error("429") });
+      const fb1 = fakeProvider({
+        name: "fb1",
+        streamEvents: [{ type: "text_delta", content: "ok" } as StreamEvent],
+      });
+      const wrapped = createFallbackProvider(primary, [{ provider: fb1 }]);
+      await drain(wrapped.stream([], "sys", [], "m"));
+      assert.equal(warns.length, 1);
+      assert.match(warns[0]!, /fell back from primary to fb1/i);
+    } finally {
+      console.warn = original;
+    }
+  });
+
+  it("does NOT emit console.warn when primary succeeds", async () => {
+    const original = console.warn;
+    const warns: string[] = [];
+    console.warn = (msg: string) => {
+      warns.push(String(msg));
+    };
+    try {
+      const primary = fakeProvider({
+        name: "primary",
+        streamEvents: [{ type: "text_delta", content: "ok" } as StreamEvent],
+      });
+      const fb1 = fakeProvider({ name: "fb1" });
+      const wrapped = createFallbackProvider(primary, [{ provider: fb1 }]);
+      await drain(wrapped.stream([], "sys", [], "m"));
+      assert.equal(warns.length, 0);
+    } finally {
+      console.warn = original;
+    }
+  });
+});

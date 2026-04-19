@@ -54,7 +54,12 @@ export function createFallbackProvider(
             hasYielded = true;
             yield event;
           }
-          _activeFallback = i === 0 ? null : p.provider.name;
+          if (i > 0) {
+            console.warn(`[provider] fell back from ${primary.name} to ${p.provider.name}`);
+            _activeFallback = p.provider.name;
+          } else {
+            _activeFallback = null;
+          }
           return;
         } catch (err) {
           // Mid-stream failure OR non-retriable OR fallback error: propagate.
@@ -79,7 +84,12 @@ export function createFallbackProvider(
         const p = providers[i]!;
         try {
           const result = await p.provider.complete(messages, systemPrompt, tools, p.model);
-          _activeFallback = i === 0 ? null : p.provider.name;
+          if (i > 0) {
+            console.warn(`[provider] fell back from ${primary.name} to ${p.provider.name}`);
+            _activeFallback = p.provider.name;
+          } else {
+            _activeFallback = null;
+          }
           return result;
         } catch (err) {
           if (!isRetriableError(err)) throw err;
