@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Three new hook events mirroring Claude Code semantics:
+  - `postToolUseFailure` fires when a tool throws or returns `{isError: true}`. Mutually exclusive with `postToolUse` (success-only now).
+  - `userPromptSubmit` fires before the user's prompt reaches the LLM. Can block (decision: "deny") or prepend context (`hookSpecificOutput.additionalContext`).
+  - `permissionRequest` fires when a tool needs approval, between `preToolUse` and the interactive ask prompt. Can respond `{decision: "allow" | "deny" | "ask"}` to short-circuit or fall through.
+- `HookOutcome` type and `emitHookWithOutcome` function (exported from `src/harness/hooks.ts`) for structured decision + context return values.
+- `parseJsonIoResponse` helper (exported) for parsing hook jsonIO-mode stdout.
+- Env vars: `OH_PROMPT`, `OH_TOOL_ERROR`, `OH_ERROR_MESSAGE`, `OH_PERMISSION_ACTION`.
+- `docs/hooks.md` — reference for all 15 hook events.
+
+### Changed
+- `postToolUse` now fires only on successful tool execution (not on `isError: true`). Previously fired on both. This is a semantic change; tools that report errors now route to `postToolUseFailure` instead.
+
 ## 2.12.0 (2026-04-18) — OAuth 2.1 for Remote MCP
 
 ### Added

@@ -317,6 +317,8 @@ hooks:
 
 Use `match` to restrict a hook to a specific tool name (e.g., `match: Bash` only triggers for the Bash tool).
 
+See [docs/hooks.md](docs/hooks.md) for the full event reference including the new `userPromptSubmit`, `permissionRequest`, and `postToolUseFailure` events.
+
 ## Cybergotchi
 
 OpenHarness ships with a Tamagotchi-style companion that lives in the side panel. It reacts to your session in real time — celebrating streaks, complaining when tools fail, and getting hungry if you ignore it.
