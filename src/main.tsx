@@ -280,6 +280,151 @@ program
     }
   });
 
+// ── `oh session`: long-lived stateful session for the Python SDK ──
+program
+  .command("session")
+  .description("Long-lived session: read JSON prompts from stdin, stream NDJSON events on stdout (for the Python SDK)")
+  .option("-m, --model <model>", "Model to use")
+  .addOption(
+    new Option("--permission-mode <mode>", "Permission mode")
+      .choices(["ask", "trust", "deny", "acceptEdits", "plan", "auto", "bypassPermissions"])
+      .default("trust"),
+  )
+  .option("--allowed-tools <tools>", "Comma-separated allowed tool names")
+  .option("--disallowed-tools <tools>", "Comma-separated disallowed tool names")
+  .option("--max-turns <n>", "Maximum turns per prompt", "20")
+  .option("--system-prompt <prompt>", "Override the system prompt")
+  .action(async (opts: Record<string, unknown>) => {
+    const savedConfig = readOhConfig();
+    const permissionMode: PermissionMode = (opts.permissionMode ??
+      savedConfig?.permissionMode ??
+      "trust") as PermissionMode;
+
+    const { createProvider } = await import("./providers/index.js");
+    const effectiveModel = (opts.model as string | undefined) ?? savedConfig?.model;
+    const overrides: Partial<ProviderConfig> = {};
+    if (savedConfig?.apiKey) overrides.apiKey = savedConfig.apiKey;
+    if (savedConfig?.baseUrl) overrides.baseUrl = savedConfig.baseUrl;
+    const { provider, model } = await createProvider(
+      effectiveModel,
+      Object.keys(overrides).length ? overrides : undefined,
+    );
+    const { query } = await import("./query.js");
+    const { createAssistantMessage, createToolResultMessage, createUserMessage } = await import("./types/message.js");
+
+    let tools = getAllTools();
+    if (opts.allowedTools) {
+      const allowed = new Set((opts.allowedTools as string).split(",").map((s) => s.trim()));
+      tools = tools.filter((t) => allowed.has(t.name));
+    }
+    if (opts.disallowedTools) {
+      const disallowed = new Set((opts.disallowedTools as string).split(",").map((s) => s.trim()));
+      tools = tools.filter((t) => !disallowed.has(t.name));
+    }
+
+    const systemPrompt = (opts.systemPrompt as string | undefined) ?? buildSystemPrompt(model);
+
+    const config = {
+      provider,
+      tools,
+      systemPrompt,
+      permissionMode,
+      maxTurns: parseInt(opts.maxTurns as string, 10),
+      model,
+    };
+
+    // Conversation history, shared across all prompts for this process.
+    const conversation: import("./types/message.js").Message[] = [];
+
+    // Announce readiness so the client can send the first prompt.
+    console.log(JSON.stringify({ type: "ready" }));
+
+    const readline = await import("node:readline");
+    const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+
+    for await (const rawLine of rl) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      let request: { id?: string; prompt?: string; command?: string };
+      try {
+        request = JSON.parse(line);
+      } catch {
+        console.log(JSON.stringify({ id: "", type: "error", message: "invalid JSON on stdin" }));
+        continue;
+      }
+
+      if (request.command === "exit") break;
+
+      const id = request.id ?? "";
+      const prompt = request.prompt;
+      if (!id || !prompt) {
+        console.log(JSON.stringify({ id, type: "error", message: "missing 'id' or 'prompt' field" }));
+        continue;
+      }
+
+      // Accumulate this turn's assistant output so we can push a full message at the end.
+      let assistantText = "";
+      const turnToolCalls: Array<{ id: string; toolName: string; arguments: Record<string, unknown> }> = [];
+      const callIdToName: Record<string, string> = {};
+      const toolResults: Array<{ callId: string; output: string; isError: boolean }> = [];
+
+      for await (const event of query(prompt, config, conversation)) {
+        if (event.type === "text_delta") {
+          assistantText += event.content;
+          console.log(JSON.stringify({ id, type: "text", content: event.content }));
+        } else if (event.type === "tool_call_start") {
+          callIdToName[event.callId] = event.toolName;
+          console.log(JSON.stringify({ id, type: "tool_start", tool: event.toolName }));
+        } else if (event.type === "tool_call_complete") {
+          turnToolCalls.push({
+            id: event.callId,
+            toolName: callIdToName[event.callId] ?? event.callId,
+            arguments: event.arguments,
+          });
+        } else if (event.type === "tool_call_end") {
+          toolResults.push({ callId: event.callId, output: event.output, isError: event.isError });
+          console.log(
+            JSON.stringify({
+              id,
+              type: "tool_end",
+              tool: callIdToName[event.callId],
+              output: event.output,
+              error: event.isError,
+            }),
+          );
+        } else if (event.type === "error") {
+          console.log(JSON.stringify({ id, type: "error", message: event.message }));
+        } else if (event.type === "cost_update") {
+          console.log(
+            JSON.stringify({
+              id,
+              type: "cost_update",
+              inputTokens: event.inputTokens,
+              outputTokens: event.outputTokens,
+              cost: event.cost,
+              model: event.model,
+            }),
+          );
+        } else if (event.type === "turn_complete") {
+          console.log(JSON.stringify({ id, type: "turn_complete", reason: event.reason }));
+        }
+      }
+
+      // Rebuild this turn's contribution to the conversation.
+      // The pattern mirrors query()'s internal accumulation at
+      // src/query/index.ts:119 (user msg pushed before turn) and 344 (assistant
+      // msg with tool calls pushed after each turn) — see the spec for detail.
+      conversation.push(createUserMessage(prompt));
+      if (assistantText || turnToolCalls.length > 0) {
+        conversation.push(createAssistantMessage(assistantText, turnToolCalls.length > 0 ? turnToolCalls : undefined));
+      }
+      for (const tr of toolResults) {
+        conversation.push(createToolResultMessage({ callId: tr.callId, output: tr.output, isError: tr.isError }));
+      }
+    }
+  });
+
 // ── Default command: just run `openharness` to start chatting ──
 program
   .command("chat", { isDefault: true })

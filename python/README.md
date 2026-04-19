@@ -43,6 +43,29 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## Multi-turn sessions
+
+For conversations that span multiple prompts (notebooks, chatbots, agents), use `OpenHarnessClient`:
+
+```python
+import asyncio
+from openharness import OpenHarnessClient, TextDelta
+
+async def main() -> None:
+    async with OpenHarnessClient(model="ollama/llama3", permission_mode="trust") as client:
+        async for event in await client.send("What is 1+1?"):
+            if isinstance(event, TextDelta):
+                print(event.content, end="")
+        print()
+        async for event in await client.send("And times 3?"):  # remembers the prior turn
+            if isinstance(event, TextDelta):
+                print(event.content, end="")
+
+asyncio.run(main())
+```
+
+The client keeps a single `oh session` subprocess warm across calls, preserving conversation state in-process. Concurrent `send()` calls on one client are serialized via an `asyncio.Lock`. Call `close()` (or exit the async context) to terminate the subprocess.
+
 ## API
 
 ### `query(prompt, **options) -> AsyncIterator[Event]`
