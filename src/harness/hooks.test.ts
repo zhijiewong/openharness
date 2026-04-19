@@ -7,6 +7,7 @@ import {
   emitHook,
   emitHookAsync,
   emitHookWithOutcome,
+  type HookOutcome,
   invalidateHookCache,
   matchesHook,
   parseJsonIoResponse,
@@ -474,5 +475,69 @@ describe("emitHookWithOutcome (jsonIO hooks)", () => {
       // deny is ignored — notify-only
       assert.equal(outcome.allowed, true);
     });
+  });
+});
+
+describe("emitHookWithOutcome — env-mode exit-code mapping (Task 7)", () => {
+  async function runEnvExitTest(opts: {
+    event: "userPromptSubmit" | "permissionRequest" | "postToolUseFailure";
+    exitCode: number;
+  }): Promise<HookOutcome> {
+    let outcome!: HookOutcome;
+    await withTmpCwdAsync(async (dir) => {
+      const scriptPath = `${dir}/hook.cjs`;
+      writeFileSync(scriptPath, `process.exit(${opts.exitCode});`);
+      mkdirSync(`${dir}/.oh`, { recursive: true });
+      writeFileSync(
+        `${dir}/.oh/config.yaml`,
+        [
+          "provider: mock",
+          "model: mock",
+          "permissionMode: ask",
+          "hooks:",
+          `  ${opts.event}:`,
+          `    - command: "node ${scriptPath.replace(/\\/g, "/")}"`,
+          // NOTE: no jsonIO flag — this exercises the env-mode path
+          "",
+        ].join("\n"),
+      );
+      invalidateConfigCache();
+      invalidateHookCache();
+      outcome = await emitHookWithOutcome(opts.event, {});
+    });
+    return outcome;
+  }
+
+  it("userPromptSubmit env-mode exit 0 → allowed", async () => {
+    const o = await runEnvExitTest({ event: "userPromptSubmit", exitCode: 0 });
+    assert.equal(o.allowed, true);
+    assert.equal(o.additionalContext, undefined);
+  });
+
+  it("userPromptSubmit env-mode exit nonzero → denied", async () => {
+    const o = await runEnvExitTest({ event: "userPromptSubmit", exitCode: 1 });
+    assert.equal(o.allowed, false);
+  });
+
+  it("permissionRequest env-mode exit 0 → permissionDecision 'ask' (fall-through)", async () => {
+    const o = await runEnvExitTest({ event: "permissionRequest", exitCode: 0 });
+    assert.equal(o.allowed, true);
+    assert.equal(o.permissionDecision, "ask");
+  });
+
+  it("permissionRequest env-mode exit nonzero → permissionDecision 'deny'", async () => {
+    const o = await runEnvExitTest({ event: "permissionRequest", exitCode: 1 });
+    assert.equal(o.allowed, false);
+    assert.equal(o.permissionDecision, "deny");
+  });
+
+  it("postToolUseFailure env-mode exit 0 → allowed (notify-only)", async () => {
+    const o = await runEnvExitTest({ event: "postToolUseFailure", exitCode: 0 });
+    assert.equal(o.allowed, true);
+  });
+
+  it("postToolUseFailure env-mode exit nonzero → still allowed (notify-only)", async () => {
+    const o = await runEnvExitTest({ event: "postToolUseFailure", exitCode: 1 });
+    assert.equal(o.allowed, true);
   });
 });

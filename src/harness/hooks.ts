@@ -532,6 +532,29 @@ export type HookOutcome = {
 const NOTIFY_ONLY_OUTCOME_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>(["postToolUseFailure"]);
 
 /**
+ * Map a command-hook's boolean (exit 0 / nonzero) result to a ParsedJsonIoResponse
+ * for the given event, applying per-event semantics:
+ *
+ * - userPromptSubmit: exit 0 → allow ({}); nonzero → deny.
+ * - permissionRequest: exit 0 → "ask" (fall through to user); nonzero → deny.
+ * - postToolUseFailure: notify-only — exit code is irrelevant, always return {}.
+ * - All other events: same as userPromptSubmit (exit 0 allow, nonzero deny).
+ */
+function mapEnvExitToOutcome(event: HookEvent, allowed: boolean): ParsedJsonIoResponse {
+  switch (event) {
+    case "permissionRequest":
+      return allowed
+        ? { permissionDecision: "ask" }
+        : { permissionDecision: "deny", decision: "deny", reason: "hook denied (exit code)" };
+    case "postToolUseFailure":
+      // notify-only; exit code is irrelevant
+      return {};
+    default:
+      return allowed ? {} : { decision: "deny", reason: "hook denied (exit code)" };
+  }
+}
+
+/**
  * Execute a single hook definition and return a ParsedJsonIoResponse for outcome merging.
  * Private to this module — not exported.
  */
@@ -553,15 +576,15 @@ async function runHookForOutcome(def: HookDef, event: HookEvent, ctx: HookContex
   }
 
   if (def.command) {
-    // env-var mode — gate on exit code
+    // env-var mode — apply per-event exit-code semantics
     const env = buildEnv(event, ctx);
     const code = await runCommandHookAsync(def.command, env, def.timeout ?? 10_000);
-    return code === 0 ? {} : { decision: "deny", reason: "hook denied (non-zero exit)" };
+    return mapEnvExitToOutcome(event, code === 0);
   }
 
   if (def.http) {
     const allowed = await runHttpHook(def.http, event, ctx, def.timeout ?? 10_000);
-    return allowed ? {} : { decision: "deny", reason: "http hook denied" };
+    return mapEnvExitToOutcome(event, allowed);
   }
 
   if (def.prompt) {
