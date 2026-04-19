@@ -186,26 +186,21 @@ function runCommandHookAsync(command: string, env: Record<string, string>, timeo
 }
 
 /**
- * Run a JSON-mode command hook (Claude Code convention).
+ * Run a JSON-mode command hook and return the raw stdout string.
  *
- * Sends `{event, ...context}` as JSON on stdin. Parses stdout as JSON
- * `{ decision: "allow" | "deny", reason?: string, hookSpecificOutput?: any }`.
- *
- * Gating logic:
- *   - `decision: "deny"` → blocks (returns false).
- *   - `decision: "allow"` or omitted decision → allow (returns true).
- *   - Non-zero exit code → block.
- *   - Invalid/empty JSON on stdout → fall back to exit code (0 = allow).
- *   - Timeout or spawn error → block.
+ * Rejects (throws) on timeout or spawn error so callers can decide how to
+ * interpret the failure. Returns an empty string when stdout is empty.
+ * Rejects when the process exits with a non-zero code (callers treat this as
+ * a block).
  */
-function runJsonIoHookAsync(
+function runJsonIoHookCaptureStdout(
   command: string,
   env: Record<string, string>,
   event: HookEvent,
   ctx: HookContext,
   timeoutMs = 10_000,
-): Promise<boolean> {
-  return new Promise((resolve) => {
+): Promise<string> {
+  return new Promise((resolve, reject) => {
     const proc = spawn(command, {
       shell: true,
       timeout: timeoutMs,
@@ -219,7 +214,7 @@ function runJsonIoHookAsync(
       if (!settled) {
         settled = true;
         proc.kill();
-        resolve(false);
+        reject(new Error("hook timed out"));
       }
     }, timeoutMs);
 
@@ -241,39 +236,64 @@ function runJsonIoHookAsync(
       settled = true;
       clearTimeout(timer);
 
-      // Non-zero exit is always a block, regardless of stdout.
       if ((code ?? 1) !== 0) {
-        resolve(false);
+        reject(new Error(`hook exited with code ${code ?? 1}`));
         return;
       }
 
-      // Empty stdout → treat exit code as the signal (allow for exit 0).
-      if (!stdoutBuf.trim()) {
-        resolve(true);
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(stdoutBuf) as { decision?: string };
-        if (parsed.decision === "deny") {
-          resolve(false);
-        } else {
-          resolve(true); // "allow" or omitted → allow
-        }
-      } catch {
-        // Malformed JSON with a zero exit — fail closed conservatively.
-        resolve(false);
-      }
+      resolve(stdoutBuf);
     });
 
-    proc.on("error", () => {
+    proc.on("error", (err) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        resolve(false);
+        reject(err);
       }
     });
   });
+}
+
+/**
+ * Run a JSON-mode command hook (Claude Code convention).
+ *
+ * Sends `{event, ...context}` as JSON on stdin. Parses stdout as JSON
+ * `{ decision: "allow" | "deny", reason?: string, hookSpecificOutput?: any }`.
+ *
+ * Gating logic:
+ *   - `decision: "deny"` → blocks (returns false).
+ *   - `decision: "allow"` or omitted decision → allow (returns true).
+ *   - Non-zero exit code → block.
+ *   - Invalid/empty JSON on stdout → fall back to exit code (0 = allow).
+ *   - Timeout or spawn error → block.
+ */
+async function runJsonIoHookAsync(
+  command: string,
+  env: Record<string, string>,
+  event: HookEvent,
+  ctx: HookContext,
+  timeoutMs = 10_000,
+): Promise<boolean> {
+  let stdout: string;
+  try {
+    stdout = await runJsonIoHookCaptureStdout(command, env, event, ctx, timeoutMs);
+  } catch {
+    // timeout, spawn error, or non-zero exit — block
+    return false;
+  }
+
+  // Empty stdout → treat exit code as the signal (allow for exit 0).
+  if (!stdout.trim()) {
+    return true;
+  }
+
+  try {
+    const parsed = JSON.parse(stdout) as { decision?: string };
+    return parsed.decision !== "deny";
+  } catch {
+    // Malformed JSON with a zero exit — fail closed conservatively.
+    return false;
+  }
 }
 
 /** Run an HTTP hook. POSTs context as JSON, expects { allowed: true/false }. */
@@ -456,4 +476,144 @@ export async function emitHookAsync(event: HookEvent, ctx: HookContext = {}): Pr
     if (event === "preToolUse" && !allowed) return false;
   }
   return true;
+}
+
+// ── Structured-outcome hook emitter (Task 2) ──
+
+/** Parsed shape of a jsonIO hook's stdout JSON response. */
+export type ParsedJsonIoResponse = {
+  decision?: "allow" | "deny";
+  reason?: string;
+  additionalContext?: string;
+  permissionDecision?: "allow" | "deny" | "ask";
+};
+
+/** Parse a hook's stdout as a jsonIO envelope. Returns an empty object on malformed input. */
+export function parseJsonIoResponse(raw: string): ParsedJsonIoResponse {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+  const rec = obj as Record<string, unknown>;
+  const out: ParsedJsonIoResponse = {};
+  if (rec.decision === "allow" || rec.decision === "deny") out.decision = rec.decision;
+  if (typeof rec.reason === "string") out.reason = rec.reason;
+  const hso = rec.hookSpecificOutput;
+  if (hso && typeof hso === "object" && !Array.isArray(hso)) {
+    const hsoRec = hso as Record<string, unknown>;
+    if (typeof hsoRec.additionalContext === "string") out.additionalContext = hsoRec.additionalContext;
+    if (hsoRec.decision === "allow" || hsoRec.decision === "deny" || hsoRec.decision === "ask") {
+      out.permissionDecision = hsoRec.decision;
+    }
+    if (typeof hsoRec.reason === "string" && !out.reason) out.reason = hsoRec.reason;
+  }
+  return out;
+}
+
+export type HookOutcome = {
+  allowed: boolean;
+  additionalContext?: string;
+  permissionDecision?: "allow" | "deny" | "ask";
+  reason?: string;
+};
+
+/** Events for which "notify-only" semantics apply — outcome.allowed is always true. */
+const NOTIFY_ONLY_OUTCOME_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>(["postToolUseFailure"]);
+
+/**
+ * Execute a single hook definition and return a ParsedJsonIoResponse for outcome merging.
+ * Private to this module — not exported.
+ */
+async function runHookForOutcome(def: HookDef, event: HookEvent, ctx: HookContext): Promise<ParsedJsonIoResponse> {
+  if (def.jsonIO && def.command) {
+    const env = buildEnv(event, ctx);
+    let raw: string;
+    try {
+      raw = await runJsonIoHookCaptureStdout(def.command, env, event, ctx, def.timeout ?? 10_000);
+    } catch {
+      // timeout, spawn error, non-zero exit — treat as deny for gating events
+      return { decision: "deny", reason: "hook failed (timeout or non-zero exit)" };
+    }
+    if (!raw.trim()) {
+      // empty stdout with exit 0 — treat as allow (no decision)
+      return {};
+    }
+    return parseJsonIoResponse(raw);
+  }
+
+  if (def.command) {
+    // env-var mode — gate on exit code
+    const env = buildEnv(event, ctx);
+    const code = await runCommandHookAsync(def.command, env, def.timeout ?? 10_000);
+    return code === 0 ? {} : { decision: "deny", reason: "hook denied (non-zero exit)" };
+  }
+
+  if (def.http) {
+    const allowed = await runHttpHook(def.http, event, ctx, def.timeout ?? 10_000);
+    return allowed ? {} : { decision: "deny", reason: "http hook denied" };
+  }
+
+  if (def.prompt) {
+    const allowed = await runPromptHook(def.prompt, ctx, def.timeout ?? 10_000);
+    return allowed ? {} : { decision: "deny", reason: "prompt hook denied" };
+  }
+
+  return {};
+}
+
+/**
+ * Emit a hook event and return a structured HookOutcome parsed from jsonIO responses.
+ *
+ * Merge semantics:
+ * - First `deny` (or `permissionDecision: "deny"`) short-circuits: {allowed: false, ...}.
+ * - `permissionDecision: "allow"` short-circuits: {allowed: true, permissionDecision: "allow"}.
+ * - `additionalContext` from multiple hooks is concatenated in order, "\n\n" separated.
+ * - For NOTIFY_ONLY_OUTCOME_EVENTS (postToolUseFailure), decision/permissionDecision
+ *   from hooks is ignored — outcome.allowed is always true. additionalContext is still collected.
+ */
+export async function emitHookWithOutcome(event: HookEvent, ctx: HookContext = {}): Promise<HookOutcome> {
+  const hooks = getHooks();
+  const list = hooks?.[event];
+  if (!list || list.length === 0) return { allowed: true };
+  const notifyOnly = NOTIFY_ONLY_OUTCOME_EVENTS.has(event);
+
+  const additionalContexts: string[] = [];
+  let reason: string | undefined;
+  let askSeen = false;
+
+  for (const def of list) {
+    if (def.match && !matchesHook(def, ctx)) continue;
+    const parsed = await runHookForOutcome(def, event, ctx);
+
+    if (!notifyOnly) {
+      if (parsed.decision === "deny" || parsed.permissionDecision === "deny") {
+        return {
+          allowed: false,
+          reason: parsed.reason ?? reason,
+          permissionDecision: parsed.permissionDecision,
+        };
+      }
+      if (parsed.permissionDecision === "allow") {
+        if (parsed.additionalContext) additionalContexts.push(parsed.additionalContext);
+        return {
+          allowed: true,
+          permissionDecision: "allow",
+          additionalContext: additionalContexts.length ? additionalContexts.join("\n\n") : undefined,
+        };
+      }
+      if (parsed.permissionDecision === "ask") askSeen = true;
+    }
+    if (parsed.additionalContext) additionalContexts.push(parsed.additionalContext);
+    if (!reason && parsed.reason) reason = parsed.reason;
+  }
+
+  return {
+    allowed: true,
+    additionalContext: additionalContexts.length ? additionalContexts.join("\n\n") : undefined,
+    permissionDecision: askSeen ? "ask" : undefined,
+    reason,
+  };
 }

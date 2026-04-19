@@ -3,9 +3,12 @@ import { describe, it } from "node:test";
 import type { McpServerConfig } from "../harness/config.js";
 import { normalizeMcpConfig } from "./config-normalize.js";
 
-// Strings with ${VAR} syntax stored as constants to satisfy noTemplateCurlyInString lint rule.
+// Strings with ${VAR} syntax — intentional literal dollar-brace, not a template expression.
+// biome-ignore lint/suspicious/noTemplateCurlyInString: intentional literal ${VAR} string for env-expansion tests
 const bearerLinear = "Bearer " + "${LINEAR_TOKEN}";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: intentional literal ${VAR} string for env-expansion tests
 const bearerMissing = "Bearer " + "${MISSING_TOKEN}";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: intentional literal ${VAR} string for env-expansion tests
 const literalNotExpanded = "literal-" + "${NOT_EXPANDED}";
 
 describe("normalizeMcpConfig", () => {
