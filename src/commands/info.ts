@@ -12,6 +12,7 @@ import { getContextWindow } from "../harness/cost.js";
 import { normalizeMcpConfig } from "../mcp/config-normalize.js";
 import { connectedMcpServers } from "../mcp/loader.js";
 import { getAuthStatus } from "../mcp/oauth.js";
+import { getRouteSelection } from "../providers/router.js";
 import { mcpLoginHandler, mcpLogoutHandler } from "./mcp-auth.js";
 import type { CommandHandler } from "./types.js";
 
@@ -51,6 +52,7 @@ export function registerInfoCommands(
         "mcp-login",
         "mcp-logout",
         "mcp-registry",
+        "router",
         "init",
         "bug",
         "feedback",
@@ -499,6 +501,25 @@ export function registerInfoCommands(
 
   register("mcp-logout", "Wipe local OAuth tokens for an MCP server", async (args) => {
     return mcpLogoutHandler(args);
+  });
+
+  register("router", "Show the model router state", (_args, ctx) => {
+    const cfg = readOhConfig()?.modelRouter;
+    const defaultModel = ctx.model ?? "unknown";
+    if (!cfg || (!cfg.fast && !cfg.balanced && !cfg.powerful)) {
+      return { output: `Router: off (single model: ${defaultModel})`, handled: true };
+    }
+    const last = ctx.sessionId ? getRouteSelection(ctx.sessionId) : undefined;
+    const lines = [
+      "Model router:",
+      `  fast       ${cfg.fast ?? `(default: ${defaultModel})`}`,
+      `  balanced   ${cfg.balanced ?? `(default: ${defaultModel})`}`,
+      `  powerful   ${cfg.powerful ?? `(default: ${defaultModel})`}`,
+    ];
+    if (last) {
+      lines.push("", `Last selection: ${last.tier} — "${last.reason}"`);
+    }
+    return { output: lines.join("\n"), handled: true };
   });
 
   register("init", "Initialize project with .oh/ config", () => {
