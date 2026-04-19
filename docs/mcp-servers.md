@@ -111,6 +111,23 @@ Set `auth: "none"` to suppress the OAuth auto-flow. A 401 response will surface 
 
 ## Token storage
 
-Tokens and dynamically registered client info live at `~/.oh/credentials/mcp/<server-name>.json` with file mode `0600` and directory mode `0700` on Linux/macOS (mode checks do not apply on Windows). Corrupt files are treated as "no tokens" without crashing.
+openHarness stores MCP OAuth tokens in the **OS keychain** by default — macOS Keychain, Windows Credential Manager, or Linux Secret Service (libsecret). When the keychain isn't available (headless Linux without D-Bus, Docker containers, or the optional `@napi-rs/keyring` binary didn't load), tokens fall back transparently to `~/.oh/credentials/mcp/<server-name>.json` with file mode `0600`. Corrupt files on the filesystem fallback are treated as "no tokens" without crashing.
 
-OS keychain storage is not supported in this release and is tracked as a future enhancement.
+### Opting out of the keychain
+
+Force filesystem-only storage by setting in `.oh/config.yaml`:
+
+```yaml
+credentials:
+  storage: filesystem   # default: "auto" (keychain if available)
+```
+
+Useful for shared machines, kiosks, or environments where the OS would prompt for authentication on every read.
+
+### Migration from v2.12.0
+
+Zero migration burden. Existing filesystem tokens continue to load via the fallback path and migrate to the keychain organically on the next save. No manual command needed. Filesystem files are not auto-deleted — you can `rm` them manually once you've confirmed keychain is working, or leave them as a recovery fallback.
+
+### Keychain entry naming
+
+Service name `openharness-mcp`, account name `<server-name>`. On macOS, inspect with `security find-generic-password -s openharness-mcp`. On Linux, `secret-tool search service openharness-mcp`.
