@@ -21,6 +21,8 @@ export type Session = {
   gitBranch?: string;
   workingDir?: string;
   tools?: string[];
+  /** For forked sessions: the session this one was forked from. */
+  parentSessionId?: string;
   /** Hibernate state — saved on exit for wake reconstruction */
   hibernate?: {
     summary?: string; // LLM-generated summary of session state
@@ -34,7 +36,7 @@ export type Session = {
 export function createSession(
   provider: string,
   model: string,
-  extras?: { gitBranch?: string; workingDir?: string; tools?: string[] },
+  extras?: { gitBranch?: string; workingDir?: string; tools?: string[]; parentSessionId?: string },
 ): Session {
   return {
     id: randomUUID().slice(0, 12),
@@ -47,6 +49,7 @@ export function createSession(
     ...(extras?.gitBranch ? { gitBranch: extras.gitBranch } : {}),
     ...(extras?.workingDir ? { workingDir: extras.workingDir } : {}),
     ...(extras?.tools ? { tools: extras.tools } : {}),
+    ...(extras?.parentSessionId ? { parentSessionId: extras.parentSessionId } : {}),
   };
 }
 
@@ -95,6 +98,7 @@ export function listSessions(dir?: string): Array<{
   messages: number;
   cost: number;
   updatedAt: number;
+  parentSessionId?: string;
 }> {
   const sessionDir = dir ?? DEFAULT_SESSION_DIR;
   if (!existsSync(sessionDir)) return [];
@@ -110,6 +114,7 @@ export function listSessions(dir?: string): Array<{
           messages: data.messages?.length ?? 0,
           cost: data.totalCost ?? 0,
           updatedAt: data.updatedAt ?? 0,
+          ...(data.parentSessionId ? { parentSessionId: data.parentSessionId } : {}),
         };
       } catch {
         return null;

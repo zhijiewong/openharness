@@ -8,7 +8,33 @@ import { dirname, join, resolve } from "node:path";
 import { getContextWindow } from "../harness/cost.js";
 import { createSession, listSessions, loadSession, saveSession } from "../harness/session.js";
 import { compressMessages } from "../query/index.js";
+import type { Message } from "../types/message.js";
 import type { CommandContext, CommandHandler, CommandResult } from "./types.js";
+
+function formatMessagesAsMarkdown(messages: readonly Message[]): string {
+  const blocks: string[] = [];
+  for (const m of messages) {
+    if (m.role === "user") {
+      blocks.push(`## User\n\n${m.content}`);
+    } else if (m.role === "assistant") {
+      const parts: string[] = [];
+      if (m.content) parts.push(m.content);
+      if (m.toolCalls?.length) {
+        for (const tc of m.toolCalls) {
+          parts.push(`**Tool call:** \`${tc.toolName}(${JSON.stringify(tc.arguments)})\``);
+        }
+      }
+      blocks.push(`## Assistant\n\n${parts.join("\n\n")}`);
+    } else if (m.role === "tool") {
+      for (const tr of m.toolResults ?? []) {
+        const label = tr.isError ? "Tool error" : "Tool result";
+        blocks.push(`**${label}:**\n\n\`\`\`\n${tr.output}\n\`\`\``);
+      }
+    }
+    // system / info messages are skipped — they're OH-internal UX, not conversation
+  }
+  return blocks.join("\n\n");
+}
 
 function setPinned(args: string, ctx: CommandContext, pinned: boolean): CommandResult {
   const idx = parseInt(args.trim(), 10);
@@ -70,20 +96,19 @@ export function registerSessionCommands(
     };
   });
 
-  register("export", "Export conversation to file", (_args, ctx) => {
-    const lines = ctx.messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-      .join("\n\n");
+  register("export", "Export conversation to file (args: 'json' for JSON format)", (args, ctx) => {
+    const asJson = args.trim().toLowerCase() === "json";
+    const ext = asJson ? "json" : "md";
+    const filename = `.oh/export-${ctx.sessionId}.${ext}`;
+    const body = asJson ? JSON.stringify(ctx.messages, null, 2) : formatMessagesAsMarkdown(ctx.messages);
 
-    const filename = `.oh/export-${ctx.sessionId}.md`;
     try {
       mkdirSync(dirname(filename), { recursive: true });
       const { writeFileSync } = require("node:fs");
-      writeFileSync(filename, lines);
-      return { output: `Exported to ${filename}`, handled: true };
+      writeFileSync(filename, body);
+      return { output: `Exported ${ctx.messages.length} messages to ${filename}`, handled: true };
     } catch {
-      return { output: `Export failed. Content:\n\n${lines.slice(0, 500)}`, handled: true };
+      return { output: `Export failed. Content:\n\n${body.slice(0, 500)}`, handled: true };
     }
   });
 
@@ -120,7 +145,8 @@ export function registerSessionCommands(
     const lines = sessions.map((s) => {
       const date = new Date(s.updatedAt).toLocaleDateString();
       const cost = s.cost > 0 ? ` $${s.cost.toFixed(4)}` : "";
-      return `  ${s.id}  ${date}  ${String(s.messages).padStart(3)} msgs  ${(s.model || "?").slice(0, 24)}${cost}`;
+      const parent = s.parentSessionId ? ` ⤴ forked from ${s.parentSessionId}` : "";
+      return `  ${s.id}  ${date}  ${String(s.messages).padStart(3)} msgs  ${(s.model || "?").slice(0, 24)}${cost}${parent}`;
     });
     return { output: `Recent sessions (use /resume <id> to continue):\n${lines.join("\n")}`, handled: true };
   });
@@ -142,11 +168,11 @@ export function registerSessionCommands(
   });
 
   register("fork", "Fork current session (create a branch you can resume later)", (_args, ctx) => {
-    const forked = createSession("", "");
+    const forked = createSession(ctx.providerName, ctx.model, { parentSessionId: ctx.sessionId });
     forked.messages = [...ctx.messages];
     saveSession(forked);
     return {
-      output: `Session forked as ${forked.id}. Resume later with: oh --resume ${forked.id}`,
+      output: `Session forked as ${forked.id} (from ${ctx.sessionId}). Resume later with: oh --resume ${forked.id}`,
       handled: true,
     };
   });
