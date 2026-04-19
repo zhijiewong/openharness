@@ -381,7 +381,7 @@ describe("tools.ts — postToolUse / postToolUseFailure mutual exclusion", () =>
       await executeSingleTool(makeToolCall("ErrorB"), [errorTool], makeContext(), "trust");
 
       // Poll for both fire-and-forget hook processes to flush their stdout to
-      // the capture file. On slow CI runners, a fixed 200ms wait is too short.
+      // the capture file. On slow CI runners, a fixed wait is too short.
       const deadline = Date.now() + 5_000;
       let fired: string[] = [];
       while (Date.now() < deadline) {
@@ -389,11 +389,15 @@ describe("tools.ts — postToolUse / postToolUseFailure mutual exclusion", () =>
         if (fired.length >= 2) break;
         await new Promise<void>((r) => setTimeout(r, 50));
       }
+      // Child-process write order is NOT guaranteed across the two
+      // executeSingleTool calls — assert set-membership instead of array order.
+      fired = [...fired].sort();
 
-      // SuccessA → postToolUse, ErrorB → postToolUseFailure
+      // SuccessA → postToolUse fires for the success call.
+      // ErrorB → postToolUseFailure fires for the failure call.
+      // Exactly two events, one of each kind (order-independent).
       assert.equal(fired.length, 2, "exactly two hook events should have fired");
-      assert.equal(fired[0], "postToolUse", "first event should be postToolUse (success)");
-      assert.equal(fired[1], "postToolUseFailure", "second event should be postToolUseFailure (error)");
+      assert.deepEqual(fired, ["postToolUse", "postToolUseFailure"], "both hook events should have fired exactly once");
     } finally {
       process.chdir(original);
       invalidateHookCache();
