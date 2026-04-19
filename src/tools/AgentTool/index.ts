@@ -114,7 +114,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
       const runAgent = async () => {
         let finalText = "";
         try {
-          for await (const event of query(input.prompt, config)) {
+          for await (const event of query(input.prompt, { ...config, role: role?.id })) {
             if (event.type === "text_delta") finalText += event.content;
           }
         } finally {
@@ -154,7 +154,7 @@ export const AgentTool: Tool<typeof inputSchema> = {
 
     try {
       try {
-        for await (const event of query(input.prompt, config)) {
+        for await (const event of query(input.prompt, { ...config, role: role?.id })) {
           if (event.type === "text_delta") {
             finalText += event.content;
           } else if (event.type === "tool_output_delta") {

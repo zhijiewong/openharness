@@ -13,6 +13,52 @@ OpenHarness uses a 3-layer config hierarchy:
 
 Later layers override earlier ones.
 
+## Model router
+
+Route different parts of your conversation to different models automatically. Configure distinct models per tier in `.oh/config.yaml`:
+
+```yaml
+provider: anthropic
+model: claude-sonnet-4-6
+modelRouter:
+  fast: ollama/qwen2.5:7b         # exploration, tool dispatching
+  balanced: gpt-4o-mini           # general turns
+  powerful: claude-opus-4-7       # final responses, code-review sub-agents
+```
+
+All three fields are optional. When a tier is unset, it falls back to the top-level `model:`. When the whole `modelRouter:` block is unset, no routing happens — every turn uses `model:`.
+
+### Heuristics
+
+- **Context pressure > 80%** → `fast` (minimize input-token cost)
+- **Sub-agent role** in `code-reviewer`, `evaluator`, `architect`, `security-auditor` → `powerful`
+- **Early exploration** (turn 1–2, previous turn had tool calls) → `fast`
+- **Tool-heavy turn** (≥3 tool calls on previous turn) → `fast`
+- **Final response** (previous turn had no tool calls, turn > 1) → `powerful`
+- **Otherwise** → `balanced`
+
+### `/router` slash command
+
+Inspect the current router state and the last selection for your session:
+
+```
+> /router
+Model router:
+  fast       ollama/qwen2.5:7b
+  balanced   gpt-4o-mini
+  powerful   claude-opus-4-7
+
+Last selection: balanced — "default"
+```
+
+When unconfigured: `Router: off (single model: claude-sonnet-4-6)`.
+
+### Notes
+
+- Context-pressure routing requires the provider to implement `estimateTokens` and a known `contextWindow` on the model. Providers without tokenization still get all other heuristics.
+- Config reloads at the start of each user turn — edits to `.oh/config.yaml` take effect on the next prompt submission.
+- Sub-agents spawned via the `Agent` tool inherit the router's decisions based on their `role` (e.g. a `code-reviewer` agent routes to `powerful` automatically).
+
 ## Full Config Reference
 
 ```yaml

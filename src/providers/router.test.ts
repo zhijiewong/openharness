@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ModelRouter } from "./router.js";
+import { getRouteSelection, ModelRouter, recordRouteSelection } from "./router.js";
 
 describe("ModelRouter", () => {
   const router = new ModelRouter(
@@ -79,5 +79,34 @@ describe("ModelRouter", () => {
       contextUsage: 0.9,
     });
     assert.equal(result.tier, "fast", "context pressure should override role");
+  });
+});
+
+describe("recordRouteSelection / getRouteSelection", () => {
+  it("round-trips a selection by sessionId", () => {
+    recordRouteSelection("s1", { model: "m", tier: "fast", reason: "test" });
+    const got = getRouteSelection("s1");
+    assert.equal(got?.model, "m");
+    assert.equal(got?.tier, "fast");
+    assert.equal(got?.reason, "test");
+  });
+
+  it("returns undefined for unknown sessionId", () => {
+    assert.equal(getRouteSelection("never-seen-session"), undefined);
+  });
+
+  it("overwrites previous selection for the same sessionId", () => {
+    recordRouteSelection("s2", { model: "a", tier: "fast", reason: "first" });
+    recordRouteSelection("s2", { model: "b", tier: "powerful", reason: "second" });
+    assert.equal(getRouteSelection("s2")?.tier, "powerful");
+    assert.equal(getRouteSelection("s2")?.model, "b");
+  });
+
+  it("evicts oldest entries past LRU cap", () => {
+    for (let i = 0; i < 260; i++) {
+      recordRouteSelection(`cap-${i}`, { model: "m", tier: "balanced", reason: "x" });
+    }
+    assert.equal(getRouteSelection("cap-0"), undefined, "oldest should be evicted");
+    assert.ok(getRouteSelection("cap-259"), "newest should be present");
   });
 });

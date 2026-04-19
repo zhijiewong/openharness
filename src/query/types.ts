@@ -22,6 +22,8 @@ export type QueryConfig = {
   workingDir?: string;
   /** Auto-commit after each file-modifying tool */
   gitCommitPerTool?: boolean;
+  /** For sub-agent invocations: the agent role name (feeds into the model router). */
+  role?: string;
 };
 
 export type TransitionReason = "next_turn" | "retry_network" | "retry_prompt_too_long" | "retry_max_output_tokens";
@@ -37,4 +39,8 @@ export type QueryLoopState = {
   promptTooLongRetries?: number;
   /** Track consecutive compression failures for circuit breaker */
   compressionFailures?: number;
+  /** Whether the previous turn made any tool calls (feeds ModelRouter) */
+  lastTurnHadTools?: boolean;
+  /** Number of tool calls in the previous turn (feeds ModelRouter) */
+  lastTurnToolCount?: number;
 };
