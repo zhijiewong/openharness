@@ -18,6 +18,9 @@ function findTests(dir) {
 }
 
 const tests = findTests("src");
+// Disable OS keychain for test runs so tests don't leak credentials through the
+// real system credential store. Individual tests can override in-process.
 execSync(`tsx --test ${tests.map((f) => `"${f}"`).join(" ")}`, {
   stdio: "inherit",
+  env: { ...process.env, OH_KEYCHAIN: "disabled" },
 });

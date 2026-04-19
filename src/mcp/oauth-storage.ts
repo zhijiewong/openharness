@@ -28,6 +28,10 @@ export type { OhCredentials } from "./oauth-storage-fs.js";
 import type { OhCredentials } from "./oauth-storage-fs.js";
 
 function shouldUseKeychain(): boolean {
+  // Explicit opt-out via env var (used by the test runner to isolate tests
+  // from the real OS keychain). Accepts "disabled", "false", "0", or "off".
+  const envOpt = (process.env.OH_KEYCHAIN ?? "").toLowerCase();
+  if (envOpt === "disabled" || envOpt === "false" || envOpt === "0" || envOpt === "off") return false;
   const cfg = readOhConfig();
   if (cfg?.credentials?.storage === "filesystem") return false;
   return keychainAvailable();
