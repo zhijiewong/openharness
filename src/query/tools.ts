@@ -103,12 +103,22 @@ export async function executeSingleTool(
       }),
     ]);
 
-    // Hook: postToolUse
-    emitHook("postToolUse", {
-      toolName: tool.name,
-      toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
-      toolOutput: result.output.slice(0, 1000),
-    });
+    // Hook: postToolUse / postToolUseFailure (mutually exclusive — strict CC parity)
+    if (result.isError) {
+      emitHook("postToolUseFailure", {
+        toolName: tool.name,
+        toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+        toolOutput: result.output.slice(0, 1000),
+        toolError: "ReportedError",
+        errorMessage: result.output.slice(0, 1000),
+      });
+    } else {
+      emitHook("postToolUse", {
+        toolName: tool.name,
+        toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+        toolOutput: result.output.slice(0, 1000),
+      });
+    }
 
     // Emit fileChanged hook for file-modifying tools
     if (!result.isError && ["Edit", "Write", "MultiEdit"].includes(tool.name)) {
@@ -167,7 +177,15 @@ export async function executeSingleTool(
     }
     return { output, isError: result.isError };
   } catch (err) {
-    return { output: `Tool error: ${err instanceof Error ? err.message : String(err)}`, isError: true };
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errName = err instanceof Error ? err.name : "ExecutionError";
+    emitHook("postToolUseFailure", {
+      toolName: tool.name,
+      toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+      errorMessage: errMsg,
+      toolError: errName,
+    });
+    return { output: `Tool error: ${errMsg}`, isError: true };
   }
 }
 
