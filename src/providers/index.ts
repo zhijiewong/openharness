@@ -2,8 +2,10 @@
  * Provider factory — create the right provider from a model string.
  */
 
+import { readOhConfig } from "../harness/config.js";
 import { AnthropicProvider } from "./anthropic.js";
 import type { Provider, ProviderConfig } from "./base.js";
+import { createFallbackProvider, type FallbackConfig } from "./fallback.js";
 import { LlamaCppProvider } from "./llamacpp.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAIProvider } from "./openai.js";
@@ -37,8 +39,25 @@ export async function createProvider(
     ...overrides,
   };
 
-  const provider = createProviderInstance(providerName, config);
-  return { provider, model };
+  const primary = createProviderInstance(providerName, config);
+
+  const fallbackCfgs = readOhConfig()?.fallbackProviders ?? [];
+  if (fallbackCfgs.length === 0) {
+    return { provider: primary, model };
+  }
+
+  const fallbacks: FallbackConfig[] = fallbackCfgs.map((fb) => ({
+    provider: createProviderInstance(fb.provider, {
+      name: fb.provider,
+      apiKey: fb.apiKey ?? process.env[`${fb.provider.toUpperCase()}_API_KEY`],
+      baseUrl: fb.baseUrl,
+      defaultModel: fb.model ?? model,
+    }),
+    model: fb.model,
+  }));
+
+  const wrapped = createFallbackProvider(primary, fallbacks);
+  return { provider: wrapped, model };
 }
 
 export { createProviderInstance, guessProviderFromModel };
