@@ -3,7 +3,7 @@
  */
 
 import { createCheckpoint, getAffectedFiles } from "../harness/checkpoints.js";
-import { emitHook } from "../harness/hooks.js";
+import { emitHook, emitHookWithOutcome } from "../harness/hooks.js";
 import type { ToolContext, ToolResult, Tools } from "../Tool.js";
 import { findToolByName } from "../Tool.js";
 import type { StreamEvent } from "../types/events.js";
@@ -64,9 +64,28 @@ export async function executeSingleTool(
     if (perm.reason === "needs-approval" && askUser) {
       const { formatToolArgs } = await import("../utils/tool-summary.js");
       const description = formatToolArgs(tool.name, toolCall.arguments as Record<string, unknown>);
-      const allowed = await askUser(tool.name, description, tool.riskLevel);
-      if (!allowed) {
-        return { output: "Permission denied by user.", isError: true };
+
+      // Hook: permissionRequest — fires between preToolUse and the interactive askUser prompt.
+      // Only fires when checkPermission says "needs-approval" AND askUser is provided.
+      const hookOutcome = await emitHookWithOutcome("permissionRequest", {
+        toolName: tool.name,
+        toolArgs: JSON.stringify(toolCall.arguments).slice(0, 1000),
+        toolInputJson: JSON.stringify(parsed.data).slice(0, 1000),
+        permissionMode,
+        permissionAction: "ask",
+      });
+
+      if (hookOutcome.permissionDecision === "allow") {
+        // Hook granted permission — skip interactive prompt and proceed to execution.
+      } else if (hookOutcome.permissionDecision === "deny" || !hookOutcome.allowed) {
+        const reason = hookOutcome.reason ? `: ${hookOutcome.reason}` : "";
+        return { output: `Permission denied by hook${reason}`, isError: true };
+      } else {
+        // "ask" or no decision → fall through to interactive prompt
+        const allowed = await askUser(tool.name, description, tool.riskLevel);
+        if (!allowed) {
+          return { output: "Permission denied by user.", isError: true };
+        }
       }
     } else {
       return { output: `Permission denied: ${perm.reason}`, isError: true };

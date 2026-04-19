@@ -139,7 +139,186 @@ function makeToolCall(toolName: string, args: Record<string, unknown> = {}) {
   return { toolName, arguments: args, id: "test-call-1" };
 }
 
+// ── permissionRequest helpers ────────────────────────────────────────────────
+
+/**
+ * Build a mock Tool that triggers the needs-approval branch:
+ * - riskLevel "high" + isReadOnly() false so "ask" mode won't auto-approve.
+ * - call() returns the provided ToolResult.
+ */
+function makeNeedsApprovalTool(name: string, result: ToolResult): Tool {
+  return {
+    name,
+    description: "needs-approval test tool",
+    inputSchema: z.object({ input: z.string().optional() }),
+    riskLevel: "high",
+    isReadOnly() {
+      return false;
+    },
+    isConcurrencySafe() {
+      return false;
+    },
+    async call(): Promise<ToolResult> {
+      return result;
+    },
+    prompt() {
+      return name;
+    },
+  };
+}
+
+/**
+ * Write .oh/config.yaml in `dir` with:
+ * - permissionMode: ask  (so checkPermission returns needs-approval)
+ * - a permissionRequest hook that writes `hookJson` JSON to stdout, using jsonIO.
+ *
+ * When `hookJson` is null, no permissionRequest hook is configured.
+ */
+function writePermHookConfig(dir: string, hookJson: Record<string, unknown> | null): void {
+  mkdirSync(`${dir}/.oh`, { recursive: true });
+
+  const lines = ["provider: mock", "model: mock", "permissionMode: ask"];
+
+  if (hookJson !== null) {
+    // Write a .cjs hook script that prints the decision JSON to stdout then exits 0.
+    const scriptPath = `${dir}/perm-hook.cjs`;
+    const scriptPathFwd = scriptPath.replace(/\\/g, "/");
+    writeFileSync(scriptPath, `process.stdout.write(${JSON.stringify(JSON.stringify(hookJson))});\n`);
+    lines.push("hooks:");
+    lines.push("  permissionRequest:");
+    lines.push(`    - command: 'node ${scriptPathFwd}'`);
+    lines.push("      jsonIO: true");
+  }
+
+  lines.push("");
+  writeFileSync(`${dir}/.oh/config.yaml`, lines.join("\n"));
+}
+
+/**
+ * Run `fn` inside a temporary cwd configured for permissionRequest hook testing.
+ * Returns the tool result and the askUser invocation counter.
+ */
+async function withPermHook<T>(
+  hookJson: Record<string, unknown> | null,
+  fn: (askUserCounter: { count: number }) => Promise<T>,
+): Promise<{ result: T; askUserCount: number }> {
+  const dir = makeTmpDir();
+  const original = process.cwd();
+  process.chdir(dir);
+  try {
+    writePermHookConfig(dir, hookJson);
+    invalidateConfigCache();
+    invalidateHookCache();
+
+    const counter = { count: 0 };
+    const result = await fn(counter);
+
+    return { result, askUserCount: counter.count };
+  } finally {
+    process.chdir(original);
+    invalidateHookCache();
+    invalidateConfigCache();
+  }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
+
+describe("tools.ts — permissionRequest hook", () => {
+  it("hook 'allow' skips askUser and executes tool", async () => {
+    const tool = makeNeedsApprovalTool("ApprovalTool", { output: "executed", isError: false });
+    const toolCall = makeToolCall("ApprovalTool");
+
+    const { result, askUserCount } = await withPermHook({ hookSpecificOutput: { decision: "allow" } }, (counter) => {
+      const askUser = async () => {
+        counter.count++;
+        return true;
+      };
+      return executeSingleTool(toolCall, [tool], makeContext(), "ask", askUser);
+    });
+
+    assert.equal(askUserCount, 0, "askUser must NOT be called when hook says allow");
+    assert.equal(result.isError, false, "tool should have executed normally");
+    assert.ok(result.output.includes("executed"), "tool output should be returned");
+  });
+
+  it("hook 'deny' returns permission-denied without calling askUser", async () => {
+    const tool = makeNeedsApprovalTool("DenyTool", { output: "executed", isError: false });
+    const toolCall = makeToolCall("DenyTool");
+
+    const { result, askUserCount } = await withPermHook(
+      { hookSpecificOutput: { decision: "deny", reason: "no way" } },
+      (counter) => {
+        const askUser = async () => {
+          counter.count++;
+          return true;
+        };
+        return executeSingleTool(toolCall, [tool], makeContext(), "ask", askUser);
+      },
+    );
+
+    assert.equal(askUserCount, 0, "askUser must NOT be called when hook says deny");
+    assert.equal(result.isError, true, "result should be an error");
+    assert.ok(
+      /Permission denied.*no way/.test(result.output),
+      `output should mention denial reason, got: ${result.output}`,
+    );
+  });
+
+  it("hook 'ask' falls through to askUser", async () => {
+    const tool = makeNeedsApprovalTool("AskTool", { output: "executed", isError: false });
+    const toolCall = makeToolCall("AskTool");
+
+    const { result, askUserCount } = await withPermHook({ hookSpecificOutput: { decision: "ask" } }, (counter) => {
+      const askUser = async () => {
+        counter.count++;
+        return true; // user approves
+      };
+      return executeSingleTool(toolCall, [tool], makeContext(), "ask", askUser);
+    });
+
+    assert.equal(askUserCount, 1, "askUser MUST be called when hook says ask");
+    assert.equal(result.isError, false, "tool should execute after user approves");
+  });
+
+  it("no hook configured falls through to askUser", async () => {
+    const tool = makeNeedsApprovalTool("NoHookTool", { output: "executed", isError: false });
+    const toolCall = makeToolCall("NoHookTool");
+
+    const { result, askUserCount } = await withPermHook(
+      null, // no permissionRequest hook
+      (counter) => {
+        const askUser = async () => {
+          counter.count++;
+          return true;
+        };
+        return executeSingleTool(toolCall, [tool], makeContext(), "ask", askUser);
+      },
+    );
+
+    assert.equal(askUserCount, 1, "askUser MUST be called when no hook is configured");
+    assert.equal(result.isError, false, "tool should execute after user approves");
+  });
+
+  it("malformed hook response falls through to askUser (conservative)", async () => {
+    const tool = makeNeedsApprovalTool("MalformedTool", { output: "executed", isError: false });
+    const toolCall = makeToolCall("MalformedTool");
+
+    // Hook writes garbage — no valid permissionDecision can be parsed
+    const { result, askUserCount } = await withPermHook(
+      { someOtherField: "garbage", noDecisionHere: 42 },
+      (counter) => {
+        const askUser = async () => {
+          counter.count++;
+          return true;
+        };
+        return executeSingleTool(toolCall, [tool], makeContext(), "ask", askUser);
+      },
+    );
+
+    assert.equal(askUserCount, 1, "askUser MUST be called when hook response has no decision");
+    assert.equal(result.isError, false, "tool should execute after user approves");
+  });
+});
 
 describe("tools.ts — postToolUse / postToolUseFailure mutual exclusion", () => {
   it("successful tool (isError: false) fires postToolUse ONLY — not postToolUseFailure", async () => {
