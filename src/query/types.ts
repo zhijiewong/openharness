@@ -39,4 +39,8 @@ export type QueryLoopState = {
   promptTooLongRetries?: number;
   /** Track consecutive compression failures for circuit breaker */
   compressionFailures?: number;
+  /** Whether the previous turn made any tool calls (feeds ModelRouter) */
+  lastTurnHadTools?: boolean;
+  /** Number of tool calls in the previous turn (feeds ModelRouter) */
+  lastTurnToolCount?: number;
 };

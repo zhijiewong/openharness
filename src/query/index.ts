@@ -9,12 +9,15 @@
  */
 
 import { DeferredTool } from "../DeferredTool.js";
+import { readOhConfig } from "../harness/config.js";
 import { getContextWindow } from "../harness/cost.js";
+import type { Provider } from "../providers/base.js";
+import { ModelRouter } from "../providers/router.js";
 import { StreamingToolExecutor } from "../services/StreamingToolExecutor.js";
 import type { ToolContext } from "../Tool.js";
 import { toolToAPIFormat } from "../Tool.js";
 import type { StreamEvent } from "../types/events.js";
-import type { ToolCall } from "../types/message.js";
+import type { Message, ToolCall } from "../types/message.js";
 import { createAssistantMessage, createToolResultMessage, createUserMessage } from "../types/message.js";
 import { compressMessages, estimateMessagesTokens, makeTokenEstimator, summarizeConversation } from "./compress.js";
 import { ContextManager } from "./context-manager.js";
@@ -35,12 +38,29 @@ export type { QueryConfig, QueryLoopState } from "./types.js";
 
 const DEFAULT_MAX_TURNS = 50;
 
+/** Rough context-usage estimate in [0, 1]. Returns undefined when tokenization is unavailable. */
+function estimateRouteContextUsage(messages: Message[], provider: Provider, model: string): number | undefined {
+  const estimate = provider.estimateTokens?.bind(provider);
+  if (!estimate) return undefined;
+  const info = provider.getModelInfo?.(model);
+  const window = info?.contextWindow;
+  if (!window || window <= 0) return undefined;
+  let total = 0;
+  for (const m of messages) {
+    if (typeof m.content === "string") total += estimate(m.content);
+    // Non-string content (tool calls etc.) is skipped — rough estimate only.
+  }
+  return Math.min(1, total / window);
+}
+
 export async function* query(
   userMessage: string,
   config: QueryConfig,
   existingMessages: import("../types/message.js").Message[] = [],
 ): AsyncGenerator<StreamEvent, void> {
   const maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+  const routerCfg = readOhConfig()?.modelRouter ?? {};
+  const router = new ModelRouter(routerCfg, config.model ?? "");
   const toolContext: ToolContext = {
     workingDir: config.workingDir ?? process.cwd(),
     abortSignal: config.abortSignal,
@@ -205,7 +225,16 @@ export async function* query(
     );
 
     try {
-      for await (const event of config.provider.stream(state.messages, turnPrompt, apiTools, config.model)) {
+      const ctxUsage = estimateRouteContextUsage(state.messages, config.provider, config.model ?? "");
+      const selection = router.select({
+        turn: state.turn,
+        hadToolCalls: state.lastTurnHadTools ?? false,
+        toolCallCount: state.lastTurnToolCount ?? 0,
+        contextUsage: ctxUsage,
+        isFinalResponse: (state.lastTurnHadTools === false || state.lastTurnHadTools === undefined) && state.turn > 1,
+        role: config.role,
+      });
+      for await (const event of config.provider.stream(state.messages, turnPrompt, apiTools, selection.model)) {
         if (config.abortSignal?.aborted) break;
 
         switch (event.type) {
@@ -341,6 +370,8 @@ export async function* query(
       yield* executeToolCalls(remaining, config.tools, toolContext, config.permissionMode, config.askUser, state);
     }
 
+    state.lastTurnHadTools = toolCalls.length > 0;
+    state.lastTurnToolCount = toolCalls.length;
     state.transition = "next_turn";
   }
 
