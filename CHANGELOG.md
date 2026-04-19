@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Wired the existing `createFallbackProvider` into `createProvider()`. Configure `fallbackProviders:` in `.oh/config.yaml` as an array of `{provider, model?, apiKey?, baseUrl?}`; the primary is tried first, each fallback in order on retriable failure (429/5xx/network/timeout). Auth failures (401/403) and mid-stream errors do not trigger fallback. Emits one `console.warn` to stderr on fallback activation. Adds 11 new tests (9 for `createFallbackProvider`, previously untested; 2 for factory wiring).
 - Three new hook events mirroring Claude Code semantics:
   - `postToolUseFailure` fires when a tool throws or returns `{isError: true}`. Mutually exclusive with `postToolUse` (success-only now).
   - `userPromptSubmit` fires before the user's prompt reaches the LLM. Can block (decision: "deny") or prepend context (`hookSpecificOutput.additionalContext`).

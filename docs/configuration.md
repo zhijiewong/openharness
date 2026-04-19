@@ -88,3 +88,48 @@ telemetry:
 # Status bar
 statusLineFormat: "{model} {tokens} {cost}"
 ```
+
+## Fallback providers
+
+Configure backup providers that activate when the primary fails:
+
+```yaml
+provider: anthropic
+model: claude-sonnet-4-6
+apiKey: ${ANTHROPIC_API_KEY}
+fallbackProviders:
+  - provider: openai
+    model: gpt-4o-mini
+    apiKey: ${OPENAI_API_KEY}
+  - provider: ollama
+    model: llama3
+    baseUrl: http://localhost:11434
+```
+
+The primary (`provider` + `model`) is tried first. On a retriable failure before streaming begins, each fallback is tried in order.
+
+### Retriable errors
+
+| Trigger | Retriable? |
+|---|---|
+| `429 Too Many Requests` / rate limit | Yes |
+| `503` / `529` / `overloaded` / service unavailable | Yes |
+| Network error / timeout / `ECONNREFUSED` | Yes |
+| `401` / `403` (auth failure) | **No** (different providers use different keys) |
+| Any error mid-stream (after the first event is yielded) | **No** (partial output can't be un-sent) |
+
+### Observability
+
+When a fallback activates, openHarness prints one line to stderr:
+
+```
+[provider] fell back from anthropic to openai
+```
+
+The wrapped provider also exposes a live `activeFallback` getter for programmatic access.
+
+### Known limitations
+
+- Mid-stream fallback (buffer partial output, re-stream on retriable error) is not supported.
+- Retries on the same provider with exponential backoff are not implemented — each provider in the chain is tried exactly once before moving to the next.
+- `401` / `403` failures are NOT treated as retriable because different providers use different API keys. Fix the key in your config rather than relying on fallback.
