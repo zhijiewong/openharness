@@ -14,6 +14,7 @@ Quick start::
     asyncio.run(main())
 """
 
+from .client import OpenHarnessClient
 from .events import (
     CostUpdate,
     ErrorEvent,
@@ -27,13 +28,14 @@ from .events import (
 from .exceptions import OhBinaryNotFoundError, OpenHarnessError
 from .query import query
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "CostUpdate",
     "ErrorEvent",
     "Event",
     "OhBinaryNotFoundError",
+    "OpenHarnessClient",
     "OpenHarnessError",
     "TextDelta",
     "ToolEnd",
