@@ -11,6 +11,7 @@ import type { Message } from "../types/message.js";
 import { createInfoMessage, createUserMessage } from "../types/message.js";
 import type { PermissionMode } from "../types/permissions.js";
 import type { CostTracker } from "./cost.js";
+import { emitHookWithOutcome } from "./hooks.js";
 
 export type SubmitContext = {
   messages: Message[];
@@ -110,10 +111,28 @@ export async function handleUserInput(input: string, ctx: SubmitContext): Promis
       }
       if (result.prependToPrompt) {
         messages = [...messages, createUserMessage(input)];
+        const prependPrompt = result.prependToPrompt;
+        const prependOutcome = await emitHookWithOutcome("userPromptSubmit", {
+          prompt: prependPrompt,
+          sessionId: ctx.sessionId,
+          model: ctx.currentModel,
+          provider: ctx.providerName,
+          permissionMode: ctx.permissionMode,
+        });
+        if (!prependOutcome.allowed) {
+          const reason = prependOutcome.reason ? `: ${prependOutcome.reason}` : "";
+          return {
+            handled: true,
+            messages: [...messages, createInfoMessage(`Blocked by userPromptSubmit hook${reason}`)],
+          };
+        }
+        const finalPrependPrompt = prependOutcome.additionalContext
+          ? `${prependOutcome.additionalContext}\n\n${prependPrompt}`
+          : prependPrompt;
         return {
           handled: false,
           messages,
-          prompt: result.prependToPrompt,
+          prompt: finalPrependPrompt,
           newModel: result.newModel ?? undefined,
         };
       }
@@ -171,5 +190,20 @@ export async function handleUserInput(input: string, ctx: SubmitContext): Promis
     }
   }
 
-  return { handled: false, messages, prompt: resolvedInput };
+  const outcome = await emitHookWithOutcome("userPromptSubmit", {
+    prompt: resolvedInput,
+    sessionId: ctx.sessionId,
+    model: ctx.currentModel,
+    provider: ctx.providerName,
+    permissionMode: ctx.permissionMode,
+  });
+  if (!outcome.allowed) {
+    const reason = outcome.reason ? `: ${outcome.reason}` : "";
+    return {
+      handled: true,
+      messages: [...messages, createInfoMessage(`Blocked by userPromptSubmit hook${reason}`)],
+    };
+  }
+  const finalPrompt = outcome.additionalContext ? `${outcome.additionalContext}\n\n${resolvedInput}` : resolvedInput;
+  return { handled: false, messages, prompt: finalPrompt };
 }
