@@ -251,7 +251,22 @@ program
         else if (outputFormat === "stream-json") {
           console.log(JSON.stringify({ type: "error", message: event.message }));
         }
+      } else if (event.type === "cost_update") {
+        if (outputFormat === "stream-json") {
+          console.log(
+            JSON.stringify({
+              type: "cost_update",
+              inputTokens: event.inputTokens,
+              outputTokens: event.outputTokens,
+              cost: event.cost,
+              model: event.model,
+            }),
+          );
+        }
       } else if (event.type === "turn_complete") {
+        if (outputFormat === "stream-json") {
+          console.log(JSON.stringify({ type: "turn_complete", reason: event.reason }));
+        }
         if (event.reason !== "completed") {
           process.exitCode = 1;
         }

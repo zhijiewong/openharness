@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openharness"
+version = "0.1.0"
+description = "Python SDK for openHarness — drive the `oh` terminal coding agent from Python."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Zhijie Wong", email = "wangzhijie19950807@gmail.com" },
+]
+keywords = ["ai", "agent", "llm", "cli", "coding-agent", "terminal", "claude", "openai", "ollama"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "mypy>=1.11",
+  "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhijiewong/openharness"
+Repository = "https://github.com/zhijiewong/openharness"
+Issues = "https://github.com/zhijiewong/openharness/issues"
+Changelog = "https://github.com/zhijiewong/openharness/blob/main/python/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openharness"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "openharness/**/*.py",
+  "openharness/py.typed",
+  "README.md",
+  "CHANGELOG.md",
+  "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Env vars + OAuth option names embedded in test identifiers — readable as-is.
+"tests/**" = ["N802", "B017"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+packages = ["openharness"]

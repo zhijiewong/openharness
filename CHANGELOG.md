@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Python SDK launched as a separate package on PyPI: `openharness`. Version 0.1.0. Mirrors Claude Code's `claude-agent-sdk` shape — spawns the `oh` CLI as a subprocess and streams typed events via `async for event in query(...)`. See [`python/README.md`](python/README.md). Separate SemVer track from the npm package.
+- `oh run --output-format stream-json` now emits two additional NDJSON event types: `cost_update` (inputTokens, outputTokens, cost, model) and `turn_complete` (reason). Used by the Python SDK to surface cost and turn boundaries without parsing aggregated JSON. Existing `text`, `tool_start`, `tool_end`, `error` events unchanged.
+- New CI workflows: `.github/workflows/python-lint.yml` runs ruff + mypy + pytest on every Python-affecting change (matrix: ubuntu + windows × py3.10 + py3.12). `.github/workflows/publish-python.yml` triggers on `python-v*` tag and publishes to PyPI via trusted publishing (OIDC).
+
 ## 2.14.0 (2026-04-19) — Session polish + First-run wizard + Keychain storage
 
 ### Added
