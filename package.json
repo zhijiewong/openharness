@@ -84,5 +84,8 @@
   "bugs": {
     "url": "https://github.com/zhijiewong/openharness/issues"
   },
-  "homepage": "https://github.com/zhijiewong/openharness#readme"
+  "homepage": "https://github.com/zhijiewong/openharness#readme",
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1.2.0"
+  }
 }

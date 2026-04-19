@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { deleteCredentials, loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
+import { deleteCredentials, loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage-fs.js";
 
 function freshDir(): string {
   return mkdtempSync(join(tmpdir(), "oh-oauth-storage-"));

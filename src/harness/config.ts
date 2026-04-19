@@ -117,6 +117,10 @@ export type OhConfig = {
   };
   /** Fallback providers — tried in order when primary fails */
   fallbackProviders?: Array<{ provider: string; model?: string; apiKey?: string; baseUrl?: string }>;
+  /** MCP OAuth token storage backend. Default: "auto" — keychain when available, filesystem otherwise. */
+  credentials?: {
+    storage?: "filesystem" | "auto";
+  };
   /** Auto-commit after each file-modifying tool execution */
   gitCommitPerTool?: boolean;
   /** Effort level for LLM reasoning depth */
