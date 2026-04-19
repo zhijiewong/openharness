@@ -22,6 +22,8 @@ export type QueryConfig = {
   workingDir?: string;
   /** Auto-commit after each file-modifying tool */
   gitCommitPerTool?: boolean;
+  /** For sub-agent invocations: the agent role name (feeds into the model router). */
+  role?: string;
 };
 
 export type TransitionReason = "next_turn" | "retry_network" | "retry_prompt_too_long" | "retry_max_output_tokens";
