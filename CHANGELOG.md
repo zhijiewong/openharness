@@ -1,18 +1,24 @@
 # Changelog
 
-## Unreleased
+## 2.14.0 (2026-04-19) — Session polish + First-run wizard + Keychain storage
 
 ### Added
 - OS keychain storage for MCP OAuth tokens. macOS Keychain / Windows Credential Manager / Linux Secret Service, via the optional `@napi-rs/keyring` dependency. Transparent fallback to the existing `~/.oh/credentials/mcp/*.json` filesystem store when the keychain isn't available (headless Linux without D-Bus, containers, missing prebuilt binary).
 - Config: new optional `credentials: { storage: "filesystem" | "auto" }` field in `.oh/config.yaml`. Default is `"auto"` — keychain when available, filesystem otherwise. Set to `"filesystem"` to force filesystem-only storage.
 - Env var: `OH_KEYCHAIN=disabled` bypasses keychain globally (used by the test runner to isolate tests from the real OS keychain).
-- 7 new tests covering the keychain module, filesystem opt-out, keychain-preference-on-load, and delete-idempotence.
+- First-run setup wizard auto-launches on bare `oh` when no provider is configured and stdin/stdout are TTYs. Previously printed static help text and exited. Non-TTY environments (CI, piped stdin) preserve the original behavior. Matches Claude Code's `claude`-in-empty-directory flow.
+- `/fork` now records a `parentSessionId` on the new session and inherits the current session's provider/model (was passing empty strings). `/history` surfaces `⤴ forked from <id>` for sessions that have a parent.
+- `/export` default markdown now includes tool calls (formatted as `Tool call: <name>(<args>)`) and tool results (fenced). Previously dropped everything except user+assistant text. New `/export json` writes the raw message array to `.oh/export-<id>.json`.
 
 ### Changed
 - Internal: `src/mcp/oauth-storage.ts` becomes a thin orchestrator; pure filesystem helpers moved to `src/mcp/oauth-storage-fs.ts`. Public API (`saveCredentials` / `loadCredentials` / `deleteCredentials` / `OhCredentials`) unchanged — callers in `oauth.ts` and `commands/mcp-auth.ts` untouched.
 
+### Fixed
+- `/fork` was constructing the new session with empty provider/model strings (`createSession("", "")`). Now inherits from the running context.
+- CI flake in `tools.test.ts` "hooks are independent" test: fire-and-forget hook processes write to the capture file in non-deterministic order. Test now asserts set-membership rather than array order.
+
 ### Migration
-- Zero. Existing filesystem tokens load via the fallback path and migrate to the keychain on next save. Filesystem files are not auto-deleted.
+- Zero. Existing filesystem OAuth tokens load via the fallback path and migrate to the keychain on next save. Filesystem files are not auto-deleted. Existing `.oh/config.yaml` files unchanged.
 
 ## 2.13.0 (2026-04-19) — Additional Hooks + ModelRouter + Fallback Providers
 
