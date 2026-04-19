@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- OS keychain storage for MCP OAuth tokens. macOS Keychain / Windows Credential Manager / Linux Secret Service, via the optional `@napi-rs/keyring` dependency. Transparent fallback to the existing `~/.oh/credentials/mcp/*.json` filesystem store when the keychain isn't available (headless Linux without D-Bus, containers, missing prebuilt binary).
+- Config: new optional `credentials: { storage: "filesystem" | "auto" }` field in `.oh/config.yaml`. Default is `"auto"` — keychain when available, filesystem otherwise. Set to `"filesystem"` to force filesystem-only storage.
+- Env var: `OH_KEYCHAIN=disabled` bypasses keychain globally (used by the test runner to isolate tests from the real OS keychain).
+- 7 new tests covering the keychain module, filesystem opt-out, keychain-preference-on-load, and delete-idempotence.
+
+### Changed
+- Internal: `src/mcp/oauth-storage.ts` becomes a thin orchestrator; pure filesystem helpers moved to `src/mcp/oauth-storage-fs.ts`. Public API (`saveCredentials` / `loadCredentials` / `deleteCredentials` / `OhCredentials`) unchanged — callers in `oauth.ts` and `commands/mcp-auth.ts` untouched.
+
+### Migration
+- Zero. Existing filesystem tokens load via the fallback path and migrate to the keychain on next save. Filesystem files are not auto-deleted.
+
 ## 2.13.0 (2026-04-19) — Additional Hooks + ModelRouter + Fallback Providers
 
 ### Added

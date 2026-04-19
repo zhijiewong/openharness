@@ -1,76 +1,134 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { deleteCredentials, loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
+import { invalidateConfigCache } from "../harness/config.js";
+import { _resetForTesting } from "./oauth-keychain.js";
+import { loadCredentials, type OhCredentials, saveCredentials } from "./oauth-storage.js";
+import { loadCredentials as loadFs, saveCredentials as saveFs } from "./oauth-storage-fs.js";
 
-function freshDir(): string {
-  return mkdtempSync(join(tmpdir(), "oh-oauth-storage-"));
+const testRequire = createRequire(import.meta.url);
+
+function installFakeKeyring(): { restore: () => void; store: Map<string, string> } {
+  const store = new Map<string, string>();
+  class FakeEntry {
+    constructor(
+      readonly service: string,
+      readonly account: string,
+    ) {}
+    setPassword(pw: string): void {
+      store.set(`${this.service}:${this.account}`, pw);
+    }
+    getPassword(): string | null {
+      return store.get(`${this.service}:${this.account}`) ?? null;
+    }
+    deletePassword(): boolean {
+      return store.delete(`${this.service}:${this.account}`);
+    }
+  }
+  const ModuleAny = testRequire("node:module") as { _cache: Record<string, { exports: unknown }> };
+  const key = testRequire.resolve("@napi-rs/keyring");
+  ModuleAny._cache[key] = { exports: { Entry: FakeEntry } };
+  return {
+    restore: () => {
+      delete ModuleAny._cache[key];
+    },
+    store,
+  };
+}
+
+async function withTmpConfigCwd(yaml: string, fn: () => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "oh-oauth-storage-"));
+  const original = process.cwd();
+  // The test runner sets OH_KEYCHAIN=disabled globally so individual tests don't
+  // leak into the real OS keychain. Re-enable for these orchestrator tests that
+  // explicitly install a fake keyring.
+  const originalEnvKey = process.env.OH_KEYCHAIN;
+  process.env.OH_KEYCHAIN = "auto";
+  process.chdir(dir);
+  try {
+    mkdirSync(`${dir}/.oh`, { recursive: true });
+    writeFileSync(`${dir}/.oh/config.yaml`, yaml);
+    invalidateConfigCache();
+    await fn();
+  } finally {
+    process.chdir(original);
+    if (originalEnvKey === undefined) delete process.env.OH_KEYCHAIN;
+    else process.env.OH_KEYCHAIN = originalEnvKey;
+    invalidateConfigCache();
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const sample: OhCredentials = {
   issuerUrl: "https://auth.example.com",
-  clientInformation: { client_id: "abc" },
-  tokens: { access_token: "at", refresh_token: "rt", expires_at: Date.now() + 60_000, token_type: "Bearer" },
+  clientInformation: { client_id: "cid" },
+  tokens: { access_token: "from-kc", token_type: "Bearer" },
   updatedAt: new Date().toISOString(),
 };
 
-describe("oauth-storage", () => {
-  it("saveCredentials + loadCredentials round-trip", async () => {
-    const dir = freshDir();
+describe("oauth-storage orchestrator", () => {
+  it("credentials.storage: 'filesystem' bypasses keychain even when available", async () => {
+    _resetForTesting();
+    const { restore, store } = installFakeKeyring();
+    const fsDir = mkdtempSync(join(tmpdir(), "oh-oauth-fs-"));
     try {
-      await saveCredentials(dir, "linear", sample);
-      const loaded = await loadCredentials(dir, "linear");
-      assert.deepEqual(loaded, sample);
+      await withTmpConfigCwd(
+        ["provider: mock", "model: mock", "permissionMode: ask", "credentials:", "  storage: filesystem", ""].join(
+          "\n",
+        ),
+        async () => {
+          await saveCredentials(fsDir, "svr-fs-forced", sample);
+          assert.equal(store.size, 0, "keychain should not have received the write");
+          const fromFs = await loadFs(fsDir, "svr-fs-forced");
+          assert.ok(fromFs, "filesystem should have received the write");
+        },
+      );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(fsDir, { recursive: true, force: true });
+      restore();
+      _resetForTesting();
     }
   });
 
-  it("loadCredentials returns undefined when file is absent", async () => {
-    const dir = freshDir();
+  it("default save goes to keychain when available (no filesystem file)", async () => {
+    _resetForTesting();
+    const { restore, store } = installFakeKeyring();
+    const fsDir = mkdtempSync(join(tmpdir(), "oh-oauth-fs-"));
     try {
-      const loaded = await loadCredentials(dir, "nope");
-      assert.equal(loaded, undefined);
+      await withTmpConfigCwd(["provider: mock", "model: mock", "permissionMode: ask", ""].join("\n"), async () => {
+        await saveCredentials(fsDir, "svr-kc-default", sample);
+        assert.equal(store.size, 1, "keychain should have received the write");
+        const fromFs = await loadFs(fsDir, "svr-kc-default");
+        assert.equal(fromFs, undefined, "filesystem should NOT have been written");
+      });
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(fsDir, { recursive: true, force: true });
+      restore();
+      _resetForTesting();
     }
   });
 
-  it("loadCredentials returns undefined on corrupt JSON (without throwing)", async () => {
-    const dir = freshDir();
+  it("load prefers keychain over filesystem when both have entries", async () => {
+    _resetForTesting();
+    const { restore } = installFakeKeyring();
+    const fsDir = mkdtempSync(join(tmpdir(), "oh-oauth-fs-"));
     try {
-      await saveCredentials(dir, "x", sample);
-      writeFileSync(join(dir, "x.json"), "{not valid json");
-      const loaded = await loadCredentials(dir, "x");
-      assert.equal(loaded, undefined);
+      // Seed filesystem with one value…
+      await saveFs(fsDir, "svr-both", { ...sample, tokens: { access_token: "from-fs", token_type: "Bearer" } });
+      // …and keychain with another (via the orchestrator under keychain-enabled config).
+      await withTmpConfigCwd(["provider: mock", "model: mock", "permissionMode: ask", ""].join("\n"), async () => {
+        await saveCredentials(fsDir, "svr-both", sample); // writes "from-kc" to keychain
+        const loaded = await loadCredentials(fsDir, "svr-both");
+        assert.ok(loaded);
+        assert.equal(loaded!.tokens.access_token, "from-kc", "keychain value should win");
+      });
     } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("deleteCredentials removes the file idempotently", async () => {
-    const dir = freshDir();
-    try {
-      await saveCredentials(dir, "bye", sample);
-      await deleteCredentials(dir, "bye");
-      assert.equal(await loadCredentials(dir, "bye"), undefined);
-      await deleteCredentials(dir, "bye"); // idempotent
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("saveCredentials writes mode 0600 on non-Windows", async () => {
-    if (process.platform === "win32") return;
-    const dir = freshDir();
-    try {
-      await saveCredentials(dir, "m", sample);
-      const s = statSync(join(dir, "m.json"));
-      assert.equal(s.mode & 0o777, 0o600);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(fsDir, { recursive: true, force: true });
+      restore();
+      _resetForTesting();
     }
   });
 });

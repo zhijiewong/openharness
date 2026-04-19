@@ -1,69 +1,67 @@
-import { promises as fs } from "node:fs";
-import { dirname, join } from "node:path";
+/**
+ * OAuth token storage orchestrator.
+ *
+ * Prefers the OS keychain via `oauth-keychain.ts` when available and not
+ * opted out via `credentials.storage: "filesystem"`. Falls back to the
+ * filesystem store in `oauth-storage-fs.ts` on any keychain failure.
+ *
+ * Public API unchanged: callers in oauth.ts and commands/mcp-auth.ts
+ * continue to import `saveCredentials` / `loadCredentials` /
+ * `deleteCredentials` / `OhCredentials` from this module.
+ */
 
-export type OhCredentials = {
-  issuerUrl: string;
-  clientInformation: { client_id: string; client_secret?: string } & Record<string, unknown>;
-  tokens: {
-    access_token: string;
-    refresh_token?: string;
-    expires_at?: number;
-    token_type?: string;
-    scope?: string;
-  };
-  codeVerifier?: string;
-  updatedAt: string;
-};
+import { readOhConfig } from "../harness/config.js";
+import {
+  deleteCredentialsKeychain,
+  keychainAvailable,
+  loadCredentialsKeychain,
+  saveCredentialsKeychain,
+} from "./oauth-keychain.js";
+import {
+  deleteCredentials as deleteFs,
+  loadCredentials as loadFs,
+  saveCredentials as saveFs,
+} from "./oauth-storage-fs.js";
 
-function pathFor(storageDir: string, name: string): string {
-  return join(storageDir, `${name}.json`);
+export type { OhCredentials } from "./oauth-storage-fs.js";
+
+import type { OhCredentials } from "./oauth-storage-fs.js";
+
+function shouldUseKeychain(): boolean {
+  // Explicit opt-out via env var (used by the test runner to isolate tests
+  // from the real OS keychain). Accepts "disabled", "false", "0", or "off".
+  const envOpt = (process.env.OH_KEYCHAIN ?? "").toLowerCase();
+  if (envOpt === "disabled" || envOpt === "false" || envOpt === "0" || envOpt === "off") return false;
+  const cfg = readOhConfig();
+  if (cfg?.credentials?.storage === "filesystem") return false;
+  return keychainAvailable();
 }
 
-/** Atomically write credentials for one server. Creates the directory with 0o700 on first use. */
+/**
+ * Save credentials. Tries keychain first when available; falls back to
+ * filesystem on any keychain failure.
+ */
 export async function saveCredentials(storageDir: string, name: string, creds: OhCredentials): Promise<void> {
-  const filePath = pathFor(storageDir, name);
-  const tmpPath = `${filePath}.tmp`;
-  await fs.mkdir(dirname(filePath), { recursive: true, mode: 0o700 });
-  const body = JSON.stringify(creds, null, 2);
-  await fs.writeFile(tmpPath, body, { mode: 0o600 });
-  await fs.rename(tmpPath, filePath);
+  if (shouldUseKeychain() && saveCredentialsKeychain(name, creds)) return;
+  await saveFs(storageDir, name, creds);
 }
 
-/** Load credentials. Returns undefined on missing file OR corrupt JSON. Warns on world/group-readable mode. */
+/**
+ * Load credentials. Checks keychain first (when available), then filesystem.
+ * If both have entries for the same name, keychain wins.
+ */
 export async function loadCredentials(storageDir: string, name: string): Promise<OhCredentials | undefined> {
-  const filePath = pathFor(storageDir, name);
-  let raw: string;
-  try {
-    raw = await fs.readFile(filePath, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw err;
+  if (shouldUseKeychain()) {
+    const fromKc = loadCredentialsKeychain(name);
+    if (fromKc) return fromKc;
   }
-  try {
-    if (process.platform !== "win32") {
-      const s = await fs.stat(filePath);
-      if ((s.mode & 0o077) !== 0) {
-        console.warn(`[mcp] credentials file for '${name}' is world/group-readable; run 'chmod 600 ${filePath}'`);
-      }
-    }
-  } catch {
-    // stat failure is non-fatal for load
-  }
-  try {
-    return JSON.parse(raw) as OhCredentials;
-  } catch {
-    console.warn(`[mcp] credentials file for '${name}' is corrupt; ignoring`);
-    return undefined;
-  }
+  return loadFs(storageDir, name);
 }
 
-/** Idempotent delete — ENOENT is swallowed. */
+/**
+ * Delete credentials from BOTH keychain and filesystem. Idempotent.
+ */
 export async function deleteCredentials(storageDir: string, name: string): Promise<void> {
-  const filePath = pathFor(storageDir, name);
-  try {
-    await fs.unlink(filePath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
+  if (keychainAvailable()) deleteCredentialsKeychain(name);
+  await deleteFs(storageDir, name);
 }
