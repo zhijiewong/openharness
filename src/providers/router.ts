@@ -98,3 +98,23 @@ export class ModelRouter {
     };
   }
 }
+
+const ROUTE_SELECTION_CAP = 256;
+const routeSelections = new Map<string, RouteResult>();
+
+/** Record the router's selection for a session. Keeps only the most recent 256 sessions. */
+export function recordRouteSelection(sessionId: string, result: RouteResult): void {
+  // Map preserves insertion order. Delete-then-set moves the key to the end,
+  // so oldest is always keys().next().
+  if (routeSelections.has(sessionId)) routeSelections.delete(sessionId);
+  routeSelections.set(sessionId, result);
+  if (routeSelections.size > ROUTE_SELECTION_CAP) {
+    const oldest = routeSelections.keys().next().value;
+    if (oldest !== undefined) routeSelections.delete(oldest);
+  }
+}
+
+/** Retrieve the most recent selection for a session, or undefined. */
+export function getRouteSelection(sessionId: string): RouteResult | undefined {
+  return routeSelections.get(sessionId);
+}
