@@ -1,0 +1,45 @@
+name: Python SDK — lint + test
+
+on:
+  pull_request:
+    paths:
+      - "python/**"
+      - ".github/workflows/python-lint.yml"
+  push:
+    branches: [main]
+    paths:
+      - "python/**"
+      - ".github/workflows/python-lint.yml"
+
+jobs:
+  lint-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff
+        run: python -m ruff check .
+
+      - name: Mypy
+        run: python -m mypy openharness
+
+      - name: Pytest
+        run: python -m pytest tests/ -v
